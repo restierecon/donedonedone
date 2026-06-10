@@ -1,0 +1,77 @@
+{
+  "permissions": {
+    "deny": [
+      "Bash(rm -rf*)",
+      "Bash(sudo *)",
+      "Bash(git push --force*)",
+      "Bash(git push -f*)",
+      "Bash(git reset --hard*)",
+      "Bash(git clean -fd*)",
+      "Bash(curl *| sh*)",
+      "Bash(curl *| bash*)",
+      "Bash(wget *| sh*)",
+      "Bash(chmod -R 777*)",
+      "Bash(*DROP TABLE*)",
+      "Bash(*DROP DATABASE*)",
+      "Bash(*TRUNCATE *)",
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(**/secrets/**)",
+      "Read(**/*.pem)",
+      "Read(**/*_rsa)"
+    ],
+    "ask": [
+      "Bash(git push*)",
+      "Bash(rm *)",
+      "Bash(npm install *)",
+      "Bash(pip install *)",
+      "Bash(npm publish*)",
+      "Bash(*alembic downgrade*)",
+      "Bash(git merge*)"
+    ]
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -f vault/memory/session.md ]; then cat vault/memory/session.md; echo '--- git reality check ---'; git status --short 2>/dev/null | head -20; fi"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/scripts/guard.sh"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/scripts/lint.sh"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/scripts/checkpoint.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
