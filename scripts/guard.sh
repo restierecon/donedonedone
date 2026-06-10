@@ -20,7 +20,7 @@ deny_patterns=(
 )
 
 for p in "${deny_patterns[@]}"; do
-  if echo "$cmd" | grep -qE "$p"; then
+  if echo "$cmd" | grep -qE -- "$p"; then
     echo "BLOCKED by guardrail (pattern: $p). Use a reversible approach instead." >&2
     exit 2
   fi
