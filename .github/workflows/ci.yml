@@ -1,0 +1,22 @@
+name: ci
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: shellcheck
+        run: |
+          sudo apt-get update -q && sudo apt-get install -y -q shellcheck jq
+          shellcheck scripts/*.sh tests/*.sh install.sh
+      - name: hook script tests
+        run: tests/run-tests.sh
+      - name: scripts are executable in the repo
+        run: |
+          bad=$(git ls-files -s scripts/ tests/ install.sh | grep -v ^100755 || true)
+          if [ -n "$bad" ]; then echo "not executable: $bad"; exit 1; fi
+      - name: settings.json is valid JSON
+        run: jq empty settings.json
