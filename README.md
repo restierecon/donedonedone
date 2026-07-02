@@ -10,7 +10,7 @@ branch-per-slice trunk discipline · mechanisms-over-instructions (hooks + git, 
 ## Mac quick start
 
 ```bash
-git clone <this-repo> ~/claude-setup
+git clone https://github.com/restierecon/donedonedone ~/claude-setup
 cd ~/claude-setup && ./install.sh
 brew install jq gitleaks semgrep   # guardrail dependencies
 ```
@@ -34,6 +34,7 @@ claude
 | commands/init-vault.md | One-command project bootstrap |
 | settings.json | Permission deny/ask lists + 4 hooks |
 | scripts/ | guard.sh (PreToolUse) · lint.sh (PostToolUse) · checkpoint.sh (Stop) |
+| tests/ | Test harness for the hook scripts — run after any script edit; CI runs it too |
 | evals/ | 7-task benchmark + scorecard — run before trusting, re-run after any manifest edit |
 
 ## The loop
@@ -44,8 +45,11 @@ Failures resolve through 3 self-healing tiers with a hard budget ceiling.
 Every 5 slices: architecture review.
 
 ## Safety model
-- Deny/ask permission lists + PreToolUse tripwire (destructive commands can't run)
-- Subagents can't write gate state; reviewer/auditor can't write code at all
+- Deny/ask permission lists + PreToolUse tripwire (destructive commands can't run;
+  fails closed if jq is missing)
+- Subagents can't write gate state — enforced mechanically via the hook's `agent_id`
+  field across Bash, Write, and Edit; reviewer/auditor can't write code at all
+- Checkpoints never auto-commit on main (main is always green)
 - gitleaks scan before every checkpoint commit
 - `autonomy: full` is only legal in a sandbox; new projects start `supervised`
 
@@ -56,3 +60,5 @@ Claude Code docs (docs.claude.com) and adjust settings.json patterns.
 ## Iterating
 This repo IS your dotfiles for Claude Code. Edit agent manifests here, re-run
 ./install.sh, re-run the evals, commit. The setup improves as you use it.
+Any edit to scripts/ must keep `tests/run-tests.sh` green — the guardrails are
+the last line of defense, so they are the one place tests are non-negotiable.
