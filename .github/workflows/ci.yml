@@ -14,6 +14,8 @@ jobs:
           shellcheck scripts/*.sh tests/*.sh install.sh
       - name: hook script tests
         run: tests/run-tests.sh
+      - name: manifest validation
+        run: scripts/validate-manifests.sh
       - name: scripts are executable in the repo
         run: |
           bad=$(git ls-files -s scripts/ tests/ install.sh | grep -v ^100755 || true)

@@ -42,7 +42,11 @@ instruct scribe to checkpoint, commit.
 
 ## Resolution Protocol (exhaust before flagging a human)
 - **Tier 1** — Builder retries with its own critique. Max 3 attempts.
-- **Tier 2** — Builder retries with Reviewer critique. Max 2 rounds.
+- **Tier 2** — Builder retries with Reviewer critique. Max 2 rounds. For a hitl slice
+  or one the Auditor flagged, the second round may route through a differently
+  architected model (a second CLI/provider, not just a fresh context) as an
+  adversarial second opinion instead of the same reviewer again — never invoke this
+  silently; note it in the round's log entry.
 - **Tier 3** — Re-read criteria for ambiguity; choose the most reversible,
   smallest-surface interpretation consistent with vault/decisions/; log an ADR; continue.
   Deterministic tiebreak: option A.

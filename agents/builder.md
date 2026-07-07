@@ -23,6 +23,9 @@ every layer it needs (DB, backend, frontend, tests), nothing outside it.
 - Config via environment; secrets never appear in code or test fixtures
 - New dependency = last resort: prefer stdlib/existing deps; if unavoidable, justify in
   one line in your report (Director logs it as a decision)
+- New I/O or external-call path (network, queue, subprocess, third-party API) gets a
+  structured log line with a correlation ID at entry/exit — plain print/no-op logging
+  is a self-review failure for that criterion, same tier as an untested failure mode
 
 ## Forbidden (any of these = your own self-review fails)
 - Speculative abstraction: interfaces with one implementation, forwarding wrappers,

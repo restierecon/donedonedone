@@ -22,6 +22,12 @@ unintegrated output. One vertical slice at a time.
 A slice the Builder can finish inside its budget (≤ 12 invocations including review
 rounds). If acceptance criteria exceed ~7 items, split the slice.
 
+## Instrumentation
+If the slice adds a new I/O or external-call path (network, queue, subprocess,
+third-party API) that will run in production, add an explicit acceptance criterion
+for it: "logs entry/exit with a correlation ID" or equivalent. Observability is not
+an afterthought slice — it ships with the behavior it observes.
+
 ## Mode tagging (decide now, not at failure time)
 - **afk** — autonomous: requirements unambiguous, no irreversible action, no design
   judgment a human would want. Prefer afk; most CRUD, wiring, and test slices qualify.
