@@ -11,6 +11,13 @@ Multi-dimensional code review with quality gates. Every change gets reviewed bef
 
 **The approval standard:** Approve a change when it definitely improves overall code health, even if it isn't perfect. Perfect code doesn't exist — the goal is continuous improvement. Don't block a change because it isn't exactly how you would have written it. If it improves the codebase and follows the project's conventions, approve it.
 
+**In a vault-tracked project running the Autonomous Engineering Protocol**, this
+skill informs the Builder's own self-review (Gate 1) but is never a substitute for
+the dedicated `reviewer` agent gate (Gate 3). That agent's value is cold-eyes
+isolation — no memory of how the work was produced — which a self-invoked skill
+review does not have. Dispatch the `reviewer` agent for the actual gate; use this
+skill's checklist to raise your own bar before you do.
+
 ## When to Use
 
 - Before merging any PR or change

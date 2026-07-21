@@ -13,6 +13,14 @@ Git is your safety net. Treat commits as save points, branches as sandboxes, and
 
 Always. Every code change flows through git.
 
+**In a vault-tracked project running the Autonomous Engineering Protocol**, the
+branch naming (`slice/<ID>`, not `feature/<description>`) and worktree location
+(`.worktrees/<ID>` inside the repo, not a sibling directory) in that protocol's
+CLAUDE.md and Git Discipline section take precedence over the generic conventions
+below — the Director's squash-merge/tag automation depends on the `slice/<ID>`
+pattern. Everything else here (atomic commits, message discipline, sizing) still
+applies.
+
 ## Core Principles
 
 ### Trunk-Based Development (Recommended)

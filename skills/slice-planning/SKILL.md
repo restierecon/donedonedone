@@ -20,7 +20,15 @@ unintegrated output. One vertical slice at a time.
 
 ## Sizing
 A slice the Builder can finish inside its budget (≤ 12 invocations including review
-rounds). If acceptance criteria exceed ~7 items, split the slice.
+rounds). If acceptance criteria exceed ~7 items, split the slice. Other split signals:
+the title needs an "and" to describe it (that's two slices); it touches two or more
+independent subsystems (e.g. billing and notifications); you can't state its
+acceptance criteria in 3 bullets without hand-waving.
+
+## Map dependencies before sizing
+Before writing slice boundaries, sketch what depends on what (schema → API → UI is
+the common shape, but not the only one). Order slices bottom-up along that graph —
+this is what `depends_on` should encode, not just "did it get planned first."
 
 ## Instrumentation
 If the slice adds a new I/O or external-call path (network, queue, subprocess,
@@ -40,6 +48,21 @@ Walking-skeleton first: the earliest slices should produce a deployable end-to-e
 spine (one trivial behavior through every layer), then flesh out behavior by value.
 Record dependencies explicitly; the Director schedules afk slices in dependency order
 and batches hitl slices for human sessions.
+
+## Classify for parallel dispatch
+`depends_on` isn't just "must come after" — it's what makes a slice eligible for
+concurrent git-worktree dispatch (see the global protocol's Parallel Slice Dispatch).
+For each pair of afk slices, decide:
+- **Safe to parallelize** — genuinely independent: different files, no shared schema
+  or contract. Leave `depends_on` empty between them.
+- **Must be sequential** — one changes shared state the other reads (a migration,
+  a schema the other's queries assume). Add the edge to `depends_on`.
+- **Needs coordination, not sequencing** — both consume the same API contract or
+  schema but could otherwise run concurrently. Don't force a false dependency edge;
+  instead plan a contract-defining slice first (types/interfaces/schema only), then
+  let the consumers depend on *that*, not on each other.
+Getting this wrong either serializes work that could have run concurrently, or lets
+two slices race on files neither one's `depends_on` protected.
 
 ## Output
 Write slices into vault/task-tree.json:
