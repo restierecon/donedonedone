@@ -5,7 +5,9 @@ description: Initialize this project for the autonomous engineering workflow (va
 Initialize this project for the autonomous workflow. Do all of the following:
 
 1. Verify this is a git repo (`git rev-parse`); if not, `git init`.
-2. Verify `.env` and `.env.*` are in .gitignore — add them if missing. Never proceed without this.
+2. Verify `.env` and `.env.*` are in .gitignore — add them if missing. Never proceed
+   without this. Also verify `.worktrees/` is gitignored (parallel-slice git worktrees,
+   never source of truth) — add it if missing.
 3. Create directories: vault/handoffs/archive, vault/decisions, vault/findings, vault/flags, vault/memory
 4. Create vault/task-tree.json:
    {"project": "", "autonomy_note": "dial lives in project.md", "slices_since_arch_review": 0, "slices": []}
@@ -17,7 +19,9 @@ Initialize this project for the autonomous workflow. Do all of the following:
    - Stack (suggest from what you see in the repo if it's not empty)
    Then write it with these sections: Purpose · Stack · Domain Language (empty table:
    Term | Meaning — grow it as the project develops) · Autonomy: supervised ·
-   Definition of Done (every slice independently testable, no TODO/FIXME, gates green).
+   Parallelism: max_parallel_slices: 3 (git-worktree parallel dispatch, see global
+   protocol → Parallel Slice Dispatch) · Definition of Done (every slice independently
+   testable, no TODO/FIXME, gates green).
 9. Create a project-level CLAUDE.md containing ONLY project specifics (stack commands
    for lint/test/build, anything unusual) — the protocol lives globally, don't repeat it.
 10. Commit: `git add -A && git commit -m "chore: init autonomous workflow vault"`

@@ -16,15 +16,20 @@ You never write application code. You have no Bash — you only read and write v
 - session.md holds only what a cold-start Director needs to resume
 
 ## On gate pass (checkpoint)
-Update vault/memory/session.md: active slice, active step, last gate passed, next gate.
+Update vault/memory/session.md: active slice(s), active step, last gate passed, next
+gate. During a parallel wave, checkpoint per-slice as each one's own gate lands —
+don't wait for sibling slices in the same wave to finish.
 
 ## On slice complete
-1. Compress vault/handoffs/current.md to a 10-15 line outcome summary →
-   vault/handoffs/archive/<ID>.md
-2. Reset current.md with the next slice header only
+1. Compress this slice's working file — vault/handoffs/current.md normally, or
+   vault/handoffs/active/<ID>.md if it was part of a parallel wave — to a 10-15 line
+   outcome summary → vault/handoffs/archive/<ID>.md
+2. Reset current.md with the next slice header only (or, mid-wave, remove the
+   completed slice's entry from current.md's active-wave index and delete its
+   active/<ID>.md)
 3. Move builder DECISIONS into vault/memory/hot.md (re-seeded for next slice)
    and promote durable ones to vault/project.md domain notes
-4. Update session.md: completed list, next active slice
+4. Update session.md: completed list, next active slice(s)
 
 ## On size pressure (current.md > 400 lines, mid-slice)
 Rewrite current.md as: completed steps (one-line outcomes) · active step (full
