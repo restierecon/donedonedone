@@ -30,7 +30,7 @@ claude
 |---|---|
 | CLAUDE.md | Global protocol — the main session IS the Director |
 | agents/ | builder · reviewer · auditor · scribe (least-privilege tools, model-per-agent) |
-| skills/ | grill · slice-planning · compaction · architecture-review |
+| skills/ | protocol-native: grill · slice-planning · compaction · architecture-review — plus a general engineering-practice library (see Credits) |
 | commands/init-vault.md | One-command project bootstrap |
 | settings.json | Permission deny/ask lists + 4 hooks |
 | scripts/ | guard.sh (PreToolUse) · lint.sh (PostToolUse) · checkpoint.sh (Stop) |
@@ -62,3 +62,13 @@ This repo IS your dotfiles for Claude Code. Edit agent manifests here, re-run
 ./install.sh, re-run the evals, commit. The setup improves as you use it.
 Any edit to scripts/ must keep `tests/run-tests.sh` green — the guardrails are
 the last line of defense, so they are the one place tests are non-negotiable.
+
+## Credits
+The overall approach here — a skills-and-agents setup for Claude Code, driven
+by ADRs, gates, and an autonomy dial — was learned from
+[Matt Pocock's skills](https://github.com/mattpocock/skills). The general
+engineering-practice skills under `skills/` (frontend-ui-engineering,
+security-and-hardening, code-review-and-quality, and others not specific to
+this protocol's own vault workflow) are sourced from
+[Addy Osmani's agent-skills](https://github.com/addyosmani/agent-skills).
+Thanks to both for making this work public.
