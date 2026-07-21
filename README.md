@@ -35,7 +35,7 @@ claude
 | settings.json | Permission deny/ask lists + 4 hooks |
 | scripts/ | guard.sh (PreToolUse) · lint.sh (PostToolUse) · checkpoint.sh (Stop) |
 | tests/ | Test harness for the hook scripts — run after any script edit; CI runs it too |
-| evals/ | 7-task benchmark + scorecard — run before trusting, re-run after any manifest edit |
+| evals/ | 10-task benchmark + scorecard — run before trusting, re-run after any manifest edit |
 
 ## The loop
 grill → slice-plan (vertical, afk/hitl tagged) → per slice on its own branch:

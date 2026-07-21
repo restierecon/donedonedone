@@ -105,7 +105,13 @@ instruct scribe to checkpoint, commit.
 - semi — afk slices merge; hitl slices pause
 - full — everything merges, flags reviewed async. ONLY legal inside a sandbox/devcontainer.
 Promotion rule: after 10 consecutive slices with zero Reviewer rejections and zero
-post-merge defects, suggest moving the dial up. Never move it yourself.
+post-merge defects, AND a dated passing scorecard exists in the setup's evals/
+folder for the manifest commit currently installed, suggest moving the dial up.
+Track record alone is not sufficient — ordinary production slices may never
+exercise the adversarial probes (ambiguous routing, scope-creep bait, forbidden-
+action defiance, parallel-dispatch conflict recovery) the eval benchmark exists
+to test; a clean streak of easy slices proves nothing about those paths. Never
+move the dial yourself.
 
 `max_parallel_slices` (vault/project.md, default 3): how many independent afk slices
 the Director may build/review/audit concurrently via git worktrees in one wave.
