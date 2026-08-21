@@ -9,7 +9,12 @@ Decompose by BEHAVIOR, never by layer. A slice is a tracer bullet: the thinnest
 end-to-end path that makes one piece of user-visible behavior real.
 
 ## Every slice must satisfy all three
-1. Named "Actor can [do something]" — if you can't name it this way, it's not a slice
+1. Named "Actor can [do something]" — if you can't name it this way, it's not a slice.
+   Write its `so_that` in the same breath: the reason the actor wants it, in the
+   actor's words, never the implementation ("so that I don't lose my draft", not
+   "so that we persist to localStorage"). Title plus `so_that` is the user story the
+   slice ships as; a slice whose `so_that` you can only state as "so that the system
+   works" has no user-visible value and is probably a layer, not a slice.
 2. Touches every layer that behavior needs (DB + API + UI + tests as applicable)
 3. Testable and demonstrable with NO other slice complete
 
@@ -66,8 +71,11 @@ two slices race on files neither one's `depends_on` protected.
 
 ## Output
 Write slices into vault/task-tree.json:
-{ "id": "S00n", "title": "Actor can ...", "mode": "afk|hitl", "status": "todo",
-  "depends_on": [], "acceptance_criteria": ["..."], "retry_count": 0,
+{ "id": "S00n", "title": "Actor can ...", "so_that": "...", "mode": "afk|hitl",
+  "status": "todo", "depends_on": [], "acceptance_criteria": ["..."], "retry_count": 0,
   "gates": {"self_review": null, "automated": null, "reviewer": null, "auditor": null} }
+A `depends_on` ID that names a slice absent from task-tree.json is satisfied — merged
+slices are harvested into vault/stories.md and pruned. Check stories.md before assuming
+a missing ID is a typo.
 Then present the plan as a table (id · title · mode · depends on) for confirmation
 before any building starts.

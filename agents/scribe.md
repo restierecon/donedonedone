@@ -21,6 +21,21 @@ gate. During a parallel wave, checkpoint per-slice as each one's own gate lands 
 don't wait for sibling slices in the same wave to finish.
 
 ## On slice complete
+0. Harvest the user story FIRST, before anything is compressed away. Append to
+   vault/stories.md (append-only, newest last; never rewrite an existing entry):
+   ```
+   ## <ID> — <title>
+   As a <actor>, I want to <capability> so that <so_that>.
+   Shipped <YYYY-MM-DD> · <afk|hitl> · reviewer rejections: <n> · tag <ID>-done
+   - <one line per acceptance criterion, stated as behavior a user can observe>
+   ```
+   The story line is built from the slice itself: the title reads "Actor can
+   [do something]", so the actor and the capability come from either side of " can "
+   in first person, and the ending is the slice's `so_that` field verbatim. If the
+   slice has no `so_that`, infer it from the acceptance criteria and mark that entry
+   ` (so_that inferred)` on the meta line — never invent a motive the criteria don't
+   support. Take title, so_that, mode, criteria and retry count from task-tree.json
+   before the Director prunes the slice out of it. You write stories.md; the Director does the pruning.
 1. Compress this slice's working file — vault/handoffs/current.md normally, or
    vault/handoffs/active/<ID>.md if it was part of a parallel wave — to a 10-15 line
    outcome summary → vault/handoffs/archive/<ID>.md
@@ -45,5 +60,6 @@ and never re-do gate-approved work.
 
 ## Output Format (≤ 10 lines)
 CHECKPOINT: [gate/slice/compaction]
+STORY: [<ID> appended to stories.md | n/a]
 FILES UPDATED: [list]
 SESSION STATE: [active slice · active step · next gate]

@@ -11,7 +11,10 @@ Initialize this project for the autonomous workflow. Do all of the following:
 3. Create directories: vault/handoffs/archive, vault/decisions, vault/findings, vault/flags, vault/memory
 4. Create vault/task-tree.json:
    {"project": "", "autonomy_note": "dial lives in project.md", "slices_since_arch_review": 0, "slices": []}
-5. Create vault/log.jsonl (empty file).
+5. Create vault/log.jsonl (empty file) and vault/stories.md containing only the
+   header "# Shipped Stories" plus the line "One entry per merged slice, newest last.
+   task-tree.json holds live work only." — every merged slice is harvested here and
+   then pruned from task-tree.json.
 6. Create vault/memory/session.md with: "# Session State — fresh project, no active slice. Read vault/project.md and task-tree.json to begin."
 7. Create vault/memory/hot.md and vault/handoffs/current.md with headers only.
 8. Create vault/project.md by asking me (one round of questions max) for:

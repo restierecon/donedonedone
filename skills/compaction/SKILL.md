@@ -9,7 +9,8 @@ The contract: after every compaction, a brand-new session reading only
 vault/memory/session.md can resume with zero re-done work and zero lost decisions.
 
 ## What survives vs what dies
-KEEP: outcomes, decisions, acceptance criteria, gate verdicts, file paths,
+KEEP: shipped behavior (as a story in stories.md), outcomes, decisions,
+acceptance criteria, gate verdicts, file paths,
 established patterns, unresolved items.
 DISCARD: reasoning trails, intermediate attempts, deliberation, raw tool output,
 anything reconstructible from git.
@@ -38,6 +39,14 @@ active step (FULL detail preserved — never compress the live step) ·
 pending (list only). Move newly-learned durable facts to hot.md first.
 
 ## Slice-complete sequence
+0. Harvest the story first — append to vault/stories.md: `## <ID> — <title>`, then
+   `As a <actor>, I want to <capability> so that <so_that>.` (actor and capability
+   from either side of " can " in the title, ending from the slice's `so_that`), then
+   `Shipped <date> · <mode> · reviewer rejections: <n> · tag <ID>-done`, then one
+   bullet per acceptance criterion. Read them out of task-tree.json before the Director
+   prunes the slice from it. stories.md is append-only and has no size target: it is
+   the permanent record of what the product does, and the streak the autonomy-dial
+   promotion rule counts.
 1. current.md → 10-15 line outcome summary → handoffs/archive/<ID>.md
 2. Reset current.md (next slice header only)
 3. Builder DECISIONS → hot.md re-seed; durable patterns → project.md

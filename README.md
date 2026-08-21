@@ -32,6 +32,7 @@ claude
 | agents/ | builder · reviewer · auditor · scribe (least-privilege tools, model-per-agent) |
 | skills/ | protocol-native: grill · slice-planning · compaction · architecture-review — plus a general engineering-practice library (see Credits) |
 | commands/init-vault.md | One-command project bootstrap |
+| commands/harvest.md | `/harvest` — merged slices become user stories in vault/stories.md, then leave the task tree (`skills/harvest` is the same workflow for Copilot) |
 | settings.json | Permission deny/ask lists + 4 hooks |
 | scripts/ | guard.sh (PreToolUse) · lint.sh (PostToolUse) · checkpoint.sh (Stop) |
 | tests/ | Test harness for the hook scripts — run after any script edit; CI runs it too |

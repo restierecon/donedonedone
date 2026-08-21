@@ -68,6 +68,23 @@ A crashed/interrupted parallel wave leaves worktrees behind — reconcile via
 After each gate: record verdict in task-tree.json, append to vault/log.jsonl,
 instruct scribe to checkpoint, commit.
 
+## Story Harvest & Prune (after every merge)
+task-tree.json holds only live work. As soon as a slice's `<ID>-done` tag lands on main:
+1. Scribe appends the slice's user story to vault/stories.md (append-only, newest last):
+   `## <ID> — <title>` / `As a <actor>, I want to <capability> so that <so_that>.` /
+   `Shipped <YYYY-MM-DD> · <afk|hitl> · reviewer rejections: <n> · tag <ID>-done`
+   then one line per acceptance criterion, rewritten as observable behavior. The story
+   line is assembled from the slice's title ("Actor can ...") and its `so_that` field,
+   which slice-planning records at decomposition time — not invented at harvest.
+2. Director deletes that slice's object from task-tree.json and commits both files together.
+Nothing is lost by pruning: gate verdicts live in log.jsonl, the diff lives in git,
+the behavior lives in stories.md. A `depends_on` ID with no matching slice in
+task-tree.json is SATISFIED — absent means shipped; check stories.md if an ID looks
+unfamiliar (a typo reads the same as a shipped slice otherwise). Never prune a slice
+that isn't merged, and never prune to make a failure disappear.
+`/harvest` does both steps for every merged-but-unpruned slice at once — use it to
+backfill a tree that accumulated done slices before this rule existed.
+
 ## Git Discipline (branch-per-slice — main is always green)
 - Slice start: `git checkout -b slice/<ID>` — all checkpoint commits (code AND
   vault bookkeeping) land there. In a parallel wave, use
@@ -75,7 +92,8 @@ instruct scribe to checkpoint, commit.
   commits land on the slice branch; vault bookkeeping commits go straight to main
   (see Parallel Slice Dispatch)
 - All gates pass: squash-merge to main (checkpoint noise stays on the branch),
-  tag `<ID>-done`, delete branch, remove its worktree if it had one
+  tag `<ID>-done`, delete branch, remove its worktree if it had one, then harvest the
+  story and prune the slice (see Story Harvest & Prune)
 - Slice abandoned: delete branch and worktree; main never knew
 - Commits: Conventional Commits, imperative, slice ID — `feat(auth): add login endpoint (S002)`
 
@@ -105,7 +123,8 @@ instruct scribe to checkpoint, commit.
 - semi — afk slices merge; hitl slices pause
 - full — everything merges, flags reviewed async. ONLY legal inside a sandbox/devcontainer.
 Promotion rule: after 10 consecutive slices with zero Reviewer rejections and zero
-post-merge defects, AND a dated passing scorecard exists in the setup's evals/
+post-merge defects (read the streak off vault/stories.md, not task-tree.json — done
+slices are pruned from the tree), AND a dated passing scorecard exists in the setup's evals/
 folder for the manifest commit currently installed, suggest moving the dial up.
 Track record alone is not sufficient — ordinary production slices may never
 exercise the adversarial probes (ambiguous routing, scope-creep bait, forbidden-
@@ -128,7 +147,9 @@ the Director may build/review/audit concurrently via git worktrees in one wave.
 
 ## State (per project, in vault/)
 project.md (permanent: purpose, stack, domain language, autonomy dial,
-max_parallel_slices) · task-tree.json (ground truth: slices, modes, gates, retries) ·
+max_parallel_slices) · task-tree.json (ground truth: LIVE slices only — modes, gates,
+retries; merged slices are pruned) · stories.md (append-only user stories for every
+shipped slice — the durable record of what the product does) ·
 memory/session.md (resume file, < 150 lines) · memory/hot.md (active slice(s),
 < 100 lines) · handoffs/current.md (< 400 lines; during a parallel wave, an index over
 handoffs/active/<ID>.md per concurrently active slice) · decisions/ (ADRs) · findings/ ·

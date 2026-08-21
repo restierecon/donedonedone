@@ -31,7 +31,7 @@ chmod +x "$DEST"/scripts/*.sh
 cp -R "$SRC"/skills/* "$DEST/skills/"
 
 echo ""
-echo "Installed: 4 agents · 4 skills · 3 hook scripts · /init-vault · global CLAUDE.md"
+echo "Installed: 4 agents · 4 skills · 3 hook scripts · /init-vault · /harvest · global CLAUDE.md"
 echo ""
 echo "Recommended (optional) tools for full guardrails:"
 command -v jq >/dev/null 2>&1       || echo "  brew install jq        (required by hook scripts)"
