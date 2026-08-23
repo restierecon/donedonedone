@@ -30,6 +30,13 @@ Then [the one expected outcome — matches "so that"]
 - Then must be verifiable (`"loads in under 2s"`, not `"is faster"`).
 - Not a story: no user-facing outcome ("as a developer, refactor the DB") → that's an engineering task, skip this skill.
 
+## Helpers
+- `template.md` — blank fill-in stub.
+- `examples/sample.md` — good, bad, and split-needed stories.
+- `scripts/user-story-template.py` — prints a filled Markdown stub from
+  `--persona/--action/--outcome`, e.g.
+  `python3 scripts/user-story-template.py --persona "trial user" --action "log in with Google" --outcome "access the app without a new password"`
+
 ## In this workflow
 This produces exactly the fields slice-planning needs: title ("Actor can...") and
 `so_that` come straight from the Use Case; Gherkin scenarios become
