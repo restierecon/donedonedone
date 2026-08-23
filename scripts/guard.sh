@@ -15,7 +15,17 @@ tool=$(echo "$input" | jq -r '.tool_name // empty')
 agent_id=$(echo "$input" | jq -r '.agent_id // empty')     # present only inside subagents
 agent_type=$(echo "$input" | jq -r '.agent_type // empty')
 cmd=$(echo "$input" | jq -r '.tool_input.command // empty')
-file_path=$(echo "$input" | jq -r '.tool_input.file_path // empty')
+file_path=$(echo "$input" | jq -r '.tool_input.file_path // .tool_input.filePath // empty')
+
+# Normalize onto Claude Code's tool vocabulary. VS Code Copilot loads this same
+# settings.json (it parses Claude Code's hook format for compatibility) but sends its
+# own tool names and ignores the "matcher" field entirely — every hook fires on every
+# tool call. Without this, the checks below silently never match under Copilot and the
+# guardrails go dark rather than blocking anything.
+case "$tool" in
+  Bash|runTerminalCommand|run_in_terminal) tool="Bash" ;;
+  Write|Edit|MultiEdit|create_file|createFile|replace_string_in_file|editFiles|insert_edit_into_file) tool="Write" ;;
+esac
 
 # --- Vault integrity: subagents must not write gate state (Director-only files) ---
 # task-tree.json: Director only. session.md: Director and scribe only.

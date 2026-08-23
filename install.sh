@@ -30,8 +30,15 @@ cp "$SRC"/scripts/*.sh "$DEST/scripts/"
 chmod +x "$DEST"/scripts/*.sh
 cp -R "$SRC"/skills/* "$DEST/skills/"
 
+# GitHub Copilot in VS Code reads ~/.claude/CLAUDE.md, ~/.claude/skills/, and
+# ~/.claude/settings.json (hooks) natively -- nothing extra needed for those. Its
+# subagents are workspace-scoped only though, so builder/reviewer/auditor/scribe need
+# a generated user-level equivalent at ~/.copilot/agents/.
+"$DEST/scripts/generate-copilot-agents.sh" >/dev/null
+
 echo ""
-echo "Installed: 4 agents · 4 skills · 3 hook scripts · /init-vault · /harvest · global CLAUDE.md"
+echo "Installed: 4 agents · 5 skills · 3 hook scripts · /init-vault · /harvest · global CLAUDE.md"
+echo "Also generated: 5 GitHub Copilot custom agents → ~/.copilot/agents/"
 echo ""
 echo "Recommended (optional) tools for full guardrails:"
 command -v jq >/dev/null 2>&1       || echo "  brew install jq        (required by hook scripts)"

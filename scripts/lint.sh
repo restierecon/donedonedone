@@ -3,7 +3,8 @@
 # Exit 2 feeds stderr back as corrective input while the file is still in working attention.
 
 input=$(cat)
-file=$(echo "$input" | jq -r '.tool_input.file_path // empty' 2>/dev/null)
+# VS Code Copilot loads this same settings.json but uses camelCase tool_input keys.
+file=$(echo "$input" | jq -r '.tool_input.file_path // .tool_input.filePath // empty' 2>/dev/null)
 [ -z "$file" ] || [ ! -f "$file" ] && exit 0
 
 errors=""
