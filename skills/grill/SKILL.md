@@ -20,11 +20,16 @@ this order, skipping what's already answered:
 4. **Boundaries** — what is explicitly OUT of scope for this feature? Get a "no" list.
 5. **Existing patterns** — does the codebase already do something similar this must
    match? (Check before asking — then confirm.)
-6. **Reversal cost** — which decisions here are one-way doors? Those become hitl slices.
+6. **Reversal cost** — which decisions here are one-way doors? Decide each one now,
+   with the human, and record it as an ADR — no slice may carry an open human decision.
+7. **Human-judgment sweep** — before stopping, check for anything a builder would have
+   to ask about: UX wording/layout calls, money, deleting user data, schema choices.
+   Every slice this spec produces runs autonomously, so the answer has to be here.
 
 ## Stopping rule
-Stop when a new question would not change the slice plan. Typically 5-10 questions.
-Don't grill trivial work — a one-slice bugfix needs zero questions.
+Stop when a new question would not change the slice plan and item 7 finds nothing.
+Typically 5-10 questions. Grilling is mandatory for all work, but scale it: a one-slice
+bugfix gets one confirming question (expected behavior + what must not change).
 
 ## Side effects as you go
 - New domain term agreed? Add it to the Domain Language table in vault/project.md.
@@ -33,5 +38,5 @@ Don't grill trivial work — a one-slice bugfix needs zero questions.
 
 ## Output
 A grilled spec (in conversation, ≤ 30 lines): actor-outcome statement, decided
-behaviors including unhappy paths, the out-of-scope "no" list, one-way doors flagged.
-Then hand off to the slice-planning skill.
+behaviors including unhappy paths, the out-of-scope "no" list, one-way doors with the
+decision taken on each. Then dispatch the planner agent with it.

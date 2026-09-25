@@ -1,6 +1,6 @@
 ---
 name: architecture-review
-description: Use every 5 completed slices or at feature completion (Director tracks the counter in task-tree.json). Finds deepening opportunities — shallow modules, pass-throughs, cross-slice duplication — and queues them as hitl candidates. Never refactors autonomously.
+description: Use every 5 completed slices or at feature completion (Director tracks the counter in task-tree.json). Finds deepening opportunities — shallow modules, pass-throughs, cross-slice duplication — and queues them as candidates for human acceptance. Never refactors autonomously.
 ---
 
 # Architecture Review
@@ -38,7 +38,8 @@ earning its keep. "Vanishes" is your refactor candidate.
 ## Output & routing (this skill detects, never repairs)
 - Cards → vault/flags/pending-review.md, each with the 3-line triage block
   (what / what it affects / cost to reverse)
-- Human-accepted candidates become refactor slices tagged hitl in task-tree.json
+- Human-accepted candidates are grilled and planned like any feature — refactor slices
+  run autonomously once the grill has settled the target design
 - Human-rejected candidates with load-bearing reasons → offer an ADR so this
   review never re-suggests them
 - Reset slices_since_arch_review to 0 in task-tree.json
