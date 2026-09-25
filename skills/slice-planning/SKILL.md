@@ -1,6 +1,6 @@
 ---
 name: slice-planning
-description: Use when decomposing a feature, PRD, or grilled spec into tasks. Produces vertical slices (end-to-end behavior, never layers), each tagged afk or hitl, written into vault/task-tree.json.
+description: Use when decomposing a feature, PRD, or grilled spec into tasks. Produces vertical slices (end-to-end behavior, never layers), every one buildable without a human decision, written as a draft plan for vault/task-tree.json.
 ---
 
 # Slice Planning
@@ -41,23 +41,23 @@ third-party API) that will run in production, add an explicit acceptance criteri
 for it: "logs entry/exit with a correlation ID" or equivalent. Observability is not
 an afterthought slice — it ships with the behavior it observes.
 
-## Mode tagging (decide now, not at failure time)
-- **afk** — autonomous: requirements unambiguous, no irreversible action, no design
-  judgment a human would want. Prefer afk; most CRUD, wiring, and test slices qualify.
-- **hitl** — needs a human decision: ambiguous requirements, UX judgment calls,
-  schema choices that are expensive to reverse, anything touching money or deletion
-  of user data, architecture refactors.
+## Every slice is autonomous
+There is no human-in-the-loop slice type. The grill settles every decision a human
+would want — ambiguous requirements, UX calls, schema choices that are expensive to
+reverse, money, deletion of user data, refactor targets — before planning starts. If a
+slice still needs one of those decisions, don't write it: return the question to
+/grill. Note one-way doors (from the grill's ADRs) so the Director can route those
+slices to the top model and the Tier 2 second opinion.
 
 ## Ordering
 Walking-skeleton first: the earliest slices should produce a deployable end-to-end
 spine (one trivial behavior through every layer), then flesh out behavior by value.
-Record dependencies explicitly; the Director schedules afk slices in dependency order
-and batches hitl slices for human sessions.
+Record dependencies explicitly; the Director schedules slices in dependency order.
 
 ## Classify for parallel dispatch
 `depends_on` isn't just "must come after" — it's what makes a slice eligible for
 concurrent git-worktree dispatch (see the global protocol's Parallel Slice Dispatch).
-For each pair of afk slices, decide:
+For each pair of slices, decide:
 - **Safe to parallelize** — genuinely independent: different files, no shared schema
   or contract. Leave `depends_on` empty between them.
 - **Must be sequential** — one changes shared state the other reads (a migration,
@@ -70,12 +70,14 @@ Getting this wrong either serializes work that could have run concurrently, or l
 two slices race on files neither one's `depends_on` protected.
 
 ## Output
-Write slices into vault/task-tree.json:
-{ "id": "S00n", "title": "Actor can ...", "so_that": "...", "mode": "afk|hitl",
+Normally run by the `planner` agent, which writes the slices as a JSON array to
+vault/handoffs/plan-draft.json; the Director copies approved slices into
+vault/task-tree.json. Slice shape:
+{ "id": "S00n", "title": "Actor can ...", "so_that": "...",
   "status": "todo", "depends_on": [], "acceptance_criteria": ["..."], "retry_count": 0,
   "gates": {"self_review": null, "automated": null, "reviewer": null, "auditor": null} }
 A `depends_on` ID that names a slice absent from task-tree.json is satisfied — merged
 slices are harvested into vault/stories.md and pruned. Check stories.md before assuming
 a missing ID is a typo.
-Then present the plan as a table (id · title · mode · depends on) for confirmation
+Then present the plan as a table (id · title · depends on) for confirmation
 before any building starts.

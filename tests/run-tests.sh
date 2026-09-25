@@ -7,6 +7,8 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 GUARD="$ROOT/scripts/guard.sh"
 LINT="$ROOT/scripts/lint.sh"
 CHECKPOINT="$ROOT/scripts/checkpoint.sh"
+GATE="$ROOT/scripts/gate.sh"
+SESSION_START="$ROOT/scripts/session-start.sh"
 
 pass=0
 fail=0
@@ -96,7 +98,7 @@ make_repo() { # prints repo dir; creates git repo with vault/ and one commit
   git -C "$d" init -q -b main
   git -C "$d" config user.email test@test
   git -C "$d" config user.name test
-  mkdir -p "$d/vault"
+  mkdir -p "$d/vault" && touch "$d/vault/log.jsonl"
   echo init > "$d/file.txt"
   git -C "$d" add -A
   git -C "$d" commit -q -m "init"
@@ -141,6 +143,82 @@ git -C "$repo" checkout -q -b slice/S001
 status=0
 (cd "$repo" && "$CHECKPOINT" </dev/null >/dev/null 2>&1) || status=$?
 if [ "$status" -eq 0 ]; then ok "clean tree exits 0"; else bad "clean tree exits 0" "exit $status"; fi
+rm -rf "$repo"
+
+repo=$(make_repo)
+git -C "$repo" worktree add -q "$repo/.worktrees/S002" -b slice/S002
+echo change > "$repo/.worktrees/S002/file.txt"
+before=$(commits "$repo/.worktrees/S002")
+(cd "$repo/.worktrees/S002" && "$CHECKPOINT" </dev/null >/dev/null 2>&1)
+after=$(commits "$repo/.worktrees/S002")
+if [ "$after" -eq $((before + 1)) ]; then ok "commits slice progress inside a git worktree"; else bad "commits slice progress inside a git worktree" "commits $before->$after"; fi
+rm -rf "$repo"
+
+echo "== gate.sh — quiet gate runner =="
+make_gate_repo() { # <project.md gate lines> — prints repo dir
+  local d
+  d=$(make_repo)
+  printf '# Project\n## Gate\n%s\n' "$1" > "$d/vault/project.md"
+  echo "$d"
+}
+
+# shellcheck disable=SC2016  # literal shell text destined for project.md
+repo=$(make_gate_repo '- gate.lint: `true`
+- gate.test: echo ok')
+status=0
+out=$(cd "$repo" && "$GATE" 2>&1) || status=$?
+if [ "$status" -eq 0 ] && echo "$out" | grep -q "^lint PASS" && echo "$out" | grep -q "^types SKIP" \
+   && echo "$out" | grep -q "^GATE: PASS"; then
+  ok "passing steps report PASS, unconfigured steps SKIP"
+else
+  bad "passing steps report PASS, unconfigured steps SKIP" "exit $status: $out"
+fi
+rm -rf "$repo"
+
+# shellcheck disable=SC2016
+repo=$(make_gate_repo '- gate.test: for i in $(seq 1 500); do echo "noise line $i"; done; echo "AssertionError: boom"; exit 3')
+status=0
+out=$(cd "$repo" && "$GATE" test 2>&1) || status=$?
+lines=$(echo "$out" | wc -l)
+if [ "$status" -eq 1 ] && echo "$out" | grep -q "AssertionError: boom" && [ "$lines" -lt 40 ] \
+   && [ "$(wc -l < "$repo/.gate/test.log")" -gt 500 ]; then
+  ok "failing step prints a short excerpt, keeps the full log on disk"
+else
+  bad "failing step prints a short excerpt, keeps the full log on disk" "exit $status, $lines lines"
+fi
+rm -rf "$repo"
+
+repo=$(make_gate_repo '- gate.test: seq 1 100; exit 1')
+out=$(cd "$repo" && "$GATE" test 2>&1)
+if echo "$out" | grep -q "  100$" && ! echo "$out" | grep -q "  1$"; then
+  ok "falls back to the log tail when no line names the failure"
+else
+  bad "falls back to the log tail when no line names the failure" "$out"
+fi
+rm -rf "$repo"
+
+repo=$(make_repo)
+status=0
+(cd "$repo" && "$GATE" >/dev/null 2>&1) || status=$?
+if [ "$status" -eq 1 ]; then ok "fails without vault/project.md"; else bad "fails without vault/project.md" "exit $status"; fi
+rm -rf "$repo"
+
+echo "== session-start.sh — resume context in one injection =="
+repo=$(make_repo)
+out=$(cd "$repo" && "$SESSION_START" 2>&1)
+if [ -z "$out" ]; then ok "silent without session.md"; else bad "silent without session.md" "$out"; fi
+mkdir -p "$repo/vault/memory"
+echo "# Session State" > "$repo/vault/memory/session.md"
+echo '{"slices":[{"id":"S003","title":"User can export notes","status":"todo","depends_on":["S001"]}]}' \
+  > "$repo/vault/task-tree.json"
+git -C "$repo" worktree add -q "$repo/.worktrees/S009" -b slice/S009
+out=$(cd "$repo" && "$SESSION_START" 2>&1)
+if echo "$out" | grep -q "^# Session State" && echo "$out" | grep -q "S003 · todo · \[S001\]" \
+   && echo "$out" | grep -q "leftover worktrees" && echo "$out" | grep -q "S009"; then
+  ok "prints session.md, live-slice summary, leftover worktrees"
+else
+  bad "prints session.md, live-slice summary, leftover worktrees" "$out"
+fi
 rm -rf "$repo"
 
 echo "== lint.sh =="

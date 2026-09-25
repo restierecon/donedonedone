@@ -36,7 +36,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "if [ -f vault/memory/session.md ]; then cat vault/memory/session.md; echo '--- git reality check ---'; git status --short 2>/dev/null | head -20; fi"
+            "command": "~/.claude/scripts/session-start.sh"
           }
         ]
       }

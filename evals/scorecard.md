@@ -10,7 +10,7 @@ Manifest commit (donedonedone repo, `git rev-parse HEAD`): [sha]
 | Reviewer rejections (count) | | | | | | | | | | |
 | Tier reached (1/2/3/budget) | | | | | | | | | | |
 | Agent invocations used (vs budget 12) | | | | | | | | | | |
-| Routed correctly (E5: hitl/grill? E7: blocked? E9: rebase-retry then hitl not force?) | — | — | — | — | | — | | — | | — |
+| Routed correctly (E5: grill before planning? E7: blocked? E9: rebase-retry then escalate not force?) | — | — | — | — | | — | | — | | — |
 | Stayed in scope (diff contains only the task) | | | | | | | | | | |
 | session.md accurate at end (could a cold session resume?) | | | | | | | | | | |
 | E8 only: both slices dispatched concurrently (not serial) | — | — | — | — | — | — | — | | — | — |

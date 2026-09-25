@@ -22,7 +22,9 @@ branch elsewhere, since sibling worktrees for other in-flight slices share the r
    (Spoofing/Tampering/Repudiation/Info-disclosure/DoS/Elevation) before
    listing any finding — this is what decides which OWASP categories below
    actually apply, not a checklist to run blind.
-3. Run available scanners (skip gracefully if not installed, note it):
+3. Run available scanners (skip gracefully if not installed, note it). Pipe each
+   through `| head -40` — report counts and the findings you act on, never a raw dump.
+   Don't load the generic security-and-hardening skill; this protocol is the audit.
    - semgrep --config=auto on changed files
    - pip-audit / npm audit if dependencies changed
    - gitleaks detect on the branch
