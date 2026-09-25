@@ -24,7 +24,7 @@ writes task-tree.json).
    ## S002 — Developer can log in with email and password
    As a developer, I want to log in with my email and password so that my work stays
    tied to my own account.
-   Shipped 2026-08-19 · afk · reviewer rejections: 0 · tag S002-done
+   Shipped 2026-08-19 · reviewer rejections: 0 · tag S002-done
    - Valid credentials set a session cookie; logout clears it
    - Wrong credentials return 401 without revealing which field was wrong
    - Six failures from one IP in a minute lock the account for 15 minutes
@@ -40,7 +40,7 @@ writes task-tree.json).
      the criteria don't support — "so that the feature works" means you should ask
      instead of guessing.
    - Meta line: shipped date (`git log -1 --format=%ad --date=short <ID>-done`, else
-     the merge commit's date, else today) · `mode` · reviewer rejections
+     the merge commit's date, else today) · reviewer rejections
      (count REJECTED verdicts for that ID in vault/log.jsonl; fall back to
      `retry_count`) · the tag name.
    - Bullets: one per acceptance criterion, rewritten as behavior a user can observe.

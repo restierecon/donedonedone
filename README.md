@@ -38,7 +38,8 @@ claude
 | evals/ | 10-task benchmark + scorecard — run before trusting, re-run after any manifest edit |
 
 ## The loop
-grill → planner (vertical slices, afk/hitl tagged) → per slice on its own branch:
+grill (mandatory; settles every human decision) → planner (vertical slices, all
+autonomous) → per slice on its own branch:
 builder (test-first) → gate.sh once → reviewer (cold eyes + slop checklist) →
 auditor (security surfaces only) → merge + tag → scribe (story + compaction, once).
 Failures resolve through 3 self-healing tiers with a hard budget ceiling.
@@ -52,7 +53,7 @@ Where the protocol spends tokens, and what keeps it down:
 - **Subagent cold starts** — scribe runs once per slice, not after every gate; the
   planner reads the codebase for decomposition so the Director's long-lived context
   doesn't; agents get file paths, not pasted contents.
-- **Model choice** — builder drops to sonnet for small afk slices; reviewer is sonnet,
+- **Model choice** — builder drops to sonnet for small slices; reviewer is sonnet,
   scribe haiku.
 - **Always-loaded text** — the global CLAUDE.md is kept small (rarely-needed procedure
   lives in on-demand skills like parallel-dispatch) and is inert outside a vault project.

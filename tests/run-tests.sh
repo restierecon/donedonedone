@@ -209,11 +209,11 @@ out=$(cd "$repo" && "$SESSION_START" 2>&1)
 if [ -z "$out" ]; then ok "silent without session.md"; else bad "silent without session.md" "$out"; fi
 mkdir -p "$repo/vault/memory"
 echo "# Session State" > "$repo/vault/memory/session.md"
-echo '{"slices":[{"id":"S003","title":"User can export notes","status":"todo","mode":"afk","depends_on":["S001"]}]}' \
+echo '{"slices":[{"id":"S003","title":"User can export notes","status":"todo","depends_on":["S001"]}]}' \
   > "$repo/vault/task-tree.json"
 git -C "$repo" worktree add -q "$repo/.worktrees/S009" -b slice/S009
 out=$(cd "$repo" && "$SESSION_START" 2>&1)
-if echo "$out" | grep -q "^# Session State" && echo "$out" | grep -q "S003 · todo · afk · \[S001\]" \
+if echo "$out" | grep -q "^# Session State" && echo "$out" | grep -q "S003 · todo · \[S001\]" \
    && echo "$out" | grep -q "leftover worktrees" && echo "$out" | grep -q "S009"; then
   ok "prints session.md, live-slice summary, leftover worktrees"
 else

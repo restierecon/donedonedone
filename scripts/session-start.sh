@@ -9,8 +9,8 @@
 cat vault/memory/session.md
 
 if [ -f vault/task-tree.json ] && command -v jq >/dev/null 2>&1; then
-  echo "--- live slices (id · status · mode · depends_on) ---"
-  jq -r '.slices[]? | "\(.id) · \(.status) · \(.mode) · [\((.depends_on // []) | join(","))] · \(.title)"' \
+  echo "--- live slices (id · status · depends_on · title) ---"
+  jq -r '.slices[]? | "\(.id) · \(.status) · [\((.depends_on // []) | join(","))] · \(.title)"' \
     vault/task-tree.json 2>/dev/null | head -40
 fi
 

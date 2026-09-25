@@ -1,11 +1,11 @@
 ---
 name: parallel-dispatch
-description: Use when the Director is about to build two or more independent afk slices at once, or when resuming with leftover .worktrees/ from an interrupted wave. Covers git-worktree setup, concurrent builder/reviewer dispatch, where vault bookkeeping commits go, serial squash-merges, and merge-conflict recovery.
+description: Use when the Director is about to build two or more independent slices at once, or when resuming with leftover .worktrees/ from an interrupted wave. Covers git-worktree setup, concurrent builder/reviewer dispatch, where vault bookkeeping commits go, serial squash-merges, and merge-conflict recovery.
 ---
 
 # Parallel Slice Dispatch (git worktrees)
 
-Gather all `afk` slices whose `depends_on` are satisfied (done, or absent from
+Gather all slices whose `depends_on` are satisfied (done, or absent from
 task-tree.json = shipped). They are independent and safe to run concurrently. Dispatch
 up to `max_parallel_slices` (vault/project.md, default 3) at once:
 
@@ -28,7 +28,7 @@ up to `max_parallel_slices` (vault/project.md, default 3) at once:
    land — the merge stays Director-serial even though build/review was concurrent.
 6. Squash-merge conflict (a sibling already changed an overlapping file): re-dispatch
    that builder once, in its worktree, to rebase onto current main, resolve, and re-run
-   gates. Second failure → route to hitl (vault/flags/pending-review.md); don't force it.
+   gates. Second failure → escalate (vault/flags/pending-review.md); don't force it.
 7. After merge (or on abandonment): `git worktree remove .worktrees/<ID>` and delete
    the branch.
 
