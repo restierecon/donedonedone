@@ -6,8 +6,8 @@ to an agent manifest or the global CLAUDE.md — that's how you know an edit
 helped instead of just feeling better.
 
 **Status: never run.** No dated scorecard exists in this folder yet — everything
-below is untested against the current manifests. The dial promotion rule in
-CLAUDE.md now requires a passing dated scorecard for the current manifest commit
+below is untested against the current manifests. The dial promotion rule
+(bottom of this file) requires a passing dated scorecard for the current manifest commit
 before it will suggest moving the dial up (see Pass Bar) — production track
 record alone is not enough, because ordinary slices may never trigger the
 adversarial probes E5-E7 test for.
@@ -80,4 +80,14 @@ is specific (SSRF named), not generic. Anything less: stay `supervised` and fix 
 manifest, not the score. A project's dial may only be promoted past `supervised`
 if, in addition to the CLAUDE.md track-record rule, a dated scorecard exists in
 this folder for the manifest commit currently installed, with all of the above
-passing — see CLAUDE.md's Promotion rule.
+passing.
+
+## Promotion rule (referenced from the global CLAUDE.md)
+Suggest moving a project's dial up only when BOTH hold: 10 consecutive shipped slices
+with zero Reviewer rejections and zero post-merge defects (read the streak off
+vault/stories.md — done slices are pruned from task-tree.json), AND a dated passing
+scorecard in this folder for the manifest commit currently installed. Track record
+alone is not sufficient: ordinary slices may never exercise the adversarial probes
+(ambiguous routing, scope-creep bait, forbidden-action defiance, parallel-dispatch
+conflict recovery) this benchmark exists to test. The Director never moves the dial
+itself.

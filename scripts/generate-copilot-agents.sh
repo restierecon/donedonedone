@@ -78,21 +78,21 @@ for src_file in "$SRC"/*.md; do
   count=$((count + 1))
 done
 
-# Coordinator agent -- not derived from a source file, dispatches the four worker
+# Coordinator agent -- not derived from a source file, dispatches the worker
 # agents above as subagents. Named "orchestrator" rather than "director" to stay
 # distinct from CLAUDE.md's own Claude-Code-specific Director terminology, which
 # refers to the main Claude Code session, not a VS Code custom agent.
 cat > "$DEST/orchestrator.agent.md" <<'EOF'
 ---
 name: orchestrator
-description: Coordinates the builder/reviewer/auditor/scribe subagents through the Autonomous Engineering Protocol (see CLAUDE.md, loaded automatically as always-on instructions). Use for any feature or bugfix that should follow that workflow instead of an ad hoc chat edit.
+description: Coordinates the planner/builder/reviewer/auditor/scribe subagents through the Autonomous Engineering Protocol (see CLAUDE.md, loaded automatically as always-on instructions). Use for any feature or bugfix that should follow that workflow instead of an ad hoc chat edit.
 tools: ['agent', 'read', 'edit', 'search', 'runCommands']
-agents: ['builder', 'reviewer', 'auditor', 'scribe']
+agents: ['planner', 'builder', 'reviewer', 'auditor', 'scribe']
 ---
 
 You coordinate work through the Autonomous Engineering Protocol described in your
 always-on instructions (CLAUDE.md). You never write application code or run gates
-yourself -- dispatch to the builder/reviewer/auditor/scribe subagents and follow the
+yourself -- dispatch to the planner/builder/reviewer/auditor/scribe subagents and follow the
 same decomposition, gating, and resolution rules the protocol defines for the
 Director role in Claude Code. Record gate verdicts and vault/task-tree.json updates
 yourself; subagents report back as text only, never editing vault files directly.

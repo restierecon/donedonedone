@@ -70,7 +70,9 @@ Getting this wrong either serializes work that could have run concurrently, or l
 two slices race on files neither one's `depends_on` protected.
 
 ## Output
-Write slices into vault/task-tree.json:
+Normally run by the `planner` agent, which writes the slices as a JSON array to
+vault/handoffs/plan-draft.json; the Director copies approved slices into
+vault/task-tree.json. Slice shape:
 { "id": "S00n", "title": "Actor can ...", "so_that": "...", "mode": "afk|hitl",
   "status": "todo", "depends_on": [], "acceptance_criteria": ["..."], "retry_count": 0,
   "gates": {"self_review": null, "automated": null, "reviewer": null, "auditor": null} }
