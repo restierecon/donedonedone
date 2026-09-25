@@ -1,8 +1,11 @@
 #!/bin/bash
 # Stop hook — checkpoint after every turn. Secret-scan first; never immortalize a credential.
 # Only acts inside a git repo that has a vault/ (i.e., an initialized autonomous project).
+# rev-parse, not [ -d .git ]: in a git worktree .git is a file, and the checkpoint must still run.
 
-[ -d .git ] && [ -d vault ] || exit 0
+top=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
+cd "$top" || exit 0
+[ -d vault ] || exit 0
 
 # Nothing to commit?
 git diff --quiet && git diff --cached --quiet && [ -z "$(git status --porcelain)" ] && exit 0
