@@ -1,6 +1,6 @@
 # Autonomous Engineering Setup for Claude Code
 
-A lean, hardened multi-agent setup: 4 agents, 5 skills, mechanical guardrails,
+A lean, hardened multi-agent setup: 5 agents, protocol skills, mechanical guardrails,
 session-surviving memory, and an autonomy dial you turn up only as trust is earned.
 Built for Claude Code; also works with GitHub Copilot in VS Code (see below).
 
@@ -30,21 +30,34 @@ claude
 | Path | What |
 |---|---|
 | CLAUDE.md | Global protocol — the main session IS the Director |
-| agents/ | builder · reviewer · auditor · scribe (least-privilege tools, model-per-agent) |
-| skills/ | protocol-native: grill · slice-planning · compaction · architecture-review · init-vault — plus a general engineering-practice library (see Credits) |
-| commands/init-vault.md | One-command project bootstrap (Claude Code `/init-vault`; `skills/init-vault` is the same workflow for Copilot) |
-| commands/harvest.md | `/harvest` — merged slices become user stories in vault/stories.md, then leave the task tree (`skills/harvest` is the same workflow for Copilot) |
+| agents/ | planner · builder · reviewer · auditor · scribe (least-privilege tools, model-per-agent) |
+| skills/ | protocol-native: grill · slice-planning · parallel-dispatch · compaction · architecture-review · `/init-vault` · `/harvest` — plus a general engineering-practice library (see Credits) |
 | settings.json | Permission deny/ask lists + 4 hooks |
-| scripts/ | guard.sh (PreToolUse) · lint.sh (PostToolUse) · checkpoint.sh (Stop) · generate-copilot-agents.sh (install-time only) |
+| scripts/ | guard.sh (PreToolUse) · lint.sh (PostToolUse) · checkpoint.sh (Stop) · session-start.sh (SessionStart) · gate.sh (quiet lint/types/test/build runner) · generate-copilot-agents.sh (install-time only) |
 | tests/ | Test harness for the hook scripts — run after any script edit; CI runs it too |
 | evals/ | 10-task benchmark + scorecard — run before trusting, re-run after any manifest edit |
 
 ## The loop
-grill → slice-plan (vertical, afk/hitl tagged) → per slice on its own branch:
-builder (test-first) → automated gate → reviewer (cold eyes + slop checklist) →
-auditor (security surfaces only) → scribe checkpoint → merge + tag.
+grill → planner (vertical slices, afk/hitl tagged) → per slice on its own branch:
+builder (test-first) → gate.sh once → reviewer (cold eyes + slop checklist) →
+auditor (security surfaces only) → merge + tag → scribe (story + compaction, once).
 Failures resolve through 3 self-healing tiers with a hard budget ceiling.
 Every 5 slices: architecture review.
+
+## Token budget
+Where the protocol spends tokens, and what keeps it down:
+- **Test output** — the biggest avoidable cost. Every check runs through `gate.sh`,
+  which prints one line per step and a ≤ 30-line failure excerpt; full logs stay in
+  `.gate/`. The full gate runs once per slice (Director), not three times.
+- **Subagent cold starts** — scribe runs once per slice, not after every gate; the
+  planner reads the codebase for decomposition so the Director's long-lived context
+  doesn't; agents get file paths, not pasted contents.
+- **Model choice** — builder drops to sonnet for small afk slices; reviewer is sonnet,
+  scribe haiku.
+- **Always-loaded text** — the global CLAUDE.md is kept small (rarely-needed procedure
+  lives in on-demand skills like parallel-dispatch) and is inert outside a vault project.
+- **Resume** — the SessionStart hook injects session state, live slices, git status and
+  leftover worktrees in one go.
 
 ## Safety model
 - Deny/ask permission lists + PreToolUse tripwire (destructive commands can't run;
@@ -75,7 +88,7 @@ this setup works with zero conversion once `./install.sh` has run:
 What doesn't carry over automatically: VS Code only auto-detects Claude-format
 subagents from a *workspace* `.claude/agents` folder, not the user-level
 `~/.claude/agents` this repo installs to. `install.sh` runs
-`scripts/generate-copilot-agents.sh` to translate builder/reviewer/auditor/scribe
+`scripts/generate-copilot-agents.sh` to translate every agent in `agents/`
 into VS Code's native format at `~/.copilot/agents/`, plus a new `orchestrator` agent
 that plays the Director role (dispatches the other four as subagents — VS Code has
 genuine subagent orchestration via a custom agent's `agents:` frontmatter field). The

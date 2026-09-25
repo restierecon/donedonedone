@@ -7,7 +7,7 @@ DEST="$HOME/.claude"
 TS=$(date +%Y%m%d-%H%M%S)
 
 echo "Installing autonomous engineering setup → $DEST"
-mkdir -p "$DEST"/{agents,commands,scripts,skills}
+mkdir -p "$DEST"/{agents,scripts,skills}
 
 # Global CLAUDE.md — back up if one exists and differs
 if [ -f "$DEST/CLAUDE.md" ] && ! cmp -s "$SRC/CLAUDE.md" "$DEST/CLAUDE.md"; then
@@ -25,20 +25,30 @@ else
 fi
 
 cp "$SRC"/agents/*.md "$DEST/agents/"
-cp "$SRC"/commands/*.md "$DEST/commands/"
+# /init-vault and /harvest used to ship as commands/ duplicates of their skills. Skills are
+# slash-invocable themselves, so retire the old copies rather than leave two definitions.
+for old in init-vault harvest; do
+  if [ -f "$DEST/commands/$old.md" ]; then
+    mv "$DEST/commands/$old.md" "$DEST/commands/$old.md.bak-$TS"
+    echo "  retired commands/$old.md (now the $old skill) → $old.md.bak-$TS"
+  fi
+done
 cp "$SRC"/scripts/*.sh "$DEST/scripts/"
 chmod +x "$DEST"/scripts/*.sh
 cp -R "$SRC"/skills/* "$DEST/skills/"
 
 # GitHub Copilot in VS Code reads ~/.claude/CLAUDE.md, ~/.claude/skills/, and
 # ~/.claude/settings.json (hooks) natively -- nothing extra needed for those. Its
-# subagents are workspace-scoped only though, so builder/reviewer/auditor/scribe need
+# subagents are workspace-scoped only though, so the agents in agents/ need
 # a generated user-level equivalent at ~/.copilot/agents/.
 "$DEST/scripts/generate-copilot-agents.sh" >/dev/null
 
 echo ""
-echo "Installed: 4 agents · 5 skills · 3 hook scripts · /init-vault · /harvest · global CLAUDE.md"
-echo "Also generated: 5 GitHub Copilot custom agents → ~/.copilot/agents/"
+n_agents=$(find "$SRC/agents" -name '*.md' | wc -l | tr -d ' ')
+n_skills=$(find "$SRC/skills" -name SKILL.md | wc -l | tr -d ' ')
+n_scripts=$(find "$SRC/scripts" -name '*.sh' | wc -l | tr -d ' ')
+echo "Installed: $n_agents agents · $n_skills skills (incl. /init-vault, /harvest) · $n_scripts scripts · global CLAUDE.md"
+echo "Also generated: $((n_agents + 1)) GitHub Copilot custom agents → ~/.copilot/agents/"
 echo ""
 echo "Recommended (optional) tools for full guardrails:"
 command -v jq >/dev/null 2>&1       || echo "  brew install jq        (required by hook scripts)"
