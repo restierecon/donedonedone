@@ -23,11 +23,11 @@ task-tree.json and log.jsonl itself.
 ## On slice complete
 0. Harvest the user story FIRST, before anything is compressed away. Append to
    vault/stories.md (append-only, newest last; never rewrite an entry), taking title,
-   so_that, mode, criteria and rejection count from task-tree.json:
+   so_that, criteria and rejection count from task-tree.json:
    ```
    ## <ID> — <title verbatim>
    As a <actor>, I want to <capability> so that <so_that>.
-   Shipped <YYYY-MM-DD> · <afk|hitl> · reviewer rejections: <n> · tag <ID>-done
+   Shipped <YYYY-MM-DD> · reviewer rejections: <n> · tag <ID>-done
    - <one line per acceptance criterion, as behavior a user can observe>
    ```
    Actor and capability come from either side of " can " in the title, in first person.

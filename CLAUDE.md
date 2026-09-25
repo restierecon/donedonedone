@@ -26,20 +26,25 @@ heavy reads go to agents; you consume structured verdicts (≤ 20 lines) only.
 | auditor | Adversarial security pass | Only slices touching auth, data access, user input, secrets, deps, or external calls |
 | scribe | Harvests the story, compacts handoffs, checkpoints memory | Once per completed slice; when handoffs/current.md > 400 lines; before ending a session mid-slice |
 
-Model routing: builder runs on `sonnet` (pass `model` on the Agent call) for afk slices
-with ≤ 4 criteria and no auditor trigger; everything else — hitl, auditor-triggered,
-or any retry after a REJECTED — inherits the session model. Reviewer is sonnet,
+Model routing: builder runs on `sonnet` (pass `model` on the Agent call) for slices
+with ≤ 4 criteria, no auditor trigger and no one-way door; everything else — including
+any retry after a REJECTED — inherits the session model. Reviewer is sonnet,
 scribe is haiku (fixed in their manifests).
 
-## Decomposition — Vertical Slices Only
-New feature: run /grill yourself (it's a conversation with the human), then dispatch
-`planner` with the grilled spec. It writes vault/handoffs/plan-draft.json and returns a
-table. Review the table, present it to the human, then copy the approved slices into
-task-tree.json yourself and delete the draft. Every slice is named "Actor can [do
-something]", touches every layer that behavior needs, is testable alone, and is tagged
-`afk` or `hitl` — never decompose by layer. A slice only blocks slices naming it in
-`depends_on`. Independent afk slices may run concurrently: load the parallel-dispatch
-skill before starting a wave (max_parallel_slices in vault/project.md, default 3).
+## Decomposition — Grill Always, Every Slice Autonomous
+No slice exists without a grill. Every feature, bugfix and refactor — however small —
+goes through /grill first (you run it; it's a conversation with the human). The grill
+is where every human decision gets made: UX calls, one-way doors, schema choices,
+anything touching money or deleting user data. Decisions with a load-bearing rationale
+become ADRs in vault/decisions/. Then dispatch `planner` with the grilled spec; it
+writes vault/handoffs/plan-draft.json and returns a table. If it reports OPEN
+QUESTIONS, take them back to /grill — never plan around a gap. Present the table,
+then copy the approved slices into task-tree.json yourself and delete the draft.
+Every slice is autonomous: named "Actor can [do something]", touches every layer that
+behavior needs, testable alone, never decomposed by layer, and needs no human decision
+mid-build. A slice only blocks slices naming it in `depends_on`. Independent slices may
+run concurrently: load the parallel-dispatch skill before starting a wave
+(max_parallel_slices in vault/project.md, default 3).
 
 ## Completion Gates (slice is DONE only when all pass, in order)
 1. Builder self-review (criteria met, no TODOs/placeholders; reports its commit SHA)
@@ -66,19 +71,23 @@ merged, and never prune to make a failure disappear. `/harvest` backfills in bul
 
 ## Resolution Protocol (exhaust before flagging a human)
 - **Tier 1** — Builder retries with its own critique. Max 3 attempts.
-- **Tier 2** — Builder retries with Reviewer critique. Max 2 rounds. For a hitl slice
-  or one the Auditor flagged, the second round may route through a differently
+- **Tier 2** — Builder retries with Reviewer critique. Max 2 rounds. For a slice the
+  grill marked as a one-way door or one the Auditor flagged, the second round may route through a differently
   architected model (a second CLI/provider, not just a fresh context) as an
   adversarial second opinion — never silently; note it in the round's log entry.
 - **Tier 3** — Re-read criteria for ambiguity; choose the most reversible,
   smallest-surface interpretation consistent with vault/decisions/; log an ADR; continue.
-  Deterministic tiebreak: option A.
+  Deterministic tiebreak: option A. If no interpretation is safe without a human call,
+  the grill missed something: escalate.
 - **Budget ceiling** — if a slice exceeds 10 builder/reviewer/auditor invocations
-  (scribe not counted), stop and route it to hitl. Never loop indefinitely.
+  (scribe not counted), escalate. Never loop indefinitely.
+- **Escalate** = halt that slice, write a pending-review.md entry, continue with the
+  next non-dependent slice. A human resolves it by re-grilling; the slice is then
+  re-planned, never hand-patched.
 
 ## Flags (vault/flags/) — verification ergonomics required
-- pending-review.md — non-blocking (ambiguity, tiebreaks, architecture candidates,
-  nearby-improvement notes). Continue working.
+- pending-review.md — escalated slices, Tier 3 tiebreaks, architecture candidates,
+  nearby-improvement notes. Continue with non-dependent work.
 - blocked.md — Auditor CRITICAL only. Halt that slice, continue with next
   non-dependent slice. Never ship a known-critical finding.
 - Every flag entry: 3-line summary first (what / what it affects / cost to reverse),
@@ -86,8 +95,9 @@ merged, and never prune to make a failure disappear. `/harvest` backfills in bul
 
 ## Autonomy Dial (set in vault/project.md)
 - supervised — every slice pauses for human approval after gates (DEFAULT)
-- semi — afk slices merge; hitl slices pause
-- full — everything merges, flags reviewed async. ONLY legal inside a sandbox/devcontainer.
+- semi — slices merge on green gates; any escalation or CLEARED-WITH-FINDINGS pauses
+  the queue until a human looks
+- full — everything green merges, flags reviewed async. ONLY legal inside a sandbox/devcontainer.
 Suggest moving up only when the promotion rule in the setup's evals/README.md is met
 (10-slice clean streak from stories.md AND a dated passing scorecard). Never move the
 dial yourself.
@@ -113,5 +123,5 @@ handoffs/current.md (< 400 lines) · decisions/ (ADRs) · findings/ · flags/ ·
   FIRST. Leftover `.worktrees/<ID>` get resumed or torn down before new work.
 - Never re-do gate-approved work.
 - Every 5 completed slices or at feature completion: run the architecture-review skill;
-  candidates go to pending-review.md as hitl items.
+  candidates go to pending-review.md; accepted ones are grilled and planned like any feature.
 - New dependencies require a one-line justification logged as a decision; lockfiles always committed.
