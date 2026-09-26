@@ -13,9 +13,10 @@ if [ -n "$root" ] && [ -d "$root" ]; then cd "$root" || exit 0; fi
 
 [ -f vault/memory/session.md ] || exit 0
 
-# Keep the project's Cursor copy of the protocol in step with ~/.claude/CLAUDE.md.
-if [ "$event" = "sessionStart" ] && [ -f .cursor/rules/autonomous-protocol.mdc ]; then
-  "$(dirname "$0")/cursor-rules.sh" . >/dev/null 2>&1
+# Keep the project's AGENTS.md copy of the protocol (read by Cursor and Copilot) in step
+# with ~/.claude/CLAUDE.md. Only projects that opted in carry the marker.
+if [ -f AGENTS.md ] && grep -qF '<!-- skeletoncrew:protocol:begin' AGENTS.md; then
+  "$(dirname "$0")/agents-md.sh" . >/dev/null 2>&1
 fi
 
 context() {
