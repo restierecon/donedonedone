@@ -3,8 +3,10 @@
 # Exit 2 feeds stderr back as corrective input while the file is still in working attention.
 
 input=$(cat)
+# Cursor's afterFileEdit sends file_path at the top level and ignores exit codes (the
+# edit already happened), so there this hook only formats; errors surface at gate.sh.
 # VS Code Copilot loads this same settings.json but uses camelCase tool_input keys.
-file=$(echo "$input" | jq -r '.tool_input.file_path // .tool_input.filePath // empty' 2>/dev/null)
+file=$(echo "$input" | jq -r '.tool_input.file_path // .tool_input.filePath // .file_path // empty' 2>/dev/null)
 [ -z "$file" ] || [ ! -f "$file" ] && exit 0
 
 errors=""
