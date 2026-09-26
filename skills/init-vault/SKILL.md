@@ -32,6 +32,10 @@ Initialize this project for the autonomous workflow. Do all of the following:
    testable, no TODO/FIXME, gates green).
 9. Create a project-level CLAUDE.md containing ONLY project specifics (dependency
    install step, anything unusual — gate commands live in project.md) — the protocol lives globally, don't repeat it.
-10. Commit: `git add -A && git commit -m "chore: init autonomous workflow vault"`
-11. Confirm to me: vault ready, autonomy dial at `supervised`, and suggest running
+10. Cursor has no global rules file and never reads CLAUDE.md: if `~/.cursor/` exists,
+    run `~/.claude/scripts/cursor-rules.sh` to write .cursor/rules/autonomous-protocol.mdc
+    (the protocol as an always-applied project rule; it refreshes itself on each Cursor
+    session).
+11. Commit: `git add -A && git commit -m "chore: init autonomous workflow vault"`
+12. Confirm to me: vault ready, autonomy dial at `supervised`, and suggest running
     /grill on the first feature before any decomposition.
