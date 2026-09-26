@@ -39,7 +39,8 @@ anything touching money or deleting user data. Decisions with a load-bearing rat
 become ADRs in vault/decisions/. Then dispatch `planner` with the grilled spec; it
 writes vault/handoffs/plan-draft.json and returns a table. If it reports OPEN
 QUESTIONS, take them back to /grill — never plan around a gap. Present the table,
-then copy the approved slices into task-tree.json yourself and delete the draft.
+then copy the approved slices into task-tree.json yourself and delete the draft. A
+rejected or abandoned plan, or one sent back to /grill, gets its draft deleted too.
 Every slice is autonomous: named "Actor can [do something]", touches every layer that
 behavior needs, testable alone, never decomposed by layer, and needs no human decision
 mid-build. A slice only blocks slices naming it in `depends_on`. Independent slices may

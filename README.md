@@ -106,7 +106,7 @@ Pull, re-run `./install.sh`. It retires old `~/.claude/commands/init-vault.md` a
 `harvest.md` (now skills) to `.bak-<timestamp>` copies. In each existing project:
 1. Add `gate.*` lines to `vault/project.md` (see Gate commands) — without them every
    gate step reports SKIP.
-2. Add `.gate/` to `.gitignore`.
+2. Add `.gate/` and `vault/handoffs/plan-draft.json` to `.gitignore`.
 3. Run `~/.claude/scripts/agents-md.sh` once in the project so Cursor and Copilot get
    the protocol through AGENTS.md; commit it.
 4. Slices already in `task-tree.json` with a `mode: afk|hitl` field keep working; the

@@ -7,8 +7,9 @@ Initialize this project for the autonomous workflow. Do all of the following:
 
 1. Verify this is a git repo (`git rev-parse`); if not, `git init`.
 2. Verify `.env` and `.env.*` are in .gitignore — add them if missing. Never proceed
-   without this. Also verify `.worktrees/` (parallel-slice git worktrees) and `.gate/`
-   (gate.sh logs) are gitignored — add them if missing.
+   without this. Also verify `.worktrees/` (parallel-slice git worktrees), `.gate/`
+   (gate.sh logs) and `vault/handoffs/plan-draft.json` (the planner's scratch output,
+   never source of truth) are gitignored — add them if missing.
 3. Create directories: vault/handoffs/archive, vault/decisions, vault/findings, vault/flags, vault/memory
 4. Create vault/task-tree.json:
    {"project": "", "autonomy_note": "dial lives in project.md", "slices_since_arch_review": 0, "slices": []}
