@@ -302,7 +302,7 @@ if [ "$(head -1 "$proj/AGENTS.md")" = "# Mine above" ] && [ "$(tail -1 "$proj/AG
    && ! grep -q "^stale$" "$proj/AGENTS.md" && [ "$(grep -c 'skeletoncrew:protocol:begin' "$proj/AGENTS.md")" -eq 1 ]; then
   ok "agents-md replaces a stale block in place and keeps the user's own text"
 else
-  bad "agents-md replaces a stale block in place and keeps the user's own text" "$(cat "$proj/AGENTS.md" | head -3)"
+  bad "agents-md replaces a stale block in place and keeps the user's own text" "$(head -3 "$proj/AGENTS.md")"
 fi
 printf '# Existing notes\n' > "$proj/AGENTS.md"
 AGENTS_MD_SRC="$ROOT/CLAUDE.md" "$AGENTS_MD" "$proj" >/dev/null
