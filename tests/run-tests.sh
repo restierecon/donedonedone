@@ -10,7 +10,7 @@ CHECKPOINT="$ROOT/scripts/checkpoint.sh"
 GATE="$ROOT/scripts/gate.sh"
 SESSION_START="$ROOT/scripts/session-start.sh"
 GENERATE="$ROOT/scripts/generate-agents.sh"
-CURSOR_RULES="$ROOT/scripts/cursor-rules.sh"
+AGENTS_MD="$ROOT/scripts/agents-md.sh"
 
 pass=0
 fail=0
@@ -254,20 +254,23 @@ if [ "$after" -eq $((before + 1)) ]; then ok "checkpoint finds the project via w
 rm -rf "$repo"
 
 repo=$(make_repo)
-mkdir -p "$repo/vault/memory" "$repo/.cursor/rules"
+mkdir -p "$repo/vault/memory"
 echo "# Session State" > "$repo/vault/memory/session.md"
-echo stale > "$repo/.cursor/rules/autonomous-protocol.mdc"
+printf '<!-- skeletoncrew:protocol:begin old -->\nstale\n<!-- skeletoncrew:protocol:end -->\n' > "$repo/AGENTS.md"
 out=$(cd /tmp && jq -n --arg r "$repo" '{hook_event_name: "sessionStart", workspace_roots: [$r]}' \
-  | CURSOR_RULES_SRC="$ROOT/CLAUDE.md" "$SESSION_START" 2>/dev/null)
+  | AGENTS_MD_SRC="$ROOT/CLAUDE.md" "$SESSION_START" 2>/dev/null)
 if echo "$out" | jq -e '.additional_context | test("# Session State")' >/dev/null 2>&1 \
-   && grep -q "alwaysApply: true" "$repo/.cursor/rules/autonomous-protocol.mdc"; then
-  ok "session-start answers Cursor with additional_context JSON and refreshes the rule"
+   && grep -q "Autonomous Engineering Protocol" "$repo/AGENTS.md" && ! grep -q "^stale$" "$repo/AGENTS.md"; then
+  ok "session-start answers Cursor with additional_context JSON and refreshes AGENTS.md"
 else
-  bad "session-start answers Cursor with additional_context JSON and refreshes the rule" "$out"
+  bad "session-start answers Cursor with additional_context JSON and refreshes AGENTS.md" "$out"
 fi
+printf '<!-- skeletoncrew:protocol:begin old -->\nstale\n<!-- skeletoncrew:protocol:end -->\n' > "$repo/AGENTS.md"
+(cd "$repo" && AGENTS_MD_SRC="$ROOT/CLAUDE.md" "$SESSION_START" </dev/null >/dev/null 2>&1)
+if ! grep -q "^stale$" "$repo/AGENTS.md"; then ok "session-start refreshes AGENTS.md under Claude Code too"; else bad "session-start refreshes AGENTS.md under Claude Code too" "still stale"; fi
 rm -rf "$repo"
 
-echo "== generate-agents.sh / cursor-rules.sh =="
+echo "== generate-agents.sh / agents-md.sh =="
 gen=$(mktemp -d)
 "$GENERATE" copilot "$gen/copilot" >/dev/null
 "$GENERATE" cursor "$gen/cursor" >/dev/null
@@ -286,12 +289,27 @@ fi
 status=0; "$GENERATE" bogus >/dev/null 2>&1 || status=$?
 if [ "$status" -eq 1 ]; then ok "unknown target exits 1"; else bad "unknown target exits 1" "exit $status"; fi
 proj="$gen/proj"; mkdir -p "$proj"
-first=$(CURSOR_RULES_SRC="$ROOT/CLAUDE.md" "$CURSOR_RULES" "$proj")
-second=$(CURSOR_RULES_SRC="$ROOT/CLAUDE.md" "$CURSOR_RULES" "$proj")
-if [ -n "$first" ] && [ -z "$second" ] && grep -q "Autonomous Engineering Protocol" "$proj/.cursor/rules/autonomous-protocol.mdc"; then
-  ok "cursor-rules writes the rule once and is a no-op when unchanged"
+first=$(AGENTS_MD_SRC="$ROOT/CLAUDE.md" "$AGENTS_MD" "$proj")
+second=$(AGENTS_MD_SRC="$ROOT/CLAUDE.md" "$AGENTS_MD" "$proj")
+if [ -n "$first" ] && [ -z "$second" ] && grep -q "Autonomous Engineering Protocol" "$proj/AGENTS.md"; then
+  ok "agents-md creates AGENTS.md once and is a no-op when unchanged"
 else
-  bad "cursor-rules writes the rule once and is a no-op when unchanged" "first=$first second=$second"
+  bad "agents-md creates AGENTS.md once and is a no-op when unchanged" "first=$first second=$second"
+fi
+printf '# Mine above\n<!-- skeletoncrew:protocol:begin x -->\nstale\n<!-- skeletoncrew:protocol:end -->\n# Mine below\n' > "$proj/AGENTS.md"
+AGENTS_MD_SRC="$ROOT/CLAUDE.md" "$AGENTS_MD" "$proj" >/dev/null
+if [ "$(head -1 "$proj/AGENTS.md")" = "# Mine above" ] && [ "$(tail -1 "$proj/AGENTS.md")" = "# Mine below" ] \
+   && ! grep -q "^stale$" "$proj/AGENTS.md" && [ "$(grep -c 'skeletoncrew:protocol:begin' "$proj/AGENTS.md")" -eq 1 ]; then
+  ok "agents-md replaces a stale block in place and keeps the user's own text"
+else
+  bad "agents-md replaces a stale block in place and keeps the user's own text" "$(cat "$proj/AGENTS.md" | head -3)"
+fi
+printf '# Existing notes\n' > "$proj/AGENTS.md"
+AGENTS_MD_SRC="$ROOT/CLAUDE.md" "$AGENTS_MD" "$proj" >/dev/null
+if [ "$(head -1 "$proj/AGENTS.md")" = "# Existing notes" ] && grep -q "skeletoncrew:protocol:end" "$proj/AGENTS.md"; then
+  ok "agents-md appends the block to an AGENTS.md that has none"
+else
+  bad "agents-md appends the block to an AGENTS.md that has none" "$(head -3 "$proj/AGENTS.md")"
 fi
 rm -rf "$gen"
 

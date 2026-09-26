@@ -48,8 +48,8 @@ rm -f "$DEST/scripts/generate-copilot-agents.sh"
 
 # Cursor reads ~/.claude/skills and ~/.claude/agents natively, but not CLAUDE.md or
 # settings.json. It gets: read-only-aware agent copies in ~/.cursor/agents, the same
-# hook scripts wired through ~/.cursor/hooks.json, and a per-project rule written by
-# /init-vault (cursor-rules.sh). Only when Cursor is present, or CURSOR=1 forces it.
+# hook scripts wired through ~/.cursor/hooks.json, and the protocol via each project's
+# AGENTS.md (/init-vault runs agents-md.sh). Only when Cursor is present, or CURSOR=1.
 cursor_status="not detected (re-run with CURSOR=1 to set it up anyway)"
 if [ -d "$HOME/.cursor" ] || command -v cursor >/dev/null 2>&1 || [ "${CURSOR:-}" = "1" ]; then
   "$DEST/scripts/generate-agents.sh" cursor >/dev/null

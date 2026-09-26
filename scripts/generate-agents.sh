@@ -128,13 +128,13 @@ generate_copilot() {
   cat > "$DEST/orchestrator.agent.md" <<'AGENT'
 ---
 name: orchestrator
-description: Coordinates the planner/builder/reviewer/auditor/scribe subagents through the Autonomous Engineering Protocol (see CLAUDE.md, loaded automatically as always-on instructions). Use for any feature or bugfix that should follow that workflow instead of an ad hoc chat edit.
+description: Coordinates the planner/builder/reviewer/auditor/scribe subagents through the Autonomous Engineering Protocol (in the project's AGENTS.md, and in ~/.claude/CLAUDE.md when chat.useClaudeMdFile is on). Use for any feature or bugfix that should follow that workflow instead of an ad hoc chat edit.
 tools: ['agent', 'read', 'edit', 'search', 'runCommands']
 agents: ['planner', 'builder', 'reviewer', 'auditor', 'scribe']
 ---
 
 You coordinate work through the Autonomous Engineering Protocol described in your
-always-on instructions (CLAUDE.md). You never write application code or run gates
+always-on instructions (the protocol block in AGENTS.md, or ~/.claude/CLAUDE.md). You never write application code or run gates
 yourself -- dispatch to the planner/builder/reviewer/auditor/scribe subagents and follow the
 same decomposition, gating, and resolution rules the protocol defines for the
 Director role in Claude Code. Record gate verdicts and vault/task-tree.json updates
