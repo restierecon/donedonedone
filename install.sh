@@ -37,18 +37,53 @@ cp "$SRC"/scripts/*.sh "$DEST/scripts/"
 chmod +x "$DEST"/scripts/*.sh
 cp -R "$SRC"/skills/* "$DEST/skills/"
 
+# Renamed to generate-agents.sh (now serves Copilot and Cursor); drop the stale copy.
+rm -f "$DEST/scripts/generate-copilot-agents.sh"
+
 # GitHub Copilot in VS Code reads ~/.claude/CLAUDE.md, ~/.claude/skills/, and
 # ~/.claude/settings.json (hooks) natively -- nothing extra needed for those. Its
 # subagents are workspace-scoped only though, so the agents in agents/ need
 # a generated user-level equivalent at ~/.copilot/agents/.
-"$DEST/scripts/generate-copilot-agents.sh" >/dev/null
+"$DEST/scripts/generate-agents.sh" copilot >/dev/null
+
+# Cursor reads ~/.claude/skills and ~/.claude/agents natively, but not CLAUDE.md or
+# settings.json. It gets: read-only-aware agent copies in ~/.cursor/agents, the same
+# hook scripts wired through ~/.cursor/hooks.json, and the protocol via each project's
+# AGENTS.md (/init-vault runs agents-md.sh). Only when Cursor is present, or CURSOR=1.
+cursor_status="not detected (re-run with CURSOR=1 to set it up anyway)"
+if [ -d "$HOME/.cursor" ] || command -v cursor >/dev/null 2>&1 || [ "${CURSOR:-}" = "1" ]; then
+  "$DEST/scripts/generate-agents.sh" cursor >/dev/null
+  if command -v jq >/dev/null 2>&1; then
+    hooks_tmp=$(mktemp)
+    jq -n --arg s "$DEST/scripts" '{
+      version: 1,
+      hooks: {
+        sessionStart:         [{command: ($s + "/session-start.sh")}],
+        beforeShellExecution: [{command: ($s + "/guard.sh")}],
+        afterFileEdit:        [{command: ($s + "/lint.sh")}],
+        stop:                 [{command: ($s + "/checkpoint.sh")}]
+      }
+    }' > "$hooks_tmp"
+    # Same policy as settings.json: never overwrite a hooks.json the user already has.
+    if [ -f "$HOME/.cursor/hooks.json" ] && ! cmp -s "$hooks_tmp" "$HOME/.cursor/hooks.json"; then
+      mv "$hooks_tmp" "$HOME/.cursor/hooks.json.new-$TS"
+      echo "  !! existing ~/.cursor/hooks.json kept. Merge hooks from hooks.json.new-$TS manually."
+    else
+      mv "$hooks_tmp" "$HOME/.cursor/hooks.json"
+    fi
+    cursor_status="agents → ~/.cursor/agents/, hooks → ~/.cursor/hooks.json"
+  else
+    cursor_status="agents → ~/.cursor/agents/; hooks SKIPPED (install jq, re-run)"
+  fi
+fi
 
 echo ""
 n_agents=$(find "$SRC/agents" -name '*.md' | wc -l | tr -d ' ')
 n_skills=$(find "$SRC/skills" -name SKILL.md | wc -l | tr -d ' ')
 n_scripts=$(find "$SRC/scripts" -name '*.sh' | wc -l | tr -d ' ')
 echo "Installed: $n_agents agents · $n_skills skills (incl. /init-vault, /harvest) · $n_scripts scripts · global CLAUDE.md"
-echo "Also generated: $((n_agents + 1)) GitHub Copilot custom agents → ~/.copilot/agents/"
+echo "GitHub Copilot: $((n_agents + 1)) custom agents → ~/.copilot/agents/"
+echo "Cursor: $cursor_status"
 echo ""
 echo "Recommended (optional) tools for full guardrails:"
 command -v jq >/dev/null 2>&1       || echo "  brew install jq        (required by hook scripts)"

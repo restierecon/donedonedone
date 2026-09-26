@@ -9,6 +9,8 @@ LINT="$ROOT/scripts/lint.sh"
 CHECKPOINT="$ROOT/scripts/checkpoint.sh"
 GATE="$ROOT/scripts/gate.sh"
 SESSION_START="$ROOT/scripts/session-start.sh"
+GENERATE="$ROOT/scripts/generate-agents.sh"
+AGENTS_MD="$ROOT/scripts/agents-md.sh"
 
 pass=0
 fail=0
@@ -205,14 +207,14 @@ rm -rf "$repo"
 
 echo "== session-start.sh — resume context in one injection =="
 repo=$(make_repo)
-out=$(cd "$repo" && "$SESSION_START" 2>&1)
+out=$(cd "$repo" && "$SESSION_START" </dev/null 2>&1)
 if [ -z "$out" ]; then ok "silent without session.md"; else bad "silent without session.md" "$out"; fi
 mkdir -p "$repo/vault/memory"
 echo "# Session State" > "$repo/vault/memory/session.md"
 echo '{"slices":[{"id":"S003","title":"User can export notes","status":"todo","depends_on":["S001"]}]}' \
   > "$repo/vault/task-tree.json"
 git -C "$repo" worktree add -q "$repo/.worktrees/S009" -b slice/S009
-out=$(cd "$repo" && "$SESSION_START" 2>&1)
+out=$(cd "$repo" && "$SESSION_START" </dev/null 2>&1)
 if echo "$out" | grep -q "^# Session State" && echo "$out" | grep -q "S003 · todo · \[S001\]" \
    && echo "$out" | grep -q "leftover worktrees" && echo "$out" | grep -q "S009"; then
   ok "prints session.md, live-slice summary, leftover worktrees"
@@ -220,6 +222,96 @@ else
   bad "prints session.md, live-slice summary, leftover worktrees" "$out"
 fi
 rm -rf "$repo"
+
+echo "== Cursor hook payloads =="
+cursor_shell() { # <command> — prints guard.sh stdout, returns its exit code
+  jq -n --arg c "$1" '{hook_event_name: "beforeShellExecution", command: $c, workspace_roots: ["/tmp"]}' \
+    | "$GUARD" 2>/dev/null
+}
+status=0; out=$(cursor_shell 'git push --force origin main') || status=$?
+if [ "$status" -eq 2 ] && [ "$(echo "$out" | jq -r .permission)" = "deny" ]; then
+  ok "guard denies a Cursor shell command with deny JSON + exit 2"
+else
+  bad "guard denies a Cursor shell command with deny JSON + exit 2" "exit $status: $out"
+fi
+status=0; out=$(cursor_shell 'ls -la') || status=$?
+if [ "$status" -eq 0 ] && [ "$(echo "$out" | jq -r .permission)" = "allow" ]; then
+  ok "guard allows a safe Cursor shell command with allow JSON"
+else
+  bad "guard allows a safe Cursor shell command with allow JSON" "exit $status: $out"
+fi
+out=$(guard_bash 'ls -la')
+if [ -z "$out" ]; then ok "guard prints nothing for Claude Code payloads"; else bad "guard prints nothing for Claude Code payloads" "$out"; fi
+
+repo=$(make_repo)
+git -C "$repo" checkout -q -b slice/S004
+echo change > "$repo/file.txt"
+before=$(commits "$repo")
+(cd /tmp && jq -n --arg r "$repo" '{hook_event_name: "stop", status: "completed", workspace_roots: [$r]}' \
+  | "$CHECKPOINT" >/dev/null 2>&1)
+after=$(commits "$repo")
+if [ "$after" -eq $((before + 1)) ]; then ok "checkpoint finds the project via workspace_roots"; else bad "checkpoint finds the project via workspace_roots" "commits $before->$after"; fi
+rm -rf "$repo"
+
+repo=$(make_repo)
+mkdir -p "$repo/vault/memory"
+echo "# Session State" > "$repo/vault/memory/session.md"
+printf '<!-- skeletoncrew:protocol:begin old -->\nstale\n<!-- skeletoncrew:protocol:end -->\n' > "$repo/AGENTS.md"
+out=$(cd /tmp && jq -n --arg r "$repo" '{hook_event_name: "sessionStart", workspace_roots: [$r]}' \
+  | AGENTS_MD_SRC="$ROOT/CLAUDE.md" "$SESSION_START" 2>/dev/null)
+if echo "$out" | jq -e '.additional_context | test("# Session State")' >/dev/null 2>&1 \
+   && grep -q "Autonomous Engineering Protocol" "$repo/AGENTS.md" && ! grep -q "^stale$" "$repo/AGENTS.md"; then
+  ok "session-start answers Cursor with additional_context JSON and refreshes AGENTS.md"
+else
+  bad "session-start answers Cursor with additional_context JSON and refreshes AGENTS.md" "$out"
+fi
+printf '<!-- skeletoncrew:protocol:begin old -->\nstale\n<!-- skeletoncrew:protocol:end -->\n' > "$repo/AGENTS.md"
+(cd "$repo" && AGENTS_MD_SRC="$ROOT/CLAUDE.md" "$SESSION_START" </dev/null >/dev/null 2>&1)
+if ! grep -q "^stale$" "$repo/AGENTS.md"; then ok "session-start refreshes AGENTS.md under Claude Code too"; else bad "session-start refreshes AGENTS.md under Claude Code too" "still stale"; fi
+rm -rf "$repo"
+
+echo "== generate-agents.sh / agents-md.sh =="
+gen=$(mktemp -d)
+"$GENERATE" copilot "$gen/copilot" >/dev/null
+"$GENERATE" cursor "$gen/cursor" >/dev/null
+n_src=$(find "$ROOT/agents" -name '*.md' | wc -l)
+if [ "$(find "$gen/copilot" -name '*.agent.md' | wc -l)" -eq $((n_src + 1)) ]; then
+  ok "copilot target emits every agent plus the orchestrator"
+else
+  bad "copilot target emits every agent plus the orchestrator" "$(ls "$gen/copilot")"
+fi
+if grep -q "^readonly: true" "$gen/cursor/reviewer.md" && grep -q "^readonly: true" "$gen/cursor/auditor.md" \
+   && grep -q "^readonly: false" "$gen/cursor/builder.md" && grep -q "^model: fast" "$gen/cursor/scribe.md"; then
+  ok "cursor target maps write-less agents to readonly, haiku to fast"
+else
+  bad "cursor target maps write-less agents to readonly, haiku to fast" "$(grep -h '^readonly\|^model' "$gen"/cursor/*.md | tr '\n' ' ')"
+fi
+status=0; "$GENERATE" bogus >/dev/null 2>&1 || status=$?
+if [ "$status" -eq 1 ]; then ok "unknown target exits 1"; else bad "unknown target exits 1" "exit $status"; fi
+proj="$gen/proj"; mkdir -p "$proj"
+first=$(AGENTS_MD_SRC="$ROOT/CLAUDE.md" "$AGENTS_MD" "$proj")
+second=$(AGENTS_MD_SRC="$ROOT/CLAUDE.md" "$AGENTS_MD" "$proj")
+if [ -n "$first" ] && [ -z "$second" ] && grep -q "Autonomous Engineering Protocol" "$proj/AGENTS.md"; then
+  ok "agents-md creates AGENTS.md once and is a no-op when unchanged"
+else
+  bad "agents-md creates AGENTS.md once and is a no-op when unchanged" "first=$first second=$second"
+fi
+printf '# Mine above\n<!-- skeletoncrew:protocol:begin x -->\nstale\n<!-- skeletoncrew:protocol:end -->\n# Mine below\n' > "$proj/AGENTS.md"
+AGENTS_MD_SRC="$ROOT/CLAUDE.md" "$AGENTS_MD" "$proj" >/dev/null
+if [ "$(head -1 "$proj/AGENTS.md")" = "# Mine above" ] && [ "$(tail -1 "$proj/AGENTS.md")" = "# Mine below" ] \
+   && ! grep -q "^stale$" "$proj/AGENTS.md" && [ "$(grep -c 'skeletoncrew:protocol:begin' "$proj/AGENTS.md")" -eq 1 ]; then
+  ok "agents-md replaces a stale block in place and keeps the user's own text"
+else
+  bad "agents-md replaces a stale block in place and keeps the user's own text" "$(head -3 "$proj/AGENTS.md")"
+fi
+printf '# Existing notes\n' > "$proj/AGENTS.md"
+AGENTS_MD_SRC="$ROOT/CLAUDE.md" "$AGENTS_MD" "$proj" >/dev/null
+if [ "$(head -1 "$proj/AGENTS.md")" = "# Existing notes" ] && grep -q "skeletoncrew:protocol:end" "$proj/AGENTS.md"; then
+  ok "agents-md appends the block to an AGENTS.md that has none"
+else
+  bad "agents-md appends the block to an AGENTS.md that has none" "$(head -3 "$proj/AGENTS.md")"
+fi
+rm -rf "$gen"
 
 echo "== lint.sh =="
 status=0
