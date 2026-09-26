@@ -2,7 +2,7 @@
 
 A lean, hardened multi-agent setup: 5 agents, protocol skills, mechanical guardrails,
 session-surviving memory, and an autonomy dial you turn up only as trust is earned.
-Built for Claude Code; also works with GitHub Copilot in VS Code (see below).
+Built for Claude Code; also works with GitHub Copilot in VS Code and with Cursor (see below).
 
 Built on: vertical slices (tracer bullets) · red-green-refactor TDD · deep modules
 and the deletion test (Ousterhout) · ADRs · OWASP · Conventional Commits ·
@@ -36,7 +36,7 @@ builds. Nothing after the grill should need you unless a slice escalates.
 | agents/ | planner · builder · reviewer · auditor · scribe (least-privilege tools, model-per-agent) |
 | skills/ | protocol-native: grill · slice-planning · parallel-dispatch · compaction · architecture-review · `/init-vault` · `/harvest` — plus a general engineering-practice library (see Credits) |
 | settings.json | Permission deny/ask lists + 4 hooks |
-| scripts/ | guard.sh (PreToolUse) · lint.sh (PostToolUse) · checkpoint.sh (Stop) · session-start.sh (SessionStart) · gate.sh (quiet lint/types/test/build runner) · generate-copilot-agents.sh (install-time only) |
+| scripts/ | guard.sh (PreToolUse) · lint.sh (PostToolUse) · checkpoint.sh (Stop) · session-start.sh (SessionStart) · gate.sh (quiet lint/types/test/build runner) · generate-agents.sh (Copilot/Cursor agents, install-time) · agents-md.sh (protocol block in a project's AGENTS.md, for Cursor/Copilot) |
 | tests/ | Test harness for the hook scripts — run after any script edit; CI runs it too |
 | evals/ | 10-task benchmark + scorecard — run before trusting, re-run after any manifest edit |
 
@@ -107,7 +107,9 @@ Pull, re-run `./install.sh`. It retires old `~/.claude/commands/init-vault.md` a
 1. Add `gate.*` lines to `vault/project.md` (see Gate commands) — without them every
    gate step reports SKIP.
 2. Add `.gate/` to `.gitignore`.
-3. Slices already in `task-tree.json` with a `mode: afk|hitl` field keep working; the
+3. Run `~/.claude/scripts/agents-md.sh` once in the project so Cursor and Copilot get
+   the protocol through AGENTS.md; commit it.
+4. Slices already in `task-tree.json` with a `mode: afk|hitl` field keep working; the
    field is ignored. Any former hitl slice whose human decision is still open should
    go back through `/grill` before it's built.
 
@@ -131,7 +133,7 @@ this setup works with zero conversion once `./install.sh` has run:
 What doesn't carry over automatically: VS Code only auto-detects Claude-format
 subagents from a *workspace* `.claude/agents` folder, not the user-level
 `~/.claude/agents` this repo installs to. `install.sh` runs
-`scripts/generate-copilot-agents.sh` to translate every agent in `agents/`
+`scripts/generate-agents.sh copilot` to translate every agent in `agents/`
 into VS Code's native format at `~/.copilot/agents/`, plus a new `orchestrator` agent
 that plays the Director role (dispatches the five agents above as subagents — VS Code has
 genuine subagent orchestration via a custom agent's `agents:` frontmatter field). The
@@ -139,11 +141,57 @@ Bash → VS Code tool-name mapping in that script is a best-effort guess; if a
 generated agent seems to be missing terminal access, check the real tool identifier
 via the `#` tools picker in VS Code chat and fix the mapping.
 
+## Cursor compatibility
+What Cursor picks up with no conversion: `~/.claude/skills/` (all skills) and
+`~/.claude/agents/` (all subagents). What `./install.sh` adds when it finds `~/.cursor`
+(or `cursor` on PATH, or you run `CURSOR=1 ./install.sh`):
+- `~/.cursor/agents/*.md`: the same agents, re-emitted with Cursor's `readonly` flag.
+  Cursor ignores Claude's `tools:` allowlist, so without these copies the reviewer and
+  auditor could edit files. Same-named files here take precedence over `~/.claude/agents`.
+  Models: `haiku` becomes `fast`; everything else becomes `inherit`.
+- `~/.cursor/hooks.json`: the same scripts on Cursor's events. `beforeShellExecution` →
+  guard.sh (answers with Cursor's allow/deny JSON), `afterFileEdit` → lint.sh,
+  `stop` → checkpoint.sh, `sessionStart` → session-start.sh. An existing hooks.json is
+  never overwritten; the new one lands next to it as `hooks.json.new-<timestamp>`.
+
+Cursor never reads CLAUDE.md and has no file-based global rules; it reads the project's
+`AGENTS.md`. See "AGENTS.md" below.
+
+Known gaps under Cursor:
+- **Vault-integrity check isn't enforced.** Cursor's hook payloads don't say which
+  subagent is acting, so "subagents can't write task-tree.json" is prompt discipline
+  there, not a hook.
+- **Lint errors don't reach the agent.** `afterFileEdit` runs after the edit and Cursor
+  ignores its exit code. Files still get formatted; errors surface at `gate.sh`.
+- **Session context injection may not work.** Cursor has a reported bug where
+  `sessionStart`'s `additional_context` isn't injected. If the agent doesn't see its
+  session state, it can read `vault/memory/session.md` itself.
+- **Hook payload fields are unverified.** They come from secondary sources (Cursor's
+  docs weren't reachable when this was written). If a hook doesn't fire, check Cursor's
+  hooks docs and adjust the event names in `install.sh`.
+
+## AGENTS.md (Cursor and Copilot)
+Cursor and GitHub Copilot both read a project's `AGENTS.md`; Claude Code reads the
+global `~/.claude/CLAUDE.md` instead. `/init-vault` runs `~/.claude/scripts/agents-md.sh`,
+which writes the protocol into AGENTS.md between
+`<!-- skeletoncrew:protocol:begin … -->` and `<!-- skeletoncrew:protocol:end -->`.
+Anything else in the file is yours and is never touched. The session-start hook rewrites
+the block whenever `~/.claude/CLAUDE.md` changes, so upgrades propagate — commit the diff.
+
+This also reaches Copilot surfaces that never see `~/.claude/`: the cloud coding agent
+and the CLI get the protocol text, but not gate.sh, the hooks, or the agents, so there it
+is guidance only.
+
+VS Code reads both files: `~/.claude/CLAUDE.md` (`chat.useClaudeMdFile`, on by default)
+and AGENTS.md, so in a vault project the protocol loads twice. To avoid paying for it
+twice, turn off `chat.useClaudeMdFile`. Nothing is lost: the protocol only applies in
+vault projects, and every vault project carries AGENTS.md.
+
 ## Iterating
-This repo IS your dotfiles for Claude Code (and, via the above, Copilot in VS Code).
+This repo IS your dotfiles for Claude Code (and, via the above, Copilot in VS Code and Cursor).
 Edit agent manifests here, re-run ./install.sh, re-run the evals, commit. The setup
 improves as you use it. Re-running install.sh also regenerates
-`~/.copilot/agents/` from whatever's currently in `agents/` — that output is pure
+`~/.copilot/agents/` (and `~/.cursor/agents/`) from whatever's currently in `agents/` — that output is pure
 derived content, never hand-edit it directly.
 The global CLAUDE.md is inert in any directory without a `vault/` — including this
 repo — so editing the setup itself doesn't put Claude into Director mode.

@@ -32,6 +32,10 @@ Initialize this project for the autonomous workflow. Do all of the following:
    testable, no TODO/FIXME, gates green).
 9. Create a project-level CLAUDE.md containing ONLY project specifics (dependency
    install step, anything unusual — gate commands live in project.md) — the protocol lives globally, don't repeat it.
-10. Commit: `git add -A && git commit -m "chore: init autonomous workflow vault"`
-11. Confirm to me: vault ready, autonomy dial at `supervised`, and suggest running
+10. Run `~/.claude/scripts/agents-md.sh` to put the protocol into AGENTS.md — the file
+    Cursor and GitHub Copilot read (Claude Code ignores it and reads the global CLAUDE.md).
+    It only manages its own marked block, so an existing AGENTS.md keeps its content, and
+    the session-start hook keeps the block current after upgrades.
+11. Commit: `git add -A && git commit -m "chore: init autonomous workflow vault"`
+12. Confirm to me: vault ready, autonomy dial at `supervised`, and suggest running
     /grill on the first feature before any decomposition.

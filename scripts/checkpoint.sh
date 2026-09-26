@@ -3,6 +3,12 @@
 # Only acts inside a git repo that has a vault/ (i.e., an initialized autonomous project).
 # rev-parse, not [ -d .git ]: in a git worktree .git is a file, and the checkpoint must still run.
 
+# Hooks get a JSON payload on stdin. Cursor runs user-level hooks outside the project,
+# so move to the workspace it names (Claude Code's payload carries cwd; same effect).
+[ -t 0 ] || input=$(cat)
+root=$(echo "${input:-}" | jq -r '.cwd // .workspace_roots[0]? // empty' 2>/dev/null)
+if [ -n "$root" ] && [ -d "$root" ]; then cd "$root" || exit 0; fi
+
 top=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
 cd "$top" || exit 0
 [ -d vault ] || exit 0
