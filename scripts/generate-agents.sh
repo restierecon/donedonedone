@@ -100,7 +100,7 @@ generate_cursor() {
 }
 
 generate_copilot() {
-  local count=0 src_file name claude_tools description yaml_tools body
+  local count=0 src_file name claude_tools description yaml_tools body names=()
   for src_file in "$SRC"/*.md; do
     [ -e "$src_file" ] || continue
     name=$(basename "$src_file" .md)
@@ -118,27 +118,34 @@ generate_copilot() {
       echo "---"
       echo "$body"
     } > "$DEST/$name.agent.md"
+    names+=("$name")
     count=$((count + 1))
   done
+  # The orchestrator may dispatch every worker agent, so its roster comes from agents/
+  # on disk -- a new agent is reachable under Copilot without touching this script.
+  local roster roster_prose
+  roster=$(to_yaml_list "$(IFS=,; echo "${names[*]}")")
+  roster_prose=$(IFS=/; echo "${names[*]}")
 
   # Coordinator agent -- not derived from a source file, dispatches the worker
   # agents above as subagents. Named "orchestrator" rather than "director" to stay
   # distinct from CLAUDE.md's own Claude-Code-specific Director terminology, which
   # refers to the main Claude Code session, not a VS Code custom agent.
-  cat > "$DEST/orchestrator.agent.md" <<'AGENT'
+  cat > "$DEST/orchestrator.agent.md" <<AGENT
 ---
 name: orchestrator
-description: Coordinates the planner/builder/reviewer/auditor/scribe subagents through the Autonomous Engineering Protocol (in the project's AGENTS.md, and in ~/.claude/CLAUDE.md when chat.useClaudeMdFile is on). Use for any feature or bugfix that should follow that workflow instead of an ad hoc chat edit.
+description: Coordinates the ${roster_prose} subagents through the Autonomous Engineering Protocol (in the project's AGENTS.md, and in ~/.claude/CLAUDE.md when chat.useClaudeMdFile is on). Use for any feature or bugfix that should follow that workflow instead of an ad hoc chat edit.
 tools: ['agent', 'read', 'edit', 'search', 'runCommands']
-agents: ['planner', 'builder', 'reviewer', 'auditor', 'scribe']
+agents: ${roster}
 ---
 
 You coordinate work through the Autonomous Engineering Protocol described in your
 always-on instructions (the protocol block in AGENTS.md, or ~/.claude/CLAUDE.md). You never write application code or run gates
-yourself -- dispatch to the planner/builder/reviewer/auditor/scribe subagents and follow the
+yourself -- dispatch to the ${roster_prose} subagents and follow the
 same decomposition, gating, and resolution rules the protocol defines for the
-Director role in Claude Code. Record gate verdicts and vault/task-tree.json updates
-yourself; subagents report back as text only, never editing vault files directly.
+Director role in Claude Code. Record gate verdicts, vault/task-tree.json updates and
+vault/log.jsonl lines (through ~/.claude/scripts/log-event.sh) yourself; subagents
+report back as text only, never editing vault files directly.
 AGENT
   count=$((count + 1))
 

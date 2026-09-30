@@ -50,7 +50,7 @@ case "$tool" in
 esac
 
 # --- Vault integrity: subagents must not write gate state (Director-only files) ---
-# task-tree.json: Director only. session.md: Director and scribe only.
+# task-tree.json and log.jsonl: Director only. session.md: Director and scribe only.
 if [ -n "$agent_id" ]; then
   case "$tool" in
     Write|Edit|MultiEdit) write_target="$file_path" ;;
@@ -59,6 +59,9 @@ if [ -n "$agent_id" ]; then
   esac
   if echo "$write_target" | grep -q 'task-tree\.json'; then
     block "BLOCKED: task-tree.json is written by the Director only. Return your verdict as text."
+  fi
+  if echo "$write_target" | grep -q 'log\.jsonl' || { [ "$tool" = "Bash" ] && echo "$cmd" | grep -q 'log-event\.sh'; }; then
+    block "BLOCKED: vault/log.jsonl is written by the Director only (log-event.sh). Return your verdict as text."
   fi
   if echo "$write_target" | grep -q 'memory/session\.md' && [ "$agent_type" != "scribe" ]; then
     block "BLOCKED: session.md is written by the Director or the scribe only."

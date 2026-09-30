@@ -25,11 +25,12 @@ heavy reads go to agents; you consume structured verdicts (≤ 20 lines) only.
 | reviewer | Cold-eyes verification vs acceptance criteria + slop checklist | Every slice |
 | auditor | Adversarial security pass | Only slices touching auth, data access, user input, secrets, deps, or external calls |
 | scribe | Harvests the story, compacts handoffs, checkpoints memory | Once per completed slice; when handoffs/current.md > 400 lines; before ending a session mid-slice |
+| retro | Mines log.jsonl for failures that recur across slices; proposes the fix to the setup | With every architecture review; at once when log-event.sh prints RETRO DUE (learning-loop skill) |
 
 Model routing: builder runs on `sonnet` (pass `model` on the Agent call) for slices
 with ≤ 4 criteria, no auditor trigger and no one-way door; everything else — including
 any retry after a REJECTED — inherits the session model. Reviewer is sonnet,
-scribe is haiku (fixed in their manifests).
+scribe is haiku (fixed in their manifests); planner, auditor and retro inherit.
 
 ## Decomposition — Grill Always, Every Slice Autonomous
 No slice exists without a grill. Every feature, bugfix and refactor — however small —
@@ -48,13 +49,19 @@ run concurrently: load the parallel-dispatch skill before starting a wave
 (max_parallel_slices in vault/project.md, default 3).
 
 ## Completion Gates (slice is DONE only when all pass, in order)
-1. Builder self-review (criteria met, no TODOs/placeholders; reports its commit SHA)
+1. Builder self-check — mechanical: gate green at its SHA, each criterion names its
+   test. A claim, not evidence: gates 2-3 verify it
 2. Automated: you run `gate.sh` once, in the slice's checkout, at the builder's SHA
 3. Reviewer: APPROVED — hand it the SHA and the gate result line; it re-runs only if
    HEAD moved
 4. Auditor: CLEARED (only if triggers match; otherwise skip)
-After each gate: record the verdict in task-tree.json, append one line to
-vault/log.jsonl, commit. You do this yourself — no scribe call per gate.
+After each gate: record the verdict in task-tree.json, log it with
+`~/.claude/scripts/log-event.sh <ID> <gate> <verdict> --sha <sha>`, commit. You do this
+yourself — no scribe call per gate. On REJECTED/BLOCKED/CLEARED-WITH-FINDINGS, pass each
+CRITICAL line as `--signal` with its `--category`; log Tier 3 tiebreaks, escalations and
+every human correction of your work the same way. The scribe's compaction discards
+reasoning; this log is the only record the learning loop has. RETRO DUE printed → run
+the learning-loop skill before the next builder.
 
 ## Merge, Harvest & Prune
 All gates pass → squash-merge to main (checkpoint noise stays on the branch), tag
@@ -71,7 +78,7 @@ merged, and never prune to make a failure disappear. `/harvest` backfills in bul
 - Commits: Conventional Commits, imperative, slice ID — `feat(auth): add login endpoint (S002)`
 
 ## Resolution Protocol (exhaust before flagging a human)
-- **Tier 1** — Builder retries with its own critique. Max 3 attempts.
+- **Tier 1** — Builder retries on its own failing self-check. Max 3 attempts.
 - **Tier 2** — Builder retries with Reviewer critique. Max 2 rounds. For a slice the
   grill marked as a one-way door or one the Auditor flagged, the second round may route through a differently
   architected model (a second CLI/provider, not just a fresh context) as an
@@ -88,7 +95,7 @@ merged, and never prune to make a failure disappear. `/harvest` backfills in bul
 
 ## Flags (vault/flags/) — verification ergonomics required
 - pending-review.md — escalated slices, Tier 3 tiebreaks, architecture candidates,
-  nearby-improvement notes. Continue with non-dependent work.
+  retro proposals, nearby-improvement notes. Continue with non-dependent work.
 - blocked.md — Auditor CRITICAL only. Halt that slice, continue with next
   non-dependent slice. Never ship a known-critical finding.
 - Every flag entry: 3-line summary first (what / what it affects / cost to reverse),
@@ -116,13 +123,15 @@ dial yourself.
 project.md (purpose, stack, gate commands, domain language, autonomy dial,
 max_parallel_slices) · task-tree.json (LIVE slices only) · stories.md (append-only,
 every shipped slice) · memory/session.md (< 150 lines) · memory/hot.md (< 100 lines) ·
-handoffs/current.md (< 400 lines) · decisions/ (ADRs) · findings/ · flags/ · log.jsonl
+handoffs/current.md (< 400 lines) · decisions/ (ADRs) · findings/ · flags/ ·
+log.jsonl (append-only via log-event.sh, never compacted)
 
 ## Session Discipline
 - The SessionStart hook injects session.md, live slices, git status and leftover
   worktrees. If reality drifted from memory, reconcile session.md/hot.md against git
   FIRST. Leftover `.worktrees/<ID>` get resumed or torn down before new work.
 - Never re-do gate-approved work.
-- Every 5 completed slices or at feature completion: run the architecture-review skill;
+- Every 5 completed slices or at feature completion: run the architecture-review and
+  learning-loop skills together (code lens + process lens, dispatched in one message);
   candidates go to pending-review.md; accepted ones are grilled and planned like any feature.
 - New dependencies require a one-line justification logged as a decision; lockfiles always committed.
