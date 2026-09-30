@@ -1,7 +1,7 @@
 # Autonomous Engineering Setup for Claude Code
 
-A lean, hardened multi-agent setup: 5 agents, protocol skills, mechanical guardrails,
-session-surviving memory, and an autonomy dial you turn up only as trust is earned.
+A lean, hardened multi-agent setup: 6 agents, protocol skills, mechanical guardrails,
+session-surviving memory, a learning loop that turns repeated failures into fixes, and an autonomy dial you turn up only as trust is earned.
 Built for Claude Code; also works with GitHub Copilot in VS Code and with Cursor (see below).
 
 Built on: vertical slices (tracer bullets) · red-green-refactor TDD · deep modules
@@ -33,10 +33,10 @@ builds. Nothing after the grill should need you unless a slice escalates.
 | Path | What |
 |---|---|
 | CLAUDE.md | Global protocol — the main session IS the Director |
-| agents/ | planner · builder · reviewer · auditor · scribe (least-privilege tools, model-per-agent) |
-| skills/ | protocol-native: grill · slice-planning · parallel-dispatch · compaction · architecture-review · `/init-vault` · `/harvest` — plus a general engineering-practice library (see Credits) |
+| agents/ | planner · builder · reviewer · auditor · scribe · retro (least-privilege tools, model-per-agent) |
+| skills/ | protocol-native: grill · slice-planning · parallel-dispatch · compaction · architecture-review · learning-loop · `/init-vault` · `/harvest` — plus a general engineering-practice library (see Credits) |
 | settings.json | Permission deny/ask lists + 4 hooks |
-| scripts/ | guard.sh (PreToolUse) · lint.sh (PostToolUse) · checkpoint.sh (Stop) · session-start.sh (SessionStart) · gate.sh (quiet lint/types/test/build runner) · generate-agents.sh (Copilot/Cursor agents, install-time) · agents-md.sh (protocol block in a project's AGENTS.md, for Cursor/Copilot) |
+| scripts/ | guard.sh (PreToolUse) · lint.sh (PostToolUse) · checkpoint.sh (Stop) · session-start.sh (SessionStart) · gate.sh (quiet lint/types/test/build runner + built-in TODO/FIXME check) · log-event.sh (the Director's structured log.jsonl writer) · generate-agents.sh (Copilot/Cursor agents, install-time) · agents-md.sh (protocol block in a project's AGENTS.md, for Cursor/Copilot) |
 | tests/ | Test harness for the hook scripts — run after any script edit; CI runs it too |
 | evals/ | 10-task benchmark + scorecard — run before trusting, re-run after any manifest edit |
 
@@ -49,6 +49,21 @@ Failures resolve through 3 self-healing tiers. A slice that exhausts them, hits 
 budget ceiling (10 builder/reviewer/auditor calls), or fails a merge twice **escalates**:
 it halts, lands in `vault/flags/pending-review.md`, and goes back through the grill —
 other slices keep going. Every 5 slices: architecture review.
+
+## Learning loop
+Every gate verdict goes into `vault/log.jsonl` through `log-event.sh`, with the CRITICAL
+critique lines and a category attached when a gate fails. Tier 3 tiebreaks, escalations
+and your corrections are logged the same way. The scribe discards reasoning trails when
+it compacts; this log is never compacted, so the failure signal survives.
+
+Every 5 slices, alongside architecture review (code lens), the `retro` agent reads the
+log since the last retro (process lens). It only reports a failure that recurred across
+two or more slices. It names the rule that let the failure through and proposes the
+strongest fix: a check that fails mechanically before more manifest text. Proposals go
+to `pending-review.md`; nothing is applied without you. Accepted global fixes land in
+this repo; re-run `./install.sh` and the eval the proposal names. If the same category
+fails in two slices before the counter comes round, `log-event.sh` prints `RETRO DUE`
+and the retro runs before the next builder. Run it by hand with `/learning-loop`.
 
 ## Autonomy dial (`vault/project.md`)
 - **supervised** (default) — every slice pauses for your approval after its gates
@@ -69,8 +84,10 @@ scorecard in `evals/` — see the promotion rule in `evals/README.md`.
 - gate.build: python -m build
 ```
 
-Leave out a step your stack doesn't have — it reports SKIP. Run `gate.sh test` for one
-step, no arguments for all four; full logs land in `.gate/` (gitignored).
+Leave out a step your stack doesn't have — it reports SKIP. A fifth step, `markers`, is
+built in and needs no line: it fails when the diff against `main` (`GATE_BASE` to
+override) adds a TODO, FIXME or XXX outside `vault/`. Run `gate.sh test` for one step,
+no arguments for all five; full logs land in `.gate/` (gitignored).
 
 ## Token budget
 Where the protocol spends tokens, and what keeps it down:
@@ -96,7 +113,8 @@ manifest commits and compare cost and token counts.
 - Subagents can't write gate state — enforced mechanically via the hook's `agent_id`
   field across Bash, Write, and Edit; reviewer/auditor have no write tools at all; the
   planner can Write but is scoped to its draft plan file by its manifest (prompt
-  discipline, not enforcement — the hook still blocks it from task-tree.json)
+  discipline, not enforcement — the hook still blocks it from task-tree.json). The same
+  hook keeps subagents out of vault/log.jsonl, including through log-event.sh
 - Checkpoints never auto-commit on main (main is always green)
 - gitleaks scan before every checkpoint commit
 - `autonomy: full` is only legal in a sandbox; new projects start `supervised`
@@ -112,6 +130,10 @@ Pull, re-run `./install.sh`. It retires old `~/.claude/commands/init-vault.md` a
 4. Slices already in `task-tree.json` with a `mode: afk|hitl` field keep working; the
    field is ignored. Any former hitl slice whose human decision is still open should
    go back through `/grill` before it's built.
+5. Nothing to migrate in `vault/log.jsonl`: older hand-written lines are skipped by the
+   retro and RETRO DUE check. The first retro reads the whole log; after that, each run
+   starts where the previous one's `retro` line left off. If the default branch isn't
+   `main`, set `GATE_BASE` or the `markers` gate step reports SKIP.
 
 ## Verify on first install
 Hook and permission syntax evolves — if a hook doesn't fire, check the current
@@ -135,8 +157,9 @@ subagents from a *workspace* `.claude/agents` folder, not the user-level
 `~/.claude/agents` this repo installs to. `install.sh` runs
 `scripts/generate-agents.sh copilot` to translate every agent in `agents/`
 into VS Code's native format at `~/.copilot/agents/`, plus a new `orchestrator` agent
-that plays the Director role (dispatches the five agents above as subagents — VS Code has
-genuine subagent orchestration via a custom agent's `agents:` frontmatter field). The
+that plays the Director role (dispatches every agent above as a subagent — its
+`agents:` roster is generated from `agents/`, so a new agent needs no generator edit;
+VS Code has genuine subagent orchestration via that frontmatter field). The
 Bash → VS Code tool-name mapping in that script is a best-effort guess; if a
 generated agent seems to be missing terminal access, check the real tool identifier
 via the `#` tools picker in VS Code chat and fix the mapping.
@@ -159,8 +182,8 @@ Cursor never reads CLAUDE.md and has no file-based global rules; it reads the pr
 
 Known gaps under Cursor:
 - **Vault-integrity check isn't enforced.** Cursor's hook payloads don't say which
-  subagent is acting, so "subagents can't write task-tree.json" is prompt discipline
-  there, not a hook.
+  subagent is acting, so "subagents can't write task-tree.json or log.jsonl" is prompt
+  discipline there, not a hook.
 - **Lint errors don't reach the agent.** `afterFileEdit` runs after the edit and Cursor
   ignores its exit code. Files still get formatted; errors surface at `gate.sh`.
 - **Session context injection may not work.** Cursor has a reported bug where

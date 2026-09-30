@@ -11,6 +11,7 @@ GATE="$ROOT/scripts/gate.sh"
 SESSION_START="$ROOT/scripts/session-start.sh"
 GENERATE="$ROOT/scripts/generate-agents.sh"
 AGENTS_MD="$ROOT/scripts/agents-md.sh"
+LOG_EVENT="$ROOT/scripts/log-event.sh"
 
 pass=0
 fail=0
@@ -92,6 +93,10 @@ expect_block "subagent cannot redirect into task-tree"   guard_bash 'echo "{}" >
 expect_block "subagent cannot tee into session.md"       guard_bash 'cat notes | tee vault/memory/session.md' builder
 expect_allow "subagent may read task-tree.json"          guard_bash 'cat vault/task-tree.json' builder
 expect_allow "Director may redirect into task-tree"      guard_bash 'echo "{}" > vault/task-tree.json'
+expect_block "subagent cannot Write log.jsonl"           guard_file Write 'vault/log.jsonl' reviewer
+expect_block "subagent cannot append to log.jsonl"       guard_bash 'echo "{}" >> vault/log.jsonl' builder
+expect_block "subagent cannot run log-event.sh"          guard_bash "$HOME/.claude/scripts/log-event.sh S001 reviewer APPROVED" reviewer
+expect_allow "Director may run log-event.sh"             guard_bash "$HOME/.claude/scripts/log-event.sh S001 reviewer APPROVED"
 
 echo "== checkpoint.sh — branch discipline =="
 make_repo() { # prints repo dir; creates git repo with vault/ and one commit
@@ -205,6 +210,80 @@ status=0
 if [ "$status" -eq 1 ]; then ok "fails without vault/project.md"; else bad "fails without vault/project.md" "exit $status"; fi
 rm -rf "$repo"
 
+echo "== gate.sh — built-in markers step =="
+repo=$(make_gate_repo '')
+git -C "$repo" checkout -q -b slice/S001
+printf 'ok = 1\ncard = "XXXX-1234"\n' > "$repo/app.py"
+mkdir -p "$repo/vault/memory" && echo "TODO: next slice" > "$repo/vault/memory/hot.md"
+git -C "$repo" add -A && git -C "$repo" commit -q -m "feat: clean slice"
+status=0; out=$(cd "$repo" && "$GATE" markers 2>&1) || status=$?
+if [ "$status" -eq 0 ] && echo "$out" | grep -q "^markers PASS"; then
+  ok "markers passes a clean diff (vault/ exempt, XXXX is not a marker)"
+else
+  bad "markers passes a clean diff (vault/ exempt, XXXX is not a marker)" "exit $status: $out"
+fi
+printf 'ok = 1\ncard = "XXXX-1234"\nx = 2  # TODO: handle None\n' > "$repo/app.py"
+git -C "$repo" commit -q -am "feat: leave a marker"
+status=0; out=$(cd "$repo" && "$GATE" markers 2>&1) || status=$?
+if [ "$status" -eq 1 ] && echo "$out" | grep -q "app.py:3: x = 2  # TODO" && echo "$out" | grep -q "^GATE: FAIL (markers)"; then
+  ok "markers fails on an added TODO and names file:line"
+else
+  bad "markers fails on an added TODO and names file:line" "exit $status: $out"
+fi
+out=$(cd "$repo" && GATE_BASE=trunk "$GATE" markers 2>&1)
+if echo "$out" | grep -q "^markers SKIP"; then ok "markers skips when the base branch is missing"; else bad "markers skips when the base branch is missing" "$out"; fi
+rm -rf "$repo"
+
+echo "== log-event.sh — structured, compaction-proof log =="
+repo=$(make_repo)
+: > "$repo/vault/log.jsonl"
+echo "hand-written line from before the script" >> "$repo/vault/log.jsonl"
+out=$(cd "$repo" && "$LOG_EVENT" S001 reviewer REJECTED --sha abc123 --attempt 1 --category error-handling \
+  --signal "$(printf 'app.py:3 CRITICAL bare except\nswallows')" 2>&1)
+line=$(tail -1 "$repo/vault/log.jsonl")
+if [ -z "$out" ] && echo "$line" | jq -e '.slice == "S001" and .event == "reviewer" and .verdict == "REJECTED"
+     and .sha == "abc123" and .attempt == 1 and .categories == ["error-handling"]
+     and .signals == ["app.py:3 CRITICAL bare except swallows"]' >/dev/null 2>&1; then
+  ok "writes one JSON line with verdict, sha, category and a single-line signal"
+else
+  bad "writes one JSON line with verdict, sha, category and a single-line signal" "$out | $line"
+fi
+long=$(printf 'x%.0s' $(seq 1 300))
+(cd "$repo" && "$LOG_EVENT" S002 reviewer REJECTED --signal a --signal b --signal c --signal d --signal e --signal f --signal "$long" >/dev/null)
+if tail -1 "$repo/vault/log.jsonl" | jq -e '(.signals | length) == 5' >/dev/null; then ok "caps signals at five"; else bad "caps signals at five" "$(tail -1 "$repo/vault/log.jsonl")"; fi
+(cd "$repo" && "$LOG_EVENT" S002 reviewer REJECTED --signal "$long" >/dev/null)
+if tail -1 "$repo/vault/log.jsonl" | jq -e '(.signals[0] | length) == 200' >/dev/null; then ok "truncates a signal to 200 chars"; else bad "truncates a signal to 200 chars" "$(tail -1 "$repo/vault/log.jsonl")"; fi
+before=$(wc -l < "$repo/vault/log.jsonl")
+s1=0; (cd "$repo" && "$LOG_EVENT" S001 bogus X >/dev/null 2>&1) || s1=$?
+s2=0; (cd "$repo" && "$LOG_EVENT" S001 reviewer X --category nope >/dev/null 2>&1) || s2=$?
+if [ "$s1" -eq 1 ] && [ "$s2" -eq 1 ] && [ "$(wc -l < "$repo/vault/log.jsonl")" -eq "$before" ]; then
+  ok "rejects an unknown event or category and writes nothing"
+else
+  bad "rejects an unknown event or category and writes nothing" "exits $s1/$s2"
+fi
+out=$(cd "$repo" && "$LOG_EVENT" S001 reviewer REJECTED --category error-handling 2>&1)
+if [ -z "$out" ]; then ok "no RETRO DUE when only one slice has the category"; else bad "no RETRO DUE when only one slice has the category" "$out"; fi
+out=$(cd "$repo" && "$LOG_EVENT" S003 reviewer REJECTED --category error-handling --category other 2>&1)
+if echo "$out" | grep -q "^RETRO DUE: error-handling recurred in S001, S003" && ! echo "$out" | grep -q "other"; then
+  ok "prints RETRO DUE when a category recurs across two slices (ignores 'other')"
+else
+  bad "prints RETRO DUE when a category recurs across two slices (ignores 'other')" "$out"
+fi
+(cd "$repo" && "$LOG_EVENT" - retro "done" --signal "1 proposal" >/dev/null)
+out=$(cd "$repo" && "$LOG_EVENT" S004 reviewer REJECTED --category error-handling 2>&1)
+if [ -z "$out" ]; then ok "a retro line closes the window"; else bad "a retro line closes the window" "$out"; fi
+git -C "$repo" worktree add -q "$repo/.worktrees/S005" -b slice/S005
+(cd "$repo/.worktrees/S005" && "$LOG_EVENT" S005 gate PASS --sha def456 >/dev/null)
+if tail -1 "$repo/vault/log.jsonl" | jq -e '.slice == "S005"' >/dev/null && [ ! -s "$repo/.worktrees/S005/vault/log.jsonl" ]; then
+  ok "writes to the main checkout's log from inside a worktree"
+else
+  bad "writes to the main checkout's log from inside a worktree" "$(tail -1 "$repo/vault/log.jsonl")"
+fi
+rm -rf "$repo/vault"
+status=0; (cd "$repo" && "$LOG_EVENT" S001 gate PASS >/dev/null 2>&1) || status=$?
+if [ "$status" -eq 1 ]; then ok "fails without a vault"; else bad "fails without a vault" "exit $status"; fi
+rm -rf "$repo"
+
 echo "== session-start.sh — resume context in one injection =="
 repo=$(make_repo)
 out=$(cd "$repo" && "$SESSION_START" </dev/null 2>&1)
@@ -285,6 +364,16 @@ if grep -q "^readonly: true" "$gen/cursor/reviewer.md" && grep -q "^readonly: tr
   ok "cursor target maps write-less agents to readonly, haiku to fast"
 else
   bad "cursor target maps write-less agents to readonly, haiku to fast" "$(grep -h '^readonly\|^model' "$gen"/cursor/*.md | tr '\n' ' ')"
+fi
+roster_ok=1
+for f in "$ROOT"/agents/*.md; do
+  grep -q "^agents: .*'$(basename "$f" .md)'" "$gen/copilot/orchestrator.agent.md" || roster_ok=0
+done
+if [ "$roster_ok" -eq 1 ]; then ok "copilot orchestrator may dispatch every agent in agents/"; else bad "copilot orchestrator may dispatch every agent in agents/" "$(grep '^agents:' "$gen/copilot/orchestrator.agent.md")"; fi
+if grep -q "^readonly: true" "$gen/cursor/retro.md" && grep -q "^tools: \['read', 'search'\]" "$gen/copilot/retro.agent.md"; then
+  ok "retro is read-only under Cursor and Copilot"
+else
+  bad "retro is read-only under Cursor and Copilot" "$(grep -h '^readonly\|^tools' "$gen/cursor/retro.md" "$gen/copilot/retro.agent.md")"
 fi
 status=0; "$GENERATE" bogus >/dev/null 2>&1 || status=$?
 if [ "$status" -eq 1 ]; then ok "unknown target exits 1"; else bad "unknown target exits 1" "exit $status"; fi
