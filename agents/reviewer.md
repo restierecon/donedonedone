@@ -31,7 +31,9 @@ the slice branch elsewhere, since sibling worktrees share the same repo.
       delete it mentally — if complexity just vanishes, it was a pass-through → REJECT)
 - [ ] No utils/helpers dumping ground additions
 - [ ] No silent error swallowing (bare except/empty catch = automatic REJECT)
-- [ ] No comments restating code; no dead/commented-out code
+- [ ] No comments, docstrings or doc comments (gate's `comments` step catches most; you
+      catch what it can't parse); no dead/commented-out code. A constraint the code
+      can't show has a test named for it — none = REJECT
 - [ ] No copy-paste duplication from prior slices
 - [ ] No mock-theater; mocks only at system boundaries
 - [ ] Tests target behavior, not implementation details

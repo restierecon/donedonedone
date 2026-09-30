@@ -26,11 +26,14 @@ Initialize this project for the autonomous workflow. Do all of the following:
    Then write it with these sections: Purpose · Stack · Gate — one line per step, read
    by `~/.claude/scripts/gate.sh`, omit a step the stack doesn't have:
    `- gate.lint: <cmd>` · `- gate.types: <cmd>` · `- gate.test: <cmd>` ·
-   `- gate.build: <cmd>` (quiet flags preferred, e.g. `pytest -q`) · Domain Language (empty table:
+   `- gate.build: <cmd>` (quiet flags preferred, e.g. `pytest -q`); the built-in `markers` and
+   `comments` steps need no line, but add `- gate.comments.skip: <path prefixes>` for
+   generated code (migrations) and `- gate.comments.directives: <regex>` for a tool
+   directive the gate doesn't know · Domain Language (empty table:
    Term | Meaning — grow it as the project develops) · Autonomy: supervised ·
    Parallelism: max_parallel_slices: 3 (git-worktree parallel dispatch, see global
    protocol → Parallel Slice Dispatch) · Definition of Done (every slice independently
-   testable, no TODO/FIXME, gates green).
+   testable, no TODO/FIXME, no comments, gates green).
 9. Create a project-level CLAUDE.md containing ONLY project specifics (dependency
    install step, anything unusual — gate commands live in project.md) — the protocol lives globally, don't repeat it.
 10. Run `~/.claude/scripts/agents-md.sh` to put the protocol into AGENTS.md — the file

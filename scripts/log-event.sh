@@ -1,21 +1,7 @@
 #!/bin/bash
-# Appends one structured line to vault/log.jsonl — the Director's record of every gate
-# verdict, Tier 3 tiebreak, escalation and human correction. The scribe compacts
-# handoffs and discards reasoning trails; this log is never compacted, so it is the only
-# place the raw failure signal survives until the retro agent reads it.
-#
-# Usage: log-event.sh <slice-id|-> <event> <verdict> [--sha S] [--attempt N]
-#                     [--category C]... [--signal "text"]...
-#   event:    builder gate reviewer auditor merge tier3 escalation correction retro
-#   category: one of CATEGORIES below (the retro groups on these; free text can't be grouped)
-#   signal:   one CRITICAL critique line, tiebreak, or correction — at most 5, 200 chars each
-#
-# After appending, prints "RETRO DUE: ..." when one category has recurred across two or
-# more slices since the last retro event — dispatch the retro then, not at the next
-# 5-slice review. Always writes to the main checkout's vault, even from a worktree.
 
 EVENTS="builder gate reviewer auditor merge tier3 escalation correction retro"
-CATEGORIES="criterion-unmet test-quality speculative-abstraction error-handling dead-code duplication scope-creep contract-mismatch dependency security logging gate-failure merge-conflict ambiguous-criteria human-correction other"
+CATEGORIES="criterion-unmet test-quality speculative-abstraction error-handling dead-code duplication scope-creep comments contract-mismatch dependency security logging gate-failure merge-conflict ambiguous-criteria human-correction other"
 MAX_SIGNALS=5
 MAX_CHARS=200
 
@@ -60,7 +46,6 @@ jq -cn \
 
 [ "$event" = "retro" ] && exit 0
 
-# Lines that aren't JSON (hand-written before this script existed) are skipped, not fatal.
 jq -Rrn '
   [inputs | fromjson?] as $all
   | ([$all | to_entries[] | select(.value.event == "retro") | .key] | last // -1) as $cut
