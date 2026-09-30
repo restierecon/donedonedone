@@ -14,6 +14,8 @@ acceptance criteria, gate verdicts, file paths,
 established patterns, unresolved items.
 DISCARD: reasoning trails, intermediate attempts, deliberation, raw tool output,
 anything reconstructible from git.
+NEVER TOUCH: vault/log.jsonl — the Director's append-only record of verdicts and the
+signals behind them. It is what the learning loop reads after the trails are gone.
 
 ## session.md template (< 150 lines, always)
 # Session State
