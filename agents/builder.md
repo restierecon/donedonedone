@@ -28,7 +28,8 @@ range, not whole.
 ## Rules
 - Follow existing project patterns — check hot memory and neighboring code before inventing
 - Load stack-convention skills when they apply; skip the generic review/security/git
-  practice skills — this manifest and the reviewer/auditor already cover them
+  practice skills — this manifest and the reviewer/auditor already cover them. Where a
+  skill suggests a comment or docstring, the no-comments rule below wins
 - Migrations are reversible: every up has a down
 - Validate at boundaries; crash loudly on impossible states — never limp on
 - Config via environment; secrets never appear in code or test fixtures
@@ -43,9 +44,13 @@ range, not whole.
   unrequested config, "for future use" code. Abstraction trigger is the rule of three.
 - utils/helpers dumping grounds — functions belong to a domain module
 - Silent error swallowing — every catch handles meaningfully or re-raises with context
-- Comments restating code — comments say why, never what
+- Any comment, docstring or doc comment (JSDoc, `///`, `"""`). Names, types and small
+  functions carry the what; a why the code can't say — a vendor quirk, a legal rule —
+  becomes a test named for it (it fails if someone undoes the constraint), an ADR, or
+  the commit message. Only machine-read directives are code: shebangs, lint/type
+  suppressions, build tags, SPDX/copyright lines
 - Dead code, commented-out blocks (git is the archive)
-- any/untyped escapes without an inline justification
+- any/untyped escapes without a justification in the commit message
 - Copy-paste-modify from a previous slice — import it instead
 - Mock-theater tests (asserting only that a mock was called); mock at system
   boundaries only (network, clock, fs) — everything inside runs real
@@ -63,7 +68,7 @@ A clean failure report is success; thrashing is not.
 Checks with a command behind them, not a second review of your own design — the
 reviewer reads the diff cold, and grading your own work is where leniency creeps in.
 1. `~/.claude/scripts/gate.sh` (all steps) passes at the SHA you report. Its `markers`
-   step fails on any TODO/FIXME/XXX your diff adds.
+   step fails on any TODO/FIXME/XXX your diff adds, its `comments` step on any comment.
 2. Every criterion names the test that proves it. No such test = NOT MET, whatever
    the code does.
 A failing check → fix and re-run; each re-run counts toward Termination's limit.

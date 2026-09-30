@@ -1,19 +1,4 @@
 #!/bin/bash
-# Generates tool-native agent definitions from this repo's Claude Code subagents
-# (agents/*.md). Usage: generate-agents.sh <copilot|cursor> [dest]
-#
-# copilot -> ~/.copilot/agents/*.agent.md. VS Code auto-detects Claude-format subagents
-#   from a *workspace* .claude/agents folder, but not from the user-level ~/.claude/agents
-#   this repo installs to, so we translate them into VS Code's own .agent.md format, plus
-#   an orchestrator agent that plays the Director (see README -> Copilot).
-# cursor  -> ~/.cursor/agents/*.md. Cursor does load ~/.claude/agents, but it ignores the
-#   Claude `tools:` allowlist, so reviewer/auditor would be able to edit files there.
-#   Same-named files in ~/.cursor/agents take precedence, so we re-emit each agent with
-#   Cursor's `readonly` flag derived from its tool list.
-#
-# Output is pure derived content (never hand-edited), so this always overwrites --
-# unlike install.sh's handling of CLAUDE.md/settings.json, there's nothing here to
-# preserve or merge.
 set -e
 
 SRC="$(cd "$(dirname "$0")/.." && pwd)/agents"
@@ -25,12 +10,6 @@ case "$TARGET" in
 esac
 mkdir -p "$DEST"
 
-# Claude tool name -> VS Code tool identifier. VS Code ignores any tool name it
-# doesn't recognize (the agent still loads, just without that capability) rather than
-# failing, so an imprecise mapping degrades gracefully. The Bash -> runCommands
-# mapping in particular is a best-effort guess, not confirmed against VS Code's own
-# tool registry -- if a generated agent seems to be missing terminal access, check the
-# real identifier via the `#` tools picker in VS Code chat and fix the case below.
 map_tools() {
   local claude_tools="$1"
   local out=()
@@ -44,8 +23,6 @@ map_tools() {
       Bash) v="runCommands" ;;
       *) v="$t" ;;
     esac
-    # Several Claude tools collapse onto the same VS Code toolset (e.g. Write/Edit ->
-    # edit) -- dedupe so the output list has no repeats.
     if [[ " ${out[*]} " != *" $v "* ]]; then
       out+=("$v")
     fi
@@ -64,8 +41,6 @@ to_yaml_list() {
   echo "${result}]"
 }
 
-# Claude model alias -> Cursor subagent model. Cursor accepts `inherit` or `fast`; there
-# is no portable way to name a specific Claude model there, so anything else inherits.
 cursor_model() {
   case "$1" in
     haiku) echo "fast" ;;
@@ -81,7 +56,6 @@ generate_cursor() {
     tools=$(sed -n 's/^tools: //p' "$src_file")
     description=$(sed -n 's/^description: //p' "$src_file")
     model=$(cursor_model "$(sed -n 's/^model: //p' "$src_file")")
-    # No Write/Edit in the Claude allowlist = read-only in Cursor.
     ro=true
     echo "$tools" | grep -qE '(^|[ ,])(Write|Edit|MultiEdit)([ ,]|$)' && ro=false
     body=$(awk '/^---$/{n++; next} n>=2' "$src_file")
@@ -107,7 +81,6 @@ generate_copilot() {
     claude_tools=$(sed -n 's/^tools: //p' "$src_file")
     description=$(sed -n 's/^description: //p' "$src_file")
     yaml_tools=$(to_yaml_list "$(map_tools "$claude_tools")")
-    # Body = everything after the second '---' frontmatter delimiter.
     body=$(awk '/^---$/{n++; next} n>=2' "$src_file")
     {
       echo "---"
@@ -121,16 +94,10 @@ generate_copilot() {
     names+=("$name")
     count=$((count + 1))
   done
-  # The orchestrator may dispatch every worker agent, so its roster comes from agents/
-  # on disk -- a new agent is reachable under Copilot without touching this script.
   local roster roster_prose
   roster=$(to_yaml_list "$(IFS=,; echo "${names[*]}")")
   roster_prose=$(IFS=/; echo "${names[*]}")
 
-  # Coordinator agent -- not derived from a source file, dispatches the worker
-  # agents above as subagents. Named "orchestrator" rather than "director" to stay
-  # distinct from CLAUDE.md's own Claude-Code-specific Director terminology, which
-  # refers to the main Claude Code session, not a VS Code custom agent.
   cat > "$DEST/orchestrator.agent.md" <<AGENT
 ---
 name: orchestrator

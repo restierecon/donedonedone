@@ -1,7 +1,4 @@
 #!/bin/bash
-# Test harness for the hook scripts — mechanisms get tests, not hope.
-# Feeds synthetic hook JSON into guard.sh / lint.sh / checkpoint.sh and asserts
-# block/allow behavior. Run: tests/run-tests.sh   Exit nonzero on any failure.
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 GUARD="$ROOT/scripts/guard.sh"
@@ -12,6 +9,8 @@ SESSION_START="$ROOT/scripts/session-start.sh"
 GENERATE="$ROOT/scripts/generate-agents.sh"
 AGENTS_MD="$ROOT/scripts/agents-md.sh"
 LOG_EVENT="$ROOT/scripts/log-event.sh"
+FIND_COMMENTS="$ROOT/scripts/find-comments.sh"
+INSTALL="$ROOT/install.sh"
 
 pass=0
 fail=0
@@ -19,9 +18,6 @@ fail=0
 ok()  { pass=$((pass + 1)); echo "  PASS  $1"; }
 bad() { fail=$((fail + 1)); echo "  FAIL  $1 ($2)"; }
 
-# --- payload builders -------------------------------------------------------
-# guard_bash <command> [agent_type] — runs guard.sh as if Bash were called.
-# When agent_type is given, the payload carries agent_id/agent_type (subagent).
 guard_bash() {
   local extra='{}'
   [ -n "$2" ] && extra=$(jq -n --arg t "$2" '{agent_id: "agent-test-1", agent_type: $t}')
@@ -29,7 +25,6 @@ guard_bash() {
     '{tool_name: "Bash", tool_input: {command: $cmd}} + $x' | "$GUARD" 2>/dev/null
 }
 
-# guard_file <tool> <file_path> [agent_type] — runs guard.sh for Write/Edit calls.
 guard_file() {
   local extra='{}'
   [ -n "$3" ] && extra=$(jq -n --arg t "$3" '{agent_id: "agent-test-1", agent_type: $t}')
@@ -37,12 +32,12 @@ guard_file() {
     '{tool_name: $tool, tool_input: {file_path: $fp}} + $x' | "$GUARD" 2>/dev/null
 }
 
-expect_allow() { # <desc> <fn> <args...>
+expect_allow() {
   local desc="$1"; shift
   if "$@"; then ok "$desc"; else bad "$desc" "blocked, expected allow"; fi
 }
 
-expect_block() { # <desc> <fn> <args...>
+expect_block() {
   local desc="$1"; shift
   local status=0
   "$@" || status=$?
@@ -68,6 +63,21 @@ expect_block "blocks DROP TABLE (upper)"            guard_bash 'psql -c "DROP TA
 expect_block "blocks drop table (lower)"            guard_bash 'psql -c "drop table users;"'
 expect_block "blocks truncate table"                guard_bash 'mysql -e "truncate table logs"'
 expect_allow "allows the word droplet"              guard_bash 'doctl compute droplet list'
+
+echo "== guard.sh — VS Code Copilot sends its own tool names and ignores the matcher =="
+copilot_call() {
+  local extra="${3:-}"
+  [ -n "$extra" ] || extra='{}'
+  jq -n --arg tool "$1" --argjson input "$2" --argjson x "$extra" '{tool_name: $tool, tool_input: $input} + $x' | "$GUARD" 2>/dev/null
+}
+expect_block "guard blocks a force push sent as Copilot's run_in_terminal" \
+  copilot_call run_in_terminal '{"command":"git push --force origin main"}'
+expect_block "guard blocks a force push sent as Copilot's runTerminalCommand" \
+  copilot_call runTerminalCommand '{"command":"git push -f"}'
+expect_block "guard blocks a subagent's task-tree write sent as Copilot's create_file with camelCase filePath" \
+  copilot_call create_file '{"filePath":"vault/task-tree.json"}' '{"agent_id":"a1","agent_type":"builder"}'
+expect_allow "guard allows a safe command sent as Copilot's run_in_terminal" \
+  copilot_call run_in_terminal '{"command":"ls"}'
 
 echo "== guard.sh — fail closed without jq =="
 fakebin=$(mktemp -d)
@@ -99,7 +109,7 @@ expect_block "subagent cannot run log-event.sh"          guard_bash "$HOME/.clau
 expect_allow "Director may run log-event.sh"             guard_bash "$HOME/.claude/scripts/log-event.sh S001 reviewer APPROVED"
 
 echo "== checkpoint.sh — branch discipline =="
-make_repo() { # prints repo dir; creates git repo with vault/ and one commit
+make_repo() {
   local d
   d=$(mktemp -d)
   git -C "$d" init -q -b main
@@ -161,15 +171,44 @@ after=$(commits "$repo/.worktrees/S002")
 if [ "$after" -eq $((before + 1)) ]; then ok "commits slice progress inside a git worktree"; else bad "commits slice progress inside a git worktree" "commits $before->$after"; fi
 rm -rf "$repo"
 
+echo "== checkpoint.sh — gitleaks versions =="
+checkpoint_with_gitleaks() {
+  local fakebin repo before result status=0
+  fakebin=$(mktemp -d)
+  printf '%s\n' '#!/bin/bash' "$1" > "$fakebin/gitleaks"
+  chmod +x "$fakebin/gitleaks"
+  repo=$(make_repo)
+  git -C "$repo" checkout -q -b slice/S030
+  echo "secret" > "$repo/file.txt"
+  before=$(commits "$repo")
+  (cd "$repo" && PATH="$fakebin:$PATH" "$CHECKPOINT" </dev/null >/dev/null 2>&1) || status=$?
+  result=1
+  [ "$status" -eq 2 ] && [ "$(commits "$repo")" -eq "$before" ] && result=0
+  rm -rf "$fakebin" "$repo"
+  return $result
+}
+# shellcheck disable=SC2016
+if checkpoint_with_gitleaks '[ "$1" = git ] && { [ "$2" = --help ] && exit 0; exit 1; }; exit 0'; then
+  ok "checkpoint scans with 'gitleaks git --staged' on v8.19+, where protect no longer exists"
+else
+  bad "checkpoint scans with 'gitleaks git --staged' on v8.19+, where protect no longer exists" "committed or wrong exit"
+fi
+# shellcheck disable=SC2016
+if checkpoint_with_gitleaks '[ "$1" = protect ] && exit 1; exit 2'; then
+  ok "checkpoint falls back to 'gitleaks protect --staged' before v8.19"
+else
+  bad "checkpoint falls back to 'gitleaks protect --staged' before v8.19" "committed or wrong exit"
+fi
+
 echo "== gate.sh — quiet gate runner =="
-make_gate_repo() { # <project.md gate lines> — prints repo dir
+make_gate_repo() {
   local d
   d=$(make_repo)
   printf '# Project\n## Gate\n%s\n' "$1" > "$d/vault/project.md"
   echo "$d"
 }
 
-# shellcheck disable=SC2016  # literal shell text destined for project.md
+# shellcheck disable=SC2016
 repo=$(make_gate_repo '- gate.lint: `true`
 - gate.test: echo ok')
 status=0
@@ -265,9 +304,9 @@ out=$(cd "$repo" && "$LOG_EVENT" S001 reviewer REJECTED --category error-handlin
 if [ -z "$out" ]; then ok "no RETRO DUE when only one slice has the category"; else bad "no RETRO DUE when only one slice has the category" "$out"; fi
 out=$(cd "$repo" && "$LOG_EVENT" S003 reviewer REJECTED --category error-handling --category other 2>&1)
 if echo "$out" | grep -q "^RETRO DUE: error-handling recurred in S001, S003" && ! echo "$out" | grep -q "other"; then
-  ok "prints RETRO DUE when a category recurs across two slices (ignores 'other')"
+  ok "prints RETRO DUE when a category recurs across two slices (ignores 'other' and hand-written non-JSON lines)"
 else
-  bad "prints RETRO DUE when a category recurs across two slices (ignores 'other')" "$out"
+  bad "prints RETRO DUE when a category recurs across two slices (ignores 'other' and hand-written non-JSON lines)" "$out"
 fi
 (cd "$repo" && "$LOG_EVENT" - retro "done" --signal "1 proposal" >/dev/null)
 out=$(cd "$repo" && "$LOG_EVENT" S004 reviewer REJECTED --category error-handling 2>&1)
@@ -282,6 +321,76 @@ fi
 rm -rf "$repo/vault"
 status=0; (cd "$repo" && "$LOG_EVENT" S001 gate PASS >/dev/null 2>&1) || status=$?
 if [ "$status" -eq 1 ]; then ok "fails without a vault"; else bad "fails without a vault" "exit $status"; fi
+rm -rf "$repo"
+
+echo "== gate.sh — worktrees =="
+repo=$(make_gate_repo '- gate.test: echo ok')
+git -C "$repo" worktree add -q "$repo/.worktrees/S010" -b slice/S010
+rm -f "$repo/.worktrees/S010/vault/project.md"
+out=$(cd "$repo/.worktrees/S010" && "$GATE" test 2>&1)
+if echo "$out" | grep -q "^test PASS"; then
+  ok "gate reads the main checkout's project.md from a worktree that predates it"
+else
+  bad "gate reads the main checkout's project.md from a worktree that predates it" "$out"
+fi
+rm -rf "$repo"
+
+echo "== find-comments.sh — no comments in any codebase =="
+fc=$(mktemp -d)
+cp "$ROOT"/tests/fixtures/comments/* "$fc/"
+out=$("$FIND_COMMENTS" "$fc/sample.py" | sed "s|$fc/||" | cut -d: -f1-2 | tr '\n' ' ')
+if [ "$out" = "sample.py:3 sample.py:6 sample.py:8 sample.py:9 sample.py:10 sample.py:14 " ]; then
+  ok "python: flags comments and docstrings, not strings, argument strings or directives"
+else
+  bad "python: flags comments and docstrings, not strings, argument strings or directives" "$out"
+fi
+out=$("$FIND_COMMENTS" "$fc/sample.sh" | sed "s|$fc/||" | cut -d: -f1-2 | tr '\n' ' ')
+if [ "$out" = "sample.sh:2 sample.sh:4 " ]; then
+  ok "shell: flags comments, not \$#, \${#}, quoted or escaped #, heredocs or shellcheck directives"
+else
+  bad "shell: flags comments, not \$#, \${#}, quoted or escaped #, heredocs or shellcheck directives" "$out"
+fi
+out=$("$FIND_COMMENTS" "$fc/sample.ts" | sed "s|$fc/||" | cut -d: -f1-2 | tr '\n' ' ')
+if [ "$out" = "sample.ts:2 sample.ts:6 sample.ts:7 sample.ts:8 sample.ts:9 " ]; then
+  ok "typescript: flags line, block and doc comments, not template literals, URLs or directives"
+else
+  bad "typescript: flags line, block and doc comments, not template literals, URLs or directives" "$out"
+fi
+out=$("$FIND_COMMENTS" "$fc/sample.go" "$fc/sample.rs" "$fc/sample.yml" "$fc/sample.html" | sed "s|$fc/||" | cut -d: -f1-2 | tr '\n' ' ')
+if [ "$out" = "sample.go:2 sample.rs:1 sample.yml:3 sample.html:2 sample.html:3 " ]; then
+  ok "go, rust, yaml, html: comments flagged; build tags, raw and multi-line strings, lifetimes left alone"
+else
+  bad "go, rust, yaml, html: comments flagged; build tags, raw and multi-line strings, lifetimes left alone" "$out"
+fi
+status=0; "$FIND_COMMENTS" "$fc/clean.py" "$fc/data.json" >/dev/null || status=$?
+if [ "$status" -eq 0 ]; then ok "exits 0 on clean files and ignores unknown file types"; else bad "exits 0 on clean files and ignores unknown file types" "exit $status"; fi
+rm -rf "$fc"
+
+repo=$(make_gate_repo '- gate.comments.skip: migrations/
+- gate.comments.directives: ^keep-me')
+printf 'x = 1  # legacy comment stays\n' > "$repo/app.py"
+git -C "$repo" add -A && git -C "$repo" commit -q -m "legacy"
+git -C "$repo" checkout -q -b slice/S020
+printf 'x = 1  # legacy comment stays\ny = 2\n' > "$repo/app.py"
+mkdir -p "$repo/migrations" && printf '# Generated by the framework\n' > "$repo/migrations/0001.py"
+printf 'z = 3  # keep-me: project directive\n' > "$repo/tool.py"
+git -C "$repo" add -A && git -C "$repo" commit -q -m "feat: clean slice"
+status=0; out=$(cd "$repo" && "$GATE" comments 2>&1) || status=$?
+if [ "$status" -eq 0 ] && echo "$out" | grep -q "^comments PASS"; then
+  ok "comments gate checks only added lines, honours gate.comments.skip and gate.comments.directives"
+else
+  bad "comments gate checks only added lines, honours gate.comments.skip and gate.comments.directives" "exit $status: $out"
+fi
+printf 'x = 1  # legacy comment stays\ny = 2  # explains y\n' > "$repo/app.py"
+git -C "$repo" commit -q -am "feat: add a comment"
+status=0; out=$(cd "$repo" && "$GATE" comments 2>&1) || status=$?
+if [ "$status" -eq 1 ] && echo "$out" | grep -q "app.py:2: y = 2  # explains y" && ! echo "$out" | grep -q "legacy"; then
+  ok "comments gate fails on an added comment and names file:line"
+else
+  bad "comments gate fails on an added comment and names file:line" "exit $status: $out"
+fi
+out=$(cd "$repo" && GATE_BASE=trunk "$GATE" comments 2>&1)
+if echo "$out" | grep -q "^comments SKIP"; then ok "comments gate skips when the base branch is missing"; else bad "comments gate skips when the base branch is missing" "$out"; fi
 rm -rf "$repo"
 
 echo "== session-start.sh — resume context in one injection =="
@@ -303,7 +412,7 @@ fi
 rm -rf "$repo"
 
 echo "== Cursor hook payloads =="
-cursor_shell() { # <command> — prints guard.sh stdout, returns its exit code
+cursor_shell() {
   jq -n --arg c "$1" '{hook_event_name: "beforeShellExecution", command: $c, workspace_roots: ["/tmp"]}' \
     | "$GUARD" 2>/dev/null
 }
@@ -375,6 +484,11 @@ if grep -q "^readonly: true" "$gen/cursor/retro.md" && grep -q "^tools: \['read'
 else
   bad "retro is read-only under Cursor and Copilot" "$(grep -h '^readonly\|^tools' "$gen/cursor/retro.md" "$gen/copilot/retro.agent.md")"
 fi
+if grep -q "^tools: \['read', 'edit', 'search', 'runCommands'\]" "$gen/copilot/builder.agent.md"; then
+  ok "copilot collapses Write and Edit into one 'edit' toolset"
+else
+  bad "copilot collapses Write and Edit into one 'edit' toolset" "$(grep '^tools' "$gen/copilot/builder.agent.md")"
+fi
 status=0; "$GENERATE" bogus >/dev/null 2>&1 || status=$?
 if [ "$status" -eq 1 ]; then ok "unknown target exits 1"; else bad "unknown target exits 1" "exit $status"; fi
 proj="$gen/proj"; mkdir -p "$proj"
@@ -403,6 +517,18 @@ fi
 rm -rf "$gen"
 
 echo "== lint.sh =="
+fakebin=$(mktemp -d)
+# shellcheck disable=SC2016
+printf '#!/bin/bash\n[ "$1" = check ] && { echo "E999 fake lint error"; exit 1; }\nexit 0\n' > "$fakebin/ruff"
+chmod +x "$fakebin/ruff"
+tmppy=$(mktemp /tmp/lint-test-XXXX.py)
+status=0
+jq -n --arg fp "$tmppy" '{tool_input: {filePath: $fp}}' | PATH="$fakebin:$PATH" "$LINT" >/dev/null 2>&1 || status=$?
+if [ "$status" -eq 2 ]; then ok "lint reads VS Code Copilot's camelCase filePath"; else bad "lint reads VS Code Copilot's camelCase filePath" "exit $status"; fi
+status=0
+jq -n --arg fp "$tmppy" '{hook_event_name: "afterFileEdit", file_path: $fp}' | PATH="$fakebin:$PATH" "$LINT" >/dev/null 2>&1 || status=$?
+if [ "$status" -eq 2 ]; then ok "lint reads Cursor's top-level file_path"; else bad "lint reads Cursor's top-level file_path" "exit $status"; fi
+rm -rf "$fakebin" "$tmppy"
 status=0
 jq -n '{tool_input: {file_path: "/nonexistent/nowhere.py"}}' | "$LINT" >/dev/null 2>&1 || status=$?
 if [ "$status" -eq 0 ]; then ok "missing file exits 0"; else bad "missing file exits 0" "exit $status"; fi
@@ -424,6 +550,38 @@ if command -v ruff >/dev/null 2>&1; then
 else
   echo "  SKIP  python lint errors exit 2 (ruff not installed)"
 fi
+
+echo "== install.sh — never clobbers what the user already has =="
+home=$(mktemp -d)
+mkdir -p "$home/.claude/commands" "$home/.claude/scripts" "$home/.cursor"
+echo '{"mine": true}' > "$home/.claude/settings.json"
+echo "# my own global rules" > "$home/.claude/CLAUDE.md"
+echo "old" > "$home/.claude/commands/init-vault.md"
+echo "old" > "$home/.claude/scripts/generate-copilot-agents.sh"
+echo '{"mine": true}' > "$home/.cursor/hooks.json"
+HOME="$home" "$INSTALL" >/dev/null 2>&1
+if [ "$(jq -r .mine "$home/.claude/settings.json")" = "true" ] && ls "$home"/.claude/settings.json.new-* >/dev/null 2>&1; then
+  ok "install keeps an existing settings.json and drops the new one beside it"
+else
+  bad "install keeps an existing settings.json and drops the new one beside it" "$(ls "$home/.claude")"
+fi
+if grep -q "my own global rules" "$home"/.claude/CLAUDE.md.bak-* 2>/dev/null && cmp -s "$ROOT/CLAUDE.md" "$home/.claude/CLAUDE.md"; then
+  ok "install backs up a differing CLAUDE.md before replacing it"
+else
+  bad "install backs up a differing CLAUDE.md before replacing it" "$(ls "$home/.claude")"
+fi
+if [ "$(jq -r .mine "$home/.cursor/hooks.json")" = "true" ] && ls "$home"/.cursor/hooks.json.new-* >/dev/null 2>&1; then
+  ok "install keeps an existing Cursor hooks.json and drops the new one beside it"
+else
+  bad "install keeps an existing Cursor hooks.json and drops the new one beside it" "$(ls "$home/.cursor")"
+fi
+if [ ! -e "$home/.claude/commands/init-vault.md" ] && ls "$home"/.claude/commands/init-vault.md.bak-* >/dev/null 2>&1 \
+   && [ ! -e "$home/.claude/scripts/generate-copilot-agents.sh" ]; then
+  ok "install retires the old init-vault command and the renamed agent generator"
+else
+  bad "install retires the old init-vault command and the renamed agent generator" "$(ls "$home/.claude/commands" "$home/.claude/scripts")"
+fi
+rm -rf "$home"
 
 echo ""
 echo "$pass passed, $fail failed"

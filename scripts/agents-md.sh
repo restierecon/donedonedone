@@ -1,12 +1,4 @@
 #!/bin/bash
-# Writes the global protocol into a project's AGENTS.md, the one instruction file both
-# Cursor and GitHub Copilot read (Copilot's cloud coding agent and CLI too, which never
-# see ~/.claude/). Claude Code reads ~/.claude/CLAUDE.md directly and ignores this file.
-#
-# The protocol lives in a marked block; anything else in AGENTS.md is the user's and is
-# never touched. The block is derived: rewritten only when ~/.claude/CLAUDE.md changed,
-# and session-start.sh re-runs this each session so upgrades propagate.
-# Usage: agents-md.sh [project-dir]   (default: current directory)
 
 SRC="${AGENTS_MD_SRC:-$HOME/.claude/CLAUDE.md}"
 PROJECT="${1:-.}"
@@ -31,7 +23,6 @@ trap 'rm -f "$block" "$new"' EXIT
 if [ ! -f "$OUT" ]; then
   cp "$block" "$new"
 elif grep -qF -- "$BEGIN" "$OUT"; then
-  # Replace the existing block in place, keeping the user's text on both sides.
   awk -v begin="$BEGIN" -v end="$END" -v blockfile="$block" '
     index($0, begin) == 1 { while ((getline line < blockfile) > 0) print line; skip = 1; next }
     skip && $0 == end     { skip = 0; next }
