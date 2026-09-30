@@ -1,6 +1,6 @@
 ---
 name: architecture-review
-description: Use every 5 completed slices or at feature completion (Director tracks the counter in task-tree.json). Finds deepening opportunities — shallow modules, pass-throughs, cross-slice duplication — and queues them as candidates for human acceptance. Never refactors autonomously.
+description: Use every 5 completed slices or at feature completion (Director tracks the counter in task-tree.json), alongside the learning-loop skill. Finds deepening opportunities — shallow modules, pass-throughs, cross-slice duplication — and queues them as candidates for human acceptance. Never refactors autonomously.
 ---
 
 # Architecture Review
@@ -24,7 +24,9 @@ earning its keep. "Vanishes" is your refactor candidate.
 1. Read vault/project.md (domain language) and vault/decisions/ FIRST — never
    re-suggest what an ADR has already rejected, unless friction has become severe
    enough to say so explicitly ("contradicts ADR-00n, but worth reopening because…").
-2. Spawn an explore subagent over the code added since the last review. Note friction:
+2. Spawn an explore subagent over the code added since the last review — and, in the
+   same message, the `retro` agent per the learning-loop skill (process lens; it routes
+   its own proposals). Note friction:
    - Understanding one concept requires bouncing between many small modules
    - Shallow wrappers and pass-through layers (controller→service→repo where the
      middle adds nothing)
@@ -42,4 +44,4 @@ earning its keep. "Vanishes" is your refactor candidate.
   run autonomously once the grill has settled the target design
 - Human-rejected candidates with load-bearing reasons → offer an ADR so this
   review never re-suggests them
-- Reset slices_since_arch_review to 0 in task-tree.json
+- Reset slices_since_arch_review to 0 in task-tree.json (one counter drives both reviews)

@@ -41,7 +41,7 @@ writes task-tree.json).
      instead of guessing.
    - Meta line: shipped date (`git log -1 --format=%ad --date=short <ID>-done`, else
      the merge commit's date, else today) · reviewer rejections
-     (count REJECTED verdicts for that ID in vault/log.jsonl; fall back to
+     (count lines in vault/log.jsonl with that `slice` and `"verdict":"REJECTED"`; fall back to
      `retry_count`) · the tag name.
    - Bullets: one per acceptance criterion, rewritten as behavior a user can observe.
      Drop implementation detail; keep numbers, limits, and error behavior exact.
