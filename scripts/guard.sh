@@ -1,7 +1,7 @@
 #!/bin/bash
 
 if ! command -v jq >/dev/null 2>&1; then
-  echo "BLOCKED: guard.sh requires jq and it is not installed (brew install jq). Failing closed." >&2
+  echo "BLOCKED: guard.sh requires jq and it is not installed (brew install jq · winget install jqlang.jq · apt install jq). Failing closed." >&2
   exit 2
 fi
 
@@ -48,7 +48,10 @@ lower() { tr '[:upper:]' '[:lower:]'; }
 
 # shellcheck disable=SC2016
 normalize() {
-  printf '%s\n' "$1" | tr -d "\"'\\\\" | lower | sed -E \
+  printf '%s\n' "$1" | sed -E 's#([A-Za-z]):\\#\1:/#g' | tr -d "\"'\\\\" | lower | sed -E \
+    -e 's#(^|[[:space:];&|(`])[a-z]:/#\1/#g' \
+    -e 's#(^|[[:space:];&|(`])[a-z]:([[:space:]]|$)#\1/\2#g' \
+    -e 's#(^|[[:space:];&|(`/])(rm|git|find|sudo|dd|chmod|eval|shutdown|reboot|halt|poweroff|env|xargs|(ba|z|da|k|fi|c|tc)?sh)\.exe([[:space:]]|$)#\1\2\4#g' \
     -e 's#(^|[[:space:];&|(`])/[^[:space:];&|()`]*/(rm|git|find|sudo|dd|chmod|eval|shutdown|reboot|halt|poweroff|env|xargs|(ba|z|da|k|fi|c|tc)?sh)([[:space:]]|$)#\1\2\4#g' \
     -e ':a' \
     -e 's#(^|[^[:alnum:]_-])git[[:space:]]+(-c[[:space:]]+[^[:space:]]+|--git-dir(=|[[:space:]]+)[^[:space:]]+|--work-tree(=|[[:space:]]+)[^[:space:]]+|--namespace(=|[[:space:]]+)[^[:space:]]+|--no-pager|-p|--paginate|--bare|--no-replace-objects|--literal-pathspecs)([[:space:]]|$)#\1git #' \
