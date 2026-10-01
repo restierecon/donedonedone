@@ -11,8 +11,27 @@ if [ ! -f "$project" ]; then
 fi
 [ -f "$project" ] || { echo "gate.sh: no vault/project.md — run /init-vault and add gate.* commands" >&2; exit 1; }
 
+setting() {
+  local value
+  value=$(sed -n "s/^[-*][[:space:]]*gate\.$1:[[:space:]]*//p" "$project" | head -1 | tr -d '\r')
+  value="${value#\`}"
+  printf '%s\n' "${value%\`}"
+}
+
 known="lint types test build markers comments"
-steps=("$@")
+steps=() targets=() focused=0
+while [ $# -gt 0 ]; do
+  if [ "$1" = "--" ]; then
+    focused=1; shift; targets=("$@"); break
+  fi
+  steps+=("$1"); shift
+done
+if [ "$focused" -eq 1 ]; then
+  [ "${steps[*]}" = "test" ] || { echo "gate.sh: test targets go with the test step alone: gate.sh test -- <targets>" >&2; exit 1; }
+  [ ${#targets[@]} -gt 0 ] || { echo "gate.sh: no test targets after --" >&2; exit 1; }
+  focus=$(setting 'test\.focus')
+  [ -n "$focus" ] || { echo "gate.sh: no gate.test.focus in vault/project.md — add one (e.g. - gate.test.focus: pytest -q {}), or run gate.sh test for the full suite" >&2; exit 1; }
+fi
 [ ${#steps[@]} -eq 0 ] && read -ra steps <<< "$known"
 for step in "${steps[@]}"; do
   case " $known " in
@@ -21,7 +40,16 @@ for step in "${steps[@]}"; do
   esac
 done
 
-dirty=$(git -C "$top" status --porcelain -- . ':(exclude)vault' ':(exclude).gate')
+budget=""
+if [ "$focused" -eq 0 ]; then
+  budget=$(setting 'test\.budget')
+  case "$budget" in
+    *[!0-9]*) echo "gate.sh: gate.test.budget must be whole seconds, not '$budget'" >&2; exit 1 ;;
+  esac
+fi
+
+dirty=""
+[ "$focused" -eq 0 ] && dirty=$(git -C "$top" status --porcelain -- . ':(exclude)vault' ':(exclude).gate')
 if [ -n "$dirty" ] && [ "${GATE_ALLOW_DIRTY:-}" != "1" ]; then
   echo "GATE: FAIL (uncommitted changes outside vault/ — commit first so the result describes a SHA):" >&2
   echo "$dirty" | head -"$EXCERPT_LINES" | while IFS= read -r line; do echo "  $line" >&2; done
@@ -30,7 +58,7 @@ fi
 
 common_root=$(dirname "$(git -C "$top" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)")
 base="${GATE_BASE:-main}"
-if [ "$common_root" != "$top" ] && git -C "$top" rev-parse -q --verify "$base^{commit}" >/dev/null; then
+if [ "$focused" -eq 0 ] && [ "$common_root" != "$top" ] && git -C "$top" rev-parse -q --verify "$base^{commit}" >/dev/null; then
   touched=$(git -C "$top" diff --name-only "$base...HEAD" -- vault/task-tree.json vault/log.jsonl vault/memory/session.md)
   if [ -n "$touched" ]; then
     echo "GATE: FAIL (this worktree's branch changes Director-only files, which a squash-merge would carry into main):" >&2
@@ -50,6 +78,16 @@ added_markers() {
     /^\+/        { t = substr($0, 2)
                    if (t ~ /(^|[^A-Za-z0-9_])(TODO|FIXME|XXX)([^A-Za-z0-9_]|$)/) print f ":" n ": " t
                    n++ }'
+}
+
+with_targets() {
+  local quoted
+  quoted=$(printf '%q ' "${targets[@]}")
+  quoted="${quoted% }"
+  case "$1" in
+    *'{}'*) printf '%s\n' "${1%%\{\}*}$quoted${1#*\{\}}" ;;
+    *) printf '%s\n' "$1 $quoted" ;;
+  esac
 }
 
 for step in "${steps[@]}"; do
@@ -85,8 +123,11 @@ for step in "${steps[@]}"; do
     fi
     continue
   fi
-  cmd=$(sed -n "s/^[-*][[:space:]]*gate\.${step}:[[:space:]]*//p" "$project" | head -1)
-  cmd="${cmd#\`}"; cmd="${cmd%\`}"
+  if [ "$focused" -eq 1 ]; then
+    cmd=$(with_targets "$focus")
+  else
+    cmd=$(setting "$step")
+  fi
   if [ "$cmd" = "none" ]; then
     echo "$step SKIP (gate.$step: none)"
     continue
@@ -105,7 +146,9 @@ for step in "${steps[@]}"; do
   (cd "$top" && bash -c "$cmd") >"$log" 2>&1
   status=$?
   secs=$(( $(date +%s) - start ))
-  if [ "$status" -eq 0 ]; then
+  if [ "$status" -eq 0 ] && [ "$step" = "test" ] && [ -n "$budget" ] && [ "$secs" -gt "$budget" ]; then
+    echo "$step PASS (${secs}s) — over gate.test.budget (${budget}s)"
+  elif [ "$status" -eq 0 ]; then
     echo "$step PASS (${secs}s)"
   else
     failed+=("$step")
@@ -115,6 +158,15 @@ for step in "${steps[@]}"; do
     while IFS= read -r line; do echo "  $line"; done <<< "$excerpt"
   fi
 done
+
+if [ "$focused" -eq 1 ]; then
+  if [ ${#failed[@]} -eq 0 ]; then
+    echo "FOCUSED: PASS — the named tests only, not a gate verdict"
+    exit 0
+  fi
+  echo "FOCUSED: FAIL — the named tests only, not a gate verdict"
+  exit 1
+fi
 
 sha=$(git rev-parse --short HEAD 2>/dev/null)
 if [ ${#failed[@]} -eq 0 ]; then

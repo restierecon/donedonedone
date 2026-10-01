@@ -41,6 +41,12 @@ to_yaml_list() {
   echo "${result}]"
 }
 
+windows_note() {
+  printf '\n%s\n%s\n' \
+    'Scripts in ~/.claude/scripts are bash. On Windows, run them from Git Bash or WSL; from' \
+    "PowerShell, go through Git Bash: \`& \"\$env:ProgramFiles\\Git\\bin\\bash.exe\" -c '~/.claude/scripts/gate.sh test -- <targets>'\`"
+}
+
 cursor_model() {
   case "$1" in
     haiku) echo "fast" ;;
@@ -67,6 +73,7 @@ generate_cursor() {
       echo "readonly: $ro"
       echo "---"
       echo "$body"
+      windows_note
     } > "$DEST/$name.md"
     count=$((count + 1))
   done
@@ -90,6 +97,7 @@ generate_copilot() {
       echo "user-invocable: false"
       echo "---"
       echo "$body"
+      windows_note
     } > "$DEST/$name.agent.md"
     names+=("$name")
     count=$((count + 1))
@@ -107,13 +115,16 @@ agents: ${roster}
 ---
 
 You coordinate work through the Autonomous Engineering Protocol described in your
-always-on instructions (the protocol block in AGENTS.md, or ~/.claude/CLAUDE.md). You never write application code or run gates
+always-on instructions (the protocol block in AGENTS.md, or ~/.claude/CLAUDE.md). You never write application code
 yourself -- dispatch to the ${roster_prose} subagents and follow the
 same decomposition, gating, and resolution rules the protocol defines for the
-Director role in Claude Code. Record gate verdicts, vault/task-tree.json updates and
+Director role in Claude Code. You do run ~/.claude/scripts/gate.sh once per slice
+yourself (Completion Gates step 2) and act on what it prints, including a test line
+over gate.test.budget. Record gate verdicts, vault/task-tree.json updates and
 vault/log.jsonl lines (through ~/.claude/scripts/log-event.sh) yourself; subagents
 report back as text only, never editing vault files directly.
 AGENT
+  windows_note >> "$DEST/orchestrator.agent.md"
   count=$((count + 1))
 
   echo "Generated $count Copilot custom agents -> $DEST"

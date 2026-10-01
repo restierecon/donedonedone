@@ -22,16 +22,22 @@ Initialize this project for the autonomous workflow. Do all of the following:
 8. Create vault/project.md by asking me (one round of questions max) for:
    - Project name and one-line purpose
    - Stack (suggest from what you see in the repo if it's not empty)
-   - Gate commands (suggest from the repo: package.json scripts, pyproject, Makefile)
+   - Gate commands (suggest from the repo: package.json scripts, pyproject, Makefile),
+     including how to run only some tests, and a full-suite budget in seconds (default 300)
    Then write it with these sections: Purpose · Stack · Gate — one line per step, read
    by `~/.claude/scripts/gate.sh`, omit a step the stack doesn't have (except
    `gate.test`, which the gate requires — write `- gate.test: none` only if the
    project truly has no tests):
-   `- gate.lint: <cmd>` · `- gate.types: <cmd>` · `- gate.test: <cmd>` ·
-   `- gate.build: <cmd>` (quiet flags preferred, e.g. `pytest -q`); the built-in `markers` and
-   `comments` steps need no line, but add `- gate.comments.skip: <path prefixes>` for
-   generated code (migrations) and `- gate.comments.directives: <regex>` for a tool
-   directive the gate doesn't know · Domain Language (empty table:
+   `- gate.lint: <cmd>` · `- gate.types: <cmd>` · `- gate.test: <cmd>` (with a
+   per-test timeout where the runner offers one, e.g. `--timeout=10` with pytest-timeout) ·
+   `- gate.build: <cmd>` (quiet flags preferred, e.g. `pytest -q`) ·
+   `- gate.test.focus: <cmd>` with `{}` where test files or ids go (`pytest -q {}`,
+   `npx vitest run {}`, `go test {}`) — builders run only their own tests mid-loop ·
+   `- gate.test.budget: <seconds>` — the gate flags a full suite slower than this; the
+   built-in `markers` and `comments` steps need no line, but add
+   `- gate.comments.skip: <path prefixes>` for generated code (migrations) and
+   `- gate.comments.directives: <regex>` for a tool directive the gate doesn't know ·
+   Domain Language (empty table:
    Term | Meaning — grow it as the project develops) · Autonomy: supervised ·
    Parallelism: max_parallel_slices: 3 (git-worktree parallel dispatch, see global
    protocol → Parallel Slice Dispatch) · Definition of Done (every slice independently

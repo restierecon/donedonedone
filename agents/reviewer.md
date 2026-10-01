@@ -38,6 +38,11 @@ the slice branch elsewhere, since sibling worktrees share the same repo.
 - [ ] No mock-theater; mocks only at system boundaries
 - [ ] Tests target behavior, not implementation details
 - [ ] At least one failure-mode test per criterion that has one
+- [ ] Tests are fast: each criterion proven at the lowest layer that can, at most one
+      browser-driven test, no real waiting (sleep, a TTL waited out), no per-test
+      rebuild of expensive setup. With gate.test.focus set, time the slice's own
+      tests (`gate.sh test -- <its test files>`) and quote the seconds in any SLOP line;
+      if your sandbox can't run it, judge from the code and say so
 - [ ] No scope creep — diff contains only this slice ("also improved X" = REJECT)
 - [ ] Frontend calls match backend routes; schema matches models (contract check)
 - [ ] No new dependency without justification; lockfile committed if deps changed
