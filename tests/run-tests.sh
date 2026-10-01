@@ -22,8 +22,8 @@ bad() { fail=$((fail + 1)); echo "  FAIL  $1 ($2)"; }
 guard_bash() {
   local extra='{}'
   [ -n "$2" ] && extra=$(jq -n --arg t "$2" '{agent_id: "agent-test-1", agent_type: $t}')
-  jq -n --arg cmd "$1" --argjson x "$extra" \
-    '{tool_name: "Bash", tool_input: {command: $cmd}} + $x' | "$GUARD" 2>/dev/null
+  printf '%s' "$1" | jq -Rs --argjson x "$extra" \
+    '{tool_name: "Bash", tool_input: {command: .}} + $x' | "$GUARD" 2>/dev/null
 }
 
 guard_file() {
@@ -101,12 +101,9 @@ expect_allow "guard allows a safe command sent as Copilot's run_in_terminal" \
 
 echo "== guard.sh — fail closed without jq =="
 fakebin=$(mktemp -d)
-for b in bash sh cat grep mktemp dirname; do
-  p=$(command -v "$b") && ln -s "$p" "$fakebin/$b"
-done
 status=0
 echo '{"tool_name":"Bash","tool_input":{"command":"ls"}}' \
-  | env PATH="$fakebin" bash "$GUARD" 2>/dev/null || status=$?
+  | env PATH="$fakebin" "$(command -v bash)" "$GUARD" 2>/dev/null || status=$?
 if [ "$status" -eq 2 ]; then ok "blocks when jq is missing"; else bad "blocks when jq is missing" "exit $status, expected 2"; fi
 rm -rf "$fakebin"
 
@@ -766,6 +763,13 @@ else
   echo "  SKIP  python lint errors exit 2 (ruff not installed)"
 fi
 
+echo "== settings.json =="
+if jq -e '.env.CLAUDE_CODE_USE_POWERSHELL_TOOL == "0"' "$ROOT/settings.json" >/dev/null; then
+  ok "settings.json keeps Claude Code on Windows in Git Bash, the only shell guard.sh can read"
+else
+  bad "settings.json keeps Claude Code on Windows in Git Bash, the only shell guard.sh can read" "$(jq -c '.env' "$ROOT/settings.json")"
+fi
+
 echo "== install.sh — never clobbers what the user already has =="
 home=$(mktemp -d)
 mkdir -p "$home/.claude/commands" "$home/.claude/scripts" "$home/.cursor"
@@ -807,9 +811,15 @@ expect_block "blocks git split by empty quotes"           guard_bash 'g""it rese
 expect_block "blocks a quoted git"                        guard_bash "'git' push -f"
 expect_block "blocks git called by absolute path"         guard_bash '/usr/bin/git reset --hard'
 expect_block "blocks rm called by absolute path"          guard_bash '/bin/rm -rf /'
+expect_block "blocks rm.exe, which Git Bash on Windows runs as rm" guard_bash 'rm.exe -rf ~'
+expect_block "blocks git.exe force-pushing, as Windows spells it" guard_bash 'git.exe push --force origin main'
+expect_block "blocks rm called by a Windows drive path"   guard_bash 'C:/msys64/usr/bin/rm.exe -rf /'
+expect_block "blocks recursive rm of a Windows drive root" guard_bash 'rm -rf C:/'
+expect_block "blocks recursive rm of a backslashed Windows path" guard_bash 'rm -rf C:\Users\me'
+expect_allow "allows a program whose name only ends in rm.exe" guard_bash 'farm.exe --help'
 expect_block "blocks a backslash-escaped rm"              guard_bash '\rm -rf /'
 expect_block "blocks rm in a subshell"                    guard_bash '(rm -rf /)'
-expect_block "blocks an uppercase RM, which macOS resolves to rm" guard_bash 'RM -rf /'
+expect_block "blocks an uppercase RM, which macOS and Windows resolve to rm" guard_bash 'RM -rf /'
 expect_block "blocks rm with its flags after the target"  guard_bash 'rm / -rf'
 expect_block "blocks rm of an absolute system path"       guard_bash 'rm -rf /usr/lib'
 expect_block "blocks recursive rm of a \$VARIABLE the guard can't see" guard_bash 'rm -rf "${HOME:?}"'
@@ -836,7 +846,7 @@ expect_allow "allows piping into sha256sum"               guard_bash 'sha256sum 
 expect_allow "allows a commit message in quotes"          guard_bash 'git commit -m "fix: x"'
 expect_allow "allows reading a file under /usr"           guard_bash 'cat /usr/lib/os-release'
 expect_block "subagent cannot write a globbed task-tree"  guard_bash 'cp x vault/task-tree.j*' builder
-expect_block "subagent cannot write Task-Tree.json, the same file on macOS" guard_bash 'cp x vault/Task-Tree.json' builder
+expect_block "subagent cannot write Task-Tree.json, the same file on macOS and Windows" guard_bash 'cp x vault/Task-Tree.json' builder
 expect_block "subagent cannot cd into vault and write"    guard_bash 'cd vault && cp ../x task-*' builder
 expect_block "subagent cannot build the vault path from a variable" guard_bash 'f=task-tree; cp x vault/$f.json' builder
 expect_block "subagent cannot check vault out of history" guard_bash 'git checkout HEAD~1 -- vault' builder
