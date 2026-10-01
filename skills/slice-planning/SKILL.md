@@ -24,7 +24,7 @@ then "build the UI". That illusion of parallel completeness produces fragile,
 unintegrated output. One vertical slice at a time.
 
 ## Sizing
-A slice the Builder can finish inside its budget (≤ 12 invocations including review
+A slice the Builder can finish inside its budget (≤ 10 builder/reviewer/auditor invocations, including review
 rounds). If acceptance criteria exceed ~7 items, split the slice. Other split signals:
 the title needs an "and" to describe it (that's two slices); it touches two or more
 independent subsystems (e.g. billing and notifications); you can't state its
