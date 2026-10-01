@@ -36,7 +36,7 @@ builds. Nothing after the grill should need you unless a slice escalates.
 | agents/ | planner · builder · reviewer · auditor · scribe · retro (least-privilege tools, model-per-agent) |
 | skills/ | protocol-native: grill · slice-planning · parallel-dispatch · compaction · architecture-review · learning-loop · `/init-vault` · `/harvest` — plus a general engineering-practice library (see Credits) |
 | settings.json | Permission deny/ask lists + 4 hooks |
-| scripts/ | guard.sh (PreToolUse) · lint.sh (PostToolUse) · checkpoint.sh (Stop) · session-start.sh (SessionStart) · gate.sh (quiet lint/types/test/build runner + built-in TODO/FIXME check) · log-event.sh (the Director's structured log.jsonl writer) · generate-agents.sh (Copilot/Cursor agents, install-time) · agents-md.sh (protocol block in a project's AGENTS.md, for Cursor/Copilot) |
+| scripts/ | guard.sh (PreToolUse) · lint.sh (PostToolUse) · checkpoint.sh (Stop) · session-start.sh (SessionStart) · gate.sh (quiet lint/types/test/build runner + built-in TODO/FIXME and no-comments checks) · find-comments.sh (the comment detector behind that check) · log-event.sh (the Director's structured log.jsonl writer) · generate-agents.sh (Copilot/Cursor agents, install-time) · agents-md.sh (protocol block in a project's AGENTS.md, for Cursor/Copilot) |
 | tests/ | Test harness for the hook scripts — run after any script edit; CI runs it too |
 | evals/ | 10-task benchmark + scorecard — run before trusting, re-run after any manifest edit |
 
@@ -84,10 +84,45 @@ scorecard in `evals/` — see the promotion rule in `evals/README.md`.
 - gate.build: python -m build
 ```
 
-Leave out a step your stack doesn't have — it reports SKIP. A fifth step, `markers`, is
-built in and needs no line: it fails when the diff against `main` (`GATE_BASE` to
-override) adds a TODO, FIXME or XXX outside `vault/`. Run `gate.sh test` for one step,
-no arguments for all five; full logs land in `.gate/` (gitignored).
+Leave out a step your stack doesn't have — it reports SKIP. Two more steps are built in
+and need no line; both look only at what the diff against `main` (`GATE_BASE` to
+override) adds, outside `vault/`:
+- `markers` fails on an added TODO, FIXME or XXX.
+- `comments` fails on an added comment (see No comments below).
+
+Run `gate.sh test` for one step, no arguments for all six; full logs land in `.gate/`
+(gitignored).
+
+## No comments
+No codebase built with this setup carries comments: no line comments, block comments,
+docstrings or doc comments. Names, types and small functions say *what*. A *why* the
+code can't say — a vendor quirk, an editor's payload format, a legal rule — goes where
+it can't silently rot:
+- **a test named for the constraint** (strongest: undo the constraint and it fails,
+  and its name says why) — this repo's own tests are the example, e.g. "guard blocks a
+  force push sent as Copilot's run_in_terminal"
+- **an ADR** in `vault/decisions/` for a decision with a load-bearing rationale
+- **the commit message**, found through `git blame`
+
+Machine-read directives aren't comments and stay: shebangs, encoding cookies, lint and
+type suppressions (`# noqa`, `// eslint-disable-next-line`, `# shellcheck disable`,
+`@ts-expect-error`), build tags (`//go:build`), bundler annotations (`/*#__PURE__*/`),
+and SPDX/copyright lines. Write them bare — the reason goes in the commit message.
+
+`scripts/find-comments.sh` enforces it. It knows Python, shell, Ruby, JS/TS, Go, Rust,
+the C and JVM families, PHP, CSS/SCSS, SQL, Lua, Haskell, YAML/TOML/HCL, Dockerfiles,
+Makefiles and HTML/XML/Vue/Svelte, and it steps over strings, template literals,
+heredocs and raw strings. File types it doesn't know pass; the reviewer checks what
+the gate can't parse. Two optional project.md lines:
+
+```markdown
+- gate.comments.skip: migrations/ alembic/versions/
+- gate.comments.directives: ^my-tool:
+```
+
+`skip` takes path prefixes for generated code; `directives` adds a regex for a tool
+directive the gate doesn't know. In an adopted codebase only added lines are checked:
+existing comments stay until a slice rewrites those lines.
 
 ## Token budget
 Where the protocol spends tokens, and what keeps it down:
@@ -133,7 +168,9 @@ Pull, re-run `./install.sh`. It retires old `~/.claude/commands/init-vault.md` a
 5. Nothing to migrate in `vault/log.jsonl`: older hand-written lines are skipped by the
    retro and RETRO DUE check. The first retro reads the whole log; after that, each run
    starts where the previous one's `retro` line left off. If the default branch isn't
-   `main`, set `GATE_BASE` or the `markers` gate step reports SKIP.
+   `main`, set `GATE_BASE` or the `markers` and `comments` gate steps report SKIP.
+6. The `comments` step checks only lines a slice adds, so existing comments don't fail
+   the gate. Add `gate.comments.skip` for generated code (see No comments).
 
 ## Verify on first install
 Hook and permission syntax evolves — if a hook doesn't fire, check the current
@@ -210,6 +247,23 @@ and AGENTS.md, so in a vault project the protocol loads twice. To avoid paying f
 twice, turn off `chat.useClaudeMdFile`. Nothing is lost: the protocol only applies in
 vault projects, and every vault project carries AGENTS.md.
 
+## Scripts
+Installed to `~/.claude/scripts/`. Each one's behavior is pinned by a named test in
+`tests/run-tests.sh`.
+
+| Script | Usage | What it does |
+|---|---|---|
+| gate.sh | `gate.sh [lint\|types\|test\|build\|markers\|comments ...]` | Runs the gate one line per step, a ≤ 30-line failure excerpt (`GATE_EXCERPT_LINES`), full log in `.gate/<step>.log`. Exit 0 all pass, 1 otherwise. From a worktree that predates project.md, it reads the main checkout's. |
+| find-comments.sh | `find-comments.sh --base <ref>` or `find-comments.sh <file>...` | Prints `path:line: text` for every comment added since `<ref>`, or in the given files. Exit 1 when it finds one, 2 on bad usage. |
+| log-event.sh | `log-event.sh <ID\|-> <event> <verdict> [--sha S] [--attempt N] [--category C]... [--signal TEXT]...` | Appends one JSON line to the main checkout's `vault/log.jsonl`. Up to 5 signals of 200 chars. Unknown events or categories exit 1 and list the valid ones. Prints `RETRO DUE` when a category recurs across slices. |
+| guard.sh | PreToolUse hook | Exit 2 blocks the call and feeds the reason back. Fails closed without jq. Understands Claude Code, VS Code Copilot (its own tool names; it ignores the matcher, so the hook sees every call) and Cursor (`beforeShellExecution`, answered with allow/deny JSON). |
+| lint.sh | PostToolUse hook | Formats the edited file, exit 2 with lint errors. Reads Claude Code's `file_path`, Copilot's `filePath` and Cursor's top-level `file_path`; Cursor ignores the exit code, so there errors surface at the gate. |
+| checkpoint.sh | Stop hook | Commits progress on `slice/*` branches only (never main/master), inside worktrees too. Scans with `gitleaks git --staged` (v8.19+) or `gitleaks protect --staged` (older) and aborts on a finding. |
+| session-start.sh | SessionStart hook | Injects session.md, live slices, git status and leftover worktrees; plain text, or `{"additional_context": ...}` for Cursor. Refreshes the AGENTS.md protocol block. |
+| agents-md.sh | `agents-md.sh [project-dir]` | Writes the protocol into the project's AGENTS.md between its markers; leaves everything else in the file alone. |
+| generate-agents.sh | `generate-agents.sh <copilot\|cursor> [dest]` | Emits derived agents (always overwritten, never hand-edit). Copilot gets an `orchestrator` whose roster is every agent in `agents/`; it isn't called "director" because that name means the main Claude Code session. |
+| validate-manifests.sh | `validate-manifests.sh` | Checks agent and skill frontmatter, and that CLAUDE.md's Agents table matches `agents/`. |
+
 ## Iterating
 This repo IS your dotfiles for Claude Code (and, via the above, Copilot in VS Code and Cursor).
 Edit agent manifests here, re-run ./install.sh, re-run the evals, commit. The setup
@@ -220,6 +274,8 @@ The global CLAUDE.md is inert in any directory without a `vault/` — including 
 repo — so editing the setup itself doesn't put Claude into Director mode.
 Any edit to scripts/ must keep `tests/run-tests.sh` green — the guardrails are
 the last line of defense, so they are the one place tests are non-negotiable.
+This repo follows its own no-comments rule; CI runs `find-comments.sh` over every
+script (test fixtures aside, since they are comment samples on purpose).
 
 ## Credits
 The overall approach here — a skills-and-agents setup for Claude Code, driven

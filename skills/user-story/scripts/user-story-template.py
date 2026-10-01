@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-"""Print a filled-in user-story Markdown stub. No network, no file writes."""
-
 import argparse
 
 

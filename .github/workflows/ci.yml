@@ -12,13 +12,15 @@ jobs:
         run: |
           sudo apt-get update -q && sudo apt-get install -y -q shellcheck jq
           shellcheck scripts/*.sh tests/*.sh install.sh
+      - name: no comments in this repo's code
+        run: scripts/find-comments.sh $(git ls-files '*.sh' '*.py' '*.yml' '*.yaml' install.sh | grep -v '^tests/fixtures/')
       - name: hook script tests
         run: tests/run-tests.sh
       - name: manifest validation
         run: scripts/validate-manifests.sh
       - name: scripts are executable in the repo
         run: |
-          bad=$(git ls-files -s scripts/ tests/ install.sh | grep -v ^100755 || true)
+          bad=$(git ls-files -s scripts/ ':(glob)tests/*.sh' install.sh | grep -v ^100755 || true)
           if [ -n "$bad" ]; then echo "not executable: $bad"; exit 1; fi
       - name: settings.json is valid JSON
         run: jq empty settings.json
