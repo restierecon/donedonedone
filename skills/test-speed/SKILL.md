@@ -11,8 +11,8 @@ shows. Never fix it as a side quest inside an unrelated slice.
 
 ## 1. Measure — in a subagent, so a full run's output stays out of your context
 Have a subagent that can run commands (Claude Code: general-purpose) run the whole
-suite once with per-test timings,
-through the focused gate so the log lands in .gate/test.log:
+suite once with per-test timings, through the focused gate so the log lands in
+.gate/test.log:
 `gate.sh test -- <timing flag> <whole test dir>`. That needs `gate.test.focus` — ask
 for it if project.md lacks it — and goes in the background if the run outlasts the
 shell tool's timeout. Timing flags: pytest `--durations=25` (splits setup from
