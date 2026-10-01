@@ -10,7 +10,8 @@ and so does every slice after it. Fix a slow suite as planned work, as soon as i
 shows. Never fix it as a side quest inside an unrelated slice.
 
 ## 1. Measure — in a subagent, so a full run's output stays out of your context
-Have a general-purpose subagent run the whole suite once with per-test timings,
+Have a subagent that can run commands (Claude Code: general-purpose) run the whole
+suite once with per-test timings,
 through the focused gate so the log lands in .gate/test.log:
 `gate.sh test -- <timing flag> <whole test dir>`. That needs `gate.test.focus` — ask
 for it if project.md lacks it — and goes in the background if the run outlasts the

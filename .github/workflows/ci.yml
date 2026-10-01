@@ -24,3 +24,47 @@ jobs:
           if [ -n "$bad" ]; then echo "not executable: $bad"; exit 1; fi
       - name: settings.json is valid JSON
         run: jq empty settings.json
+
+  cross-platform:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v5
+      - name: hook script tests
+        run: tests/run-tests.sh
+      - name: install from Git Bash and make a demo project
+        if: runner.os == 'Windows'
+        run: |
+          ./install.sh >/dev/null
+          demo="$(cygpath -u "$RUNNER_TEMP")/demo"
+          git init -q -b main "$demo"
+          git -C "$demo" config user.email ci@example.com
+          git -C "$demo" config user.name ci
+          mkdir -p "$demo/vault"
+          printf '%s\n' '# Demo' '## Gate' '- gate.test: echo ok' '- gate.test.focus: printf "<%s>" {}' > "$demo/vault/project.md"
+          git -C "$demo" add -A
+          git -C "$demo" commit -q -m init
+      - name: gate.sh from PowerShell 7 through Git Bash, as AGENTS.md tells Cursor and Copilot
+        if: runner.os == 'Windows'
+        shell: pwsh
+        working-directory: ${{ runner.temp }}/demo
+        run: |
+          & "$env:ProgramFiles\Git\bin\bash.exe" -c '~/.claude/scripts/gate.sh test -- one ''two words'''
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          $log = (Get-Content -Raw .gate/test.log).Trim()
+          if ($log -ne '<one><two words>') { Write-Error "test.log was: $log"; exit 1 }
+      - name: gate.sh from Windows PowerShell 5.1 through Git Bash
+        if: runner.os == 'Windows'
+        shell: powershell
+        working-directory: ${{ runner.temp }}/demo
+        run: |
+          & "$env:ProgramFiles\Git\bin\bash.exe" -c '~/.claude/scripts/gate.sh test -- one ''two words'''
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          $log = (Get-Content -Raw .gate/test.log).Trim()
+          if ($log -ne '<one><two words>') { Write-Error "test.log was: $log"; exit 1 }
