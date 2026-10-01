@@ -327,6 +327,101 @@ else
 fi
 rm -rf "$repo"
 
+echo "== gate.sh — focused runs and the test budget =="
+# shellcheck disable=SC2016
+repo=$(make_gate_repo '- gate.test: touch full-suite-ran
+- gate.test.focus: printf "<%s>" {}; echo')
+echo wip >> "$repo/file.txt"
+status=0
+# shellcheck disable=SC2016
+out=$(cd "$repo" && "$GATE" test -- 'tests/a b.py' -k 'x and $y' 2>&1) || status=$?
+# shellcheck disable=SC2016
+if [ "$status" -eq 0 ] && [ "$(cat "$repo/.gate/test.log")" = '<tests/a b.py><-k><x and $y>' ] && [ ! -e "$repo/full-suite-ran" ]; then
+  ok "a focused run puts its targets, each one quoted, where gate.test.focus has {}"
+else
+  bad "a focused run puts its targets, each one quoted, where gate.test.focus has {}" "exit $status: $out / $(cat "$repo/.gate/test.log")"
+fi
+if echo "$out" | grep -q "^FOCUSED: PASS" && ! echo "$out" | grep -q "^GATE:"; then
+  ok "a focused run works on a dirty tree because it never prints a GATE verdict"
+else
+  bad "a focused run works on a dirty tree because it never prints a GATE verdict" "$out"
+fi
+rm -rf "$repo"
+
+# shellcheck disable=SC2016
+repo=$(make_gate_repo '- gate.test: echo ok
+- gate.test.focus: printf "<%s>"')
+(cd "$repo" && "$GATE" test -- one two >/dev/null 2>&1)
+if [ "$(cat "$repo/.gate/test.log")" = "<one><two>" ]; then
+  ok "a focused run appends its targets when gate.test.focus has no {}"
+else
+  bad "a focused run appends its targets when gate.test.focus has no {}" "$(cat "$repo/.gate/test.log")"
+fi
+rm -rf "$repo"
+
+repo=$(make_gate_repo '- gate.test: echo ok
+- gate.test.focus: false {}')
+status=0; out=$(cd "$repo" && "$GATE" test -- tests/x 2>&1) || status=$?
+if [ "$status" -eq 1 ] && echo "$out" | grep -q "^test FAIL" && echo "$out" | grep -q "^FOCUSED: FAIL" && ! echo "$out" | grep -q "^GATE:"; then
+  ok "a failing focused run exits 1, still without a GATE verdict"
+else
+  bad "a failing focused run exits 1, still without a GATE verdict" "exit $status: $out"
+fi
+rm -rf "$repo"
+
+repo=$(make_gate_repo '- gate.test: touch full-suite-ran')
+status=0; out=$(cd "$repo" && "$GATE" test -- tests/x 2>&1) || status=$?
+if [ "$status" -eq 1 ] && echo "$out" | grep -q "no gate.test.focus" && [ ! -e "$repo/full-suite-ran" ]; then
+  ok "a focused run without gate.test.focus is an error, never a silent full-suite run"
+else
+  bad "a focused run without gate.test.focus is an error, never a silent full-suite run" "exit $status: $out"
+fi
+s1=0; (cd "$repo" && "$GATE" lint -- x >/dev/null 2>&1) || s1=$?
+s2=0; (cd "$repo" && "$GATE" -- x >/dev/null 2>&1) || s2=$?
+s3=0; out=$(cd "$repo" && "$GATE" test -- 2>&1) || s3=$?
+if [ "$s1" -eq 1 ] && [ "$s2" -eq 1 ] && [ "$s3" -eq 1 ] && echo "$out" | grep -q "no test targets"; then
+  ok "targets after -- go with the test step alone, and -- needs at least one"
+else
+  bad "targets after -- go with the test step alone, and -- needs at least one" "exits $s1/$s2/$s3: $out"
+fi
+rm -rf "$repo"
+
+clock=$(mktemp -d)
+# shellcheck disable=SC2016
+printf '%s\n' '#!/bin/bash' 'n=$(cat "$(dirname "$0")/calls" 2>/dev/null || echo 0)' \
+  'echo $((n + 1)) > "$(dirname "$0")/calls"' 'echo $((1000 + n * 600))' > "$clock/date"
+chmod +x "$clock/date"
+repo=$(make_gate_repo '- gate.test: echo ok
+- gate.test.focus: echo {}
+- gate.test.budget: 300')
+status=0; out=$(cd "$repo" && PATH="$clock:$PATH" "$GATE" test 2>&1) || status=$?
+if [ "$status" -eq 0 ] && echo "$out" | grep -qx "test PASS (600s) — over gate.test.budget (300s)" && echo "$out" | grep -q "^GATE: PASS"; then
+  ok "a suite over gate.test.budget still passes, flagged, since the slice may not be what slowed it"
+else
+  bad "a suite over gate.test.budget still passes, flagged, since the slice may not be what slowed it" "exit $status: $out"
+fi
+out=$(cd "$repo" && PATH="$clock:$PATH" "$GATE" test -- tests/x 2>&1)
+if echo "$out" | grep -qx "test PASS (600s)"; then
+  ok "a focused run is never held to gate.test.budget"
+else
+  bad "a focused run is never held to gate.test.budget" "$out"
+fi
+rm -rf "$repo"
+repo=$(make_gate_repo '- gate.test: echo ok
+- gate.test.budget: 3600')
+out=$(cd "$repo" && PATH="$clock:$PATH" "$GATE" test 2>&1)
+if echo "$out" | grep -qx "test PASS (600s)"; then ok "a suite within gate.test.budget is not flagged"; else bad "a suite within gate.test.budget is not flagged" "$out"; fi
+rm -rf "$repo"
+repo=$(make_gate_repo '- gate.test: touch full-suite-ran
+- gate.test.budget: 5m')
+status=0; out=$(cd "$repo" && "$GATE" test 2>&1) || status=$?
+if [ "$status" -eq 1 ] && echo "$out" | grep -q "gate.test.budget must be whole seconds" && [ ! -e "$repo/full-suite-ran" ]; then
+  ok "a gate.test.budget that isn't whole seconds fails before the suite runs"
+else
+  bad "a gate.test.budget that isn't whole seconds fails before the suite runs" "exit $status: $out"
+fi
+rm -rf "$repo" "$clock"
+
 echo "== gate.sh — built-in markers step =="
 repo=$(make_gate_repo '')
 git -C "$repo" checkout -q -b slice/S001

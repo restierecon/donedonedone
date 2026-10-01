@@ -1,7 +1,7 @@
 #!/bin/bash
 
 EVENTS="builder gate reviewer auditor merge tier3 escalation correction retro"
-CATEGORIES="criterion-unmet test-quality speculative-abstraction error-handling dead-code duplication scope-creep comments contract-mismatch dependency security logging gate-failure merge-conflict ambiguous-criteria human-correction other"
+CATEGORIES="criterion-unmet test-quality test-speed speculative-abstraction error-handling dead-code duplication scope-creep comments contract-mismatch dependency security logging gate-failure merge-conflict ambiguous-criteria human-correction other"
 MAX_SIGNALS=5
 MAX_CHARS=200
 

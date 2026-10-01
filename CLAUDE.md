@@ -51,7 +51,9 @@ run concurrently: load the parallel-dispatch skill before starting a wave
 ## Completion Gates (slice is DONE only when all pass, in order)
 1. Builder self-check — mechanical: gate green at its SHA, each criterion names its
    test. A claim, not evidence: gates 2-3 verify it
-2. Automated: you run `gate.sh` once, in the slice's checkout, at the builder's SHA
+2. Automated: you run `gate.sh` once, in the slice's checkout, at the builder's SHA.
+   A test line `over gate.test.budget` still passes: open one pending-review entry
+   for it (test-speed skill) unless one is open — a slice never fixes the suite
 3. Reviewer: APPROVED — hand it the SHA and the gate result line; it re-runs only if
    HEAD moved
 4. Auditor: CLEARED (only if triggers match; otherwise skip)
@@ -103,7 +105,8 @@ merged, and never prune to make a failure disappear. `/harvest` backfills in bul
 
 ## Flags (vault/flags/) — verification ergonomics required
 - pending-review.md — escalated slices, Tier 3 tiebreaks, architecture candidates,
-  retro proposals, nearby-improvement notes. Continue with non-dependent work.
+  retro proposals, test-budget overruns, nearby-improvement notes. Continue with
+  non-dependent work.
 - blocked.md — Auditor CRITICAL only. Halt that slice, continue with next
   non-dependent slice. Never ship a known-critical finding.
 - Every flag entry: 3-line summary first (what / what it affects / cost to reverse),
