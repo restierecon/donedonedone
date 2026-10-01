@@ -28,6 +28,17 @@ if [ -n "$dirty" ] && [ "${GATE_ALLOW_DIRTY:-}" != "1" ]; then
   exit 1
 fi
 
+common_root=$(dirname "$(git -C "$top" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)")
+base="${GATE_BASE:-main}"
+if [ "$common_root" != "$top" ] && git -C "$top" rev-parse -q --verify "$base^{commit}" >/dev/null; then
+  touched=$(git -C "$top" diff --name-only "$base...HEAD" -- vault/task-tree.json vault/log.jsonl vault/memory/session.md)
+  if [ -n "$touched" ]; then
+    echo "GATE: FAIL (this worktree's branch changes Director-only files, which a squash-merge would carry into main):" >&2
+    echo "$touched" | while IFS= read -r line; do echo "  $line" >&2; done
+    exit 1
+  fi
+fi
+
 logdir="$top/.gate"
 mkdir -p "$logdir"
 failed=()
