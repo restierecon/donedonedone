@@ -11,10 +11,12 @@ cd "$top" || exit 0
 git diff --quiet && git diff --cached --quiet && [ -z "$(git status --porcelain)" ] && exit 0
 
 branch=$(git branch --show-current)
-if [ "$branch" = "main" ] || [ "$branch" = "master" ]; then
-  echo "checkpoint skipped: uncommitted changes on $branch — move them to a slice branch." >&2
-  exit 0
-fi
+case "$branch" in
+  slice/?*) ;;
+  *)
+    echo "checkpoint skipped: uncommitted changes on ${branch:-a detached HEAD} — checkpoints commit on slice/* branches only." >&2
+    exit 0 ;;
+esac
 
 git add -A
 
@@ -30,9 +32,5 @@ if command -v gitleaks >/dev/null 2>&1; then
     exit 2
   fi
 fi
-slice=$(echo "$branch" | grep -oE 'slice/[A-Za-z0-9_-]+' | cut -d/ -f2)
-msg="chore(checkpoint): session checkpoint"
-[ -n "$slice" ] && msg="chore(checkpoint): $slice progress"
-
-git commit -q -m "$msg" 2>/dev/null
+git commit -q -m "chore(checkpoint): ${branch#slice/} progress" 2>/dev/null
 exit 0
