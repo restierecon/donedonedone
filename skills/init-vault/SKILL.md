@@ -24,7 +24,9 @@ Initialize this project for the autonomous workflow. Do all of the following:
    - Stack (suggest from what you see in the repo if it's not empty)
    - Gate commands (suggest from the repo: package.json scripts, pyproject, Makefile)
    Then write it with these sections: Purpose · Stack · Gate — one line per step, read
-   by `~/.claude/scripts/gate.sh`, omit a step the stack doesn't have:
+   by `~/.claude/scripts/gate.sh`, omit a step the stack doesn't have (except
+   `gate.test`, which the gate requires — write `- gate.test: none` only if the
+   project truly has no tests):
    `- gate.lint: <cmd>` · `- gate.types: <cmd>` · `- gate.test: <cmd>` ·
    `- gate.build: <cmd>` (quiet flags preferred, e.g. `pytest -q`); the built-in `markers` and
    `comments` steps need no line, but add `- gate.comments.skip: <path prefixes>` for

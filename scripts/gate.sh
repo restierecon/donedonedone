@@ -11,8 +11,22 @@ if [ ! -f "$project" ]; then
 fi
 [ -f "$project" ] || { echo "gate.sh: no vault/project.md — run /init-vault and add gate.* commands" >&2; exit 1; }
 
+known="lint types test build markers comments"
 steps=("$@")
-[ ${#steps[@]} -eq 0 ] && steps=(lint types test build markers comments)
+[ ${#steps[@]} -eq 0 ] && read -ra steps <<< "$known"
+for step in "${steps[@]}"; do
+  case " $known " in
+    *" $step "*) ;;
+    *) echo "gate.sh: unknown step '$step' (one of: $known)" >&2; exit 1 ;;
+  esac
+done
+
+dirty=$(git -C "$top" status --porcelain -- . ':(exclude)vault' ':(exclude).gate')
+if [ -n "$dirty" ] && [ "${GATE_ALLOW_DIRTY:-}" != "1" ]; then
+  echo "GATE: FAIL (uncommitted changes outside vault/ — commit first so the result describes a SHA):" >&2
+  echo "$dirty" | head -"$EXCERPT_LINES" | while IFS= read -r line; do echo "  $line" >&2; done
+  exit 1
+fi
 
 logdir="$top/.gate"
 mkdir -p "$logdir"
@@ -62,7 +76,16 @@ for step in "${steps[@]}"; do
   fi
   cmd=$(sed -n "s/^[-*][[:space:]]*gate\.${step}:[[:space:]]*//p" "$project" | head -1)
   cmd="${cmd#\`}"; cmd="${cmd%\`}"
+  if [ "$cmd" = "none" ]; then
+    echo "$step SKIP (gate.$step: none)"
+    continue
+  fi
   if [ -z "$cmd" ]; then
+    if [ "$step" = "test" ]; then
+      failed+=("test")
+      echo "test FAIL (no gate.test in vault/project.md — add the test command, or gate.test: none for a project with no tests)"
+      continue
+    fi
     echo "$step SKIP (no gate.$step in vault/project.md)"
     continue
   fi

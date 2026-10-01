@@ -84,14 +84,18 @@ scorecard in `evals/` — see the promotion rule in `evals/README.md`.
 - gate.build: python -m build
 ```
 
-Leave out a step your stack doesn't have — it reports SKIP. Two more steps are built in
+Leave out a step your stack doesn't have — it reports SKIP. The exception is `test`:
+without a `gate.test` line the gate fails, so an unconfigured project can't pass on
+nothing. A project that really has no tests writes `- gate.test: none`. Two more steps are built in
 and need no line; both look only at what the diff against `main` (`GATE_BASE` to
 override) adds, outside `vault/`:
 - `markers` fails on an added TODO, FIXME or XXX.
 - `comments` fails on an added comment (see No comments below).
 
-Run `gate.sh test` for one step, no arguments for all six; full logs land in `.gate/`
-(gitignored).
+Run `gate.sh test` for one step, no arguments for all six; a misspelled step name is an
+error, not a SKIP. Full logs land in `.gate/` (gitignored). The gate refuses to run on
+uncommitted changes outside `vault/` so `GATE: PASS @ <sha>` always describes that SHA;
+`GATE_ALLOW_DIRTY=1` overrides it for a local look.
 
 ## No comments
 No codebase built with this setup carries comments: no line comments, block comments,
@@ -144,9 +148,17 @@ manifest commits and compare cost and token counts.
 
 ## Safety model
 - Deny/ask permission lists + PreToolUse tripwire (destructive commands can't run;
-  fails closed if jq is missing)
+  fails closed if jq is missing). guard.sh carries the settings.json Bash denies itself
+  (`git reset --hard`, `git clean -f`, force pushes, `sudo`, `curl | sh`, `chmod -R 777`,
+  DROP/TRUNCATE) because Cursor and Copilot never read settings.json; it also blocks
+  `git checkout/restore .`, deleting main, and a recursive rm of `/`, `~`, `$HOME`, `.`
+  or `..` however the flags are spelled. Relative `rm -rf ./build` stays allowed there
+  (settings.json still denies it under Claude Code).
 - Subagents can't write gate state — enforced mechanically via the hook's `agent_id`
-  field across Bash, Write, and Edit; reviewer/auditor have no write tools at all; the
+  field across Bash, Write, and Edit. A subagent Bash command that names
+  task-tree.json, log.jsonl or session.md is allowed only when it is plainly read-only
+  (`cat`, `head`, `grep`, `jq`, `git diff/log/show`… with no redirect or command
+  substitution); anything else that names them is blocked; reviewer/auditor have no write tools at all; the
   planner can Write but is scoped to its draft plan file by its manifest (prompt
   discipline, not enforcement — the hook still blocks it from task-tree.json). The same
   hook keeps subagents out of vault/log.jsonl, including through log-event.sh
@@ -157,8 +169,9 @@ manifest commits and compare cost and token counts.
 ## Upgrading an existing install
 Pull, re-run `./install.sh`. It retires old `~/.claude/commands/init-vault.md` and
 `harvest.md` (now skills) to `.bak-<timestamp>` copies. In each existing project:
-1. Add `gate.*` lines to `vault/project.md` (see Gate commands) — without them every
-   gate step reports SKIP.
+1. Add `gate.*` lines to `vault/project.md` (see Gate commands). `gate.test` is now
+   required — the gate fails without it (`- gate.test: none` if there are no tests).
+   Commit before running the gate: it now refuses uncommitted changes outside `vault/`.
 2. Add `.gate/` and `vault/handoffs/plan-draft.json` to `.gitignore`.
 3. Run `~/.claude/scripts/agents-md.sh` once in the project so Cursor and Copilot get
    the protocol through AGENTS.md; commit it.
@@ -253,12 +266,12 @@ Installed to `~/.claude/scripts/`. Each one's behavior is pinned by a named test
 
 | Script | Usage | What it does |
 |---|---|---|
-| gate.sh | `gate.sh [lint\|types\|test\|build\|markers\|comments ...]` | Runs the gate one line per step, a ≤ 30-line failure excerpt (`GATE_EXCERPT_LINES`), full log in `.gate/<step>.log`. Exit 0 all pass, 1 otherwise. From a worktree that predates project.md, it reads the main checkout's. |
+| gate.sh | `gate.sh [lint\|types\|test\|build\|markers\|comments ...]` | Refuses a dirty tree (`GATE_ALLOW_DIRTY=1` overrides), an unknown step, or a missing `gate.test`. Runs the gate one line per step, a ≤ 30-line failure excerpt (`GATE_EXCERPT_LINES`), full log in `.gate/<step>.log`. Exit 0 all pass, 1 otherwise. From a worktree that predates project.md, it reads the main checkout's. |
 | find-comments.sh | `find-comments.sh --base <ref>` or `find-comments.sh <file>...` | Prints `path:line: text` for every comment added since `<ref>`, or in the given files. Exit 1 when it finds one, 2 on bad usage. |
 | log-event.sh | `log-event.sh <ID\|-> <event> <verdict> [--sha S] [--attempt N] [--category C]... [--signal TEXT]...` | Appends one JSON line to the main checkout's `vault/log.jsonl`. Up to 5 signals of 200 chars. Unknown events or categories exit 1 and list the valid ones. Prints `RETRO DUE` when a category recurs across slices. |
 | guard.sh | PreToolUse hook | Exit 2 blocks the call and feeds the reason back. Fails closed without jq. Understands Claude Code, VS Code Copilot (its own tool names; it ignores the matcher, so the hook sees every call) and Cursor (`beforeShellExecution`, answered with allow/deny JSON). |
 | lint.sh | PostToolUse hook | Formats the edited file, exit 2 with lint errors. Reads Claude Code's `file_path`, Copilot's `filePath` and Cursor's top-level `file_path`; Cursor ignores the exit code, so there errors surface at the gate. |
-| checkpoint.sh | Stop hook | Commits progress on `slice/*` branches only (never main/master), inside worktrees too. Scans with `gitleaks git --staged` (v8.19+) or `gitleaks protect --staged` (older) and aborts on a finding. |
+| checkpoint.sh | Stop hook | Commits progress on `slice/*` branches only (never main, a feature branch or a detached HEAD), inside worktrees too. Scans with `gitleaks git --staged` (v8.19+) or `gitleaks protect --staged` (older) and aborts on a finding. |
 | session-start.sh | SessionStart hook | Injects session.md, live slices, git status and leftover worktrees; plain text, or `{"additional_context": ...}` for Cursor. Refreshes the AGENTS.md protocol block. |
 | agents-md.sh | `agents-md.sh [project-dir]` | Writes the protocol into the project's AGENTS.md between its markers; leaves everything else in the file alone. |
 | generate-agents.sh | `generate-agents.sh <copilot\|cursor> [dest]` | Emits derived agents (always overwritten, never hand-edit). Copilot gets an `orchestrator` whose roster is every agent in `agents/`; it isn't called "director" because that name means the main Claude Code session. |
