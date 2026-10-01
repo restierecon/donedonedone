@@ -7,6 +7,8 @@ if [ -n "$root" ] && [ -d "$root" ]; then cd "$root" || exit 0; fi
 
 [ -f vault/memory/session.md ] || exit 0
 
+"$(dirname "$0")/vault-guard.sh" --snapshot </dev/null >/dev/null 2>&1
+
 if [ -f AGENTS.md ] && grep -qF '<!-- skeletoncrew:protocol:begin' AGENTS.md; then
   "$(dirname "$0")/agents-md.sh" . >/dev/null 2>&1
 fi

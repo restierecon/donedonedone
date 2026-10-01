@@ -6,19 +6,24 @@ if ! command -v jq >/dev/null 2>&1; then
 fi
 
 input=$(cat)
-event=$(echo "$input" | jq -r '.hook_event_name // empty')
-tool=$(echo "$input" | jq -r '.tool_name // empty')
-agent_id=$(echo "$input" | jq -r '.agent_id // empty')
-agent_type=$(echo "$input" | jq -r '.agent_type // empty')
-cmd=$(echo "$input" | jq -r '.tool_input.command // empty')
-file_path=$(echo "$input" | jq -r '.tool_input.file_path // .tool_input.filePath // empty')
+if ! echo "$input" | jq -e 'type == "object"' >/dev/null 2>&1; then
+  echo "BLOCKED: guard.sh could not parse the hook payload. Failing closed." >&2
+  exit 2
+fi
+
+field() { echo "$input" | jq -r "$1 // empty"; }
+event="" tool="" agent_id="" agent_type="" cmd="" file_path=""
+if ! parsed=$(echo "$input" | jq -r '@sh "event=\(.hook_event_name // "") tool=\(.tool_name // "") agent_id=\(.agent_id // "") agent_type=\(.agent_type // "") cmd=\(.tool_input.command // "") file_path=\(.tool_input.file_path // .tool_input.filePath // .tool_input.notebook_path // .tool_input.path // "")"' 2>/dev/null); then
+  echo "BLOCKED: guard.sh could not read the hook payload's fields. Failing closed." >&2
+  exit 2
+fi
+eval "$parsed"
 
 cursor=0
-if [ "$event" = "beforeShellExecution" ]; then
-  cursor=1
-  tool="Bash"
-  cmd=$(echo "$input" | jq -r '.command // empty')
-fi
+case "$event" in
+  beforeShellExecution) cursor=1; tool="Bash"; cmd=$(field '.command') ;;
+  beforeReadFile) cursor=1; tool="Read"; file_path=$(field '.file_path') ;;
+esac
 
 block() {
   echo "$1" >&2
@@ -32,11 +37,28 @@ allow() {
 
 case "$tool" in
   Bash|runTerminalCommand|run_in_terminal) tool="Bash" ;;
-  Write|Edit|MultiEdit|create_file|createFile|replace_string_in_file|editFiles|insert_edit_into_file) tool="Write" ;;
+  Read|Grep|Glob|LS|NotebookRead|read_file|readFile|list_dir|listDirectory|file_search|grep_search) tool="Read" ;;
+  *)
+    if [ -n "$cmd" ]; then tool="Bash"
+    elif [ -n "$file_path" ]; then tool="Write"
+    fi ;;
 esac
 
+lower() { tr '[:upper:]' '[:lower:]'; }
+
+# shellcheck disable=SC2016
+normalize() {
+  printf '%s\n' "$1" | tr -d "\"'\\\\" | lower | sed -E \
+    -e 's#(^|[[:space:];&|(`])/[^[:space:];&|()`]*/(rm|git|find|sudo|dd|chmod|eval|shutdown|reboot|halt|poweroff|env|xargs|(ba|z|da|k|fi|c|tc)?sh)([[:space:]]|$)#\1\2\4#g' \
+    -e ':a' \
+    -e 's#(^|[^[:alnum:]_-])git[[:space:]]+(-c[[:space:]]+[^[:space:]]+|--git-dir(=|[[:space:]]+)[^[:space:]]+|--work-tree(=|[[:space:]]+)[^[:space:]]+|--namespace(=|[[:space:]]+)[^[:space:]]+|--no-pager|-p|--paginate|--bare|--no-replace-objects|--literal-pathspecs)([[:space:]]|$)#\1git #' \
+    -e 'ta'
+}
+
+segments() { printf '%s\n' "$1" | tr ';&|()`' '\n'; }
+
 read_only_shell() {
-  case "$1" in *\>*|*\$\(*|*\`*|*\<\(*) return 1 ;; esac
+  case "$1" in *\>*|*\$\(*|*\`*|*\<\(*|*--output*|*--pre*) return 1 ;; esac
   local seg words
   while IFS= read -r seg; do
     read -ra words <<< "$seg"
@@ -50,35 +72,86 @@ read_only_shell() {
         esac ;;
       *) return 1 ;;
     esac
-  done < <(printf '%s\n' "$1" | tr ';&|' '\n')
+  done < <(segments "$1")
   return 0
 }
 
-protected_hit() {
-  case "$tool" in
-    Write) echo "$file_path" | grep -q "$1" ;;
-    Bash) echo "$cmd" | grep -q "$1" && ! read_only_shell "$cmd" ;;
-    *) return 1 ;;
-  esac
+secret_path() {
+  echo "$1" | lower | grep -qE '(^|/)\.env(\.[a-z0-9_.-]+)?$|(^|/)secrets/|\.pem$|\.key$|(^|/)id_(rsa|dsa|ecdsa|ed25519)$|_rsa$|(^|/)\.ssh/' \
+    && ! echo "$1" | lower | grep -qE '\.env\.(example|sample|template|dist)$'
 }
 
+secret_in_shell() {
+  local seg words w
+  while IFS= read -r seg; do
+    case "$seg" in *.gitignore*) continue ;; esac
+    read -ra words <<< "$seg"
+    if [ "${words[0]:-}" = cp ] && [ ${#words[@]} -eq 3 ] \
+       && echo "${words[1]}" | grep -qE '\.env\.(example|sample|template|dist)$' \
+       && echo "${words[2]}" | grep -qE '(^|/)\.env$'; then
+      continue
+    fi
+    for w in "${words[@]}"; do
+      secret_path "$w" && return 0
+    done
+  done < <(segments "$1")
+  return 1
+}
+
+protected_name() {
+  echo "$1" | lower | grep -qE "$2"
+}
+
+if [ -n "$file_path" ] && secret_path "$file_path"; then
+  block "BLOCKED: $file_path looks like a secret (.env, key, secrets/). Ask the human for the value you need instead."
+fi
+
 if [ -n "$agent_id" ]; then
-  if protected_hit 'task-tree\.json'; then
-    block "BLOCKED: task-tree.json is written by the Director only. Return your verdict as text."
+  if [ "$tool" = "Write" ]; then
+    protected_name "$file_path" 'task-tree\.json' \
+      && block "BLOCKED: task-tree.json is written by the Director only. Return your verdict as text."
+    protected_name "$file_path" 'log\.jsonl' \
+      && block "BLOCKED: vault/log.jsonl is written by the Director only (log-event.sh). Return your verdict as text."
+    [ "$agent_type" != "scribe" ] && protected_name "$file_path" 'memory/session\.md' \
+      && block "BLOCKED: session.md is written by the Director or the scribe only."
   fi
-  if protected_hit 'log\.jsonl' || { [ "$tool" = "Bash" ] && echo "$cmd" | grep -q 'log-event\.sh'; }; then
-    block "BLOCKED: vault/log.jsonl is written by the Director only (log-event.sh). Return your verdict as text."
-  fi
-  if [ "$agent_type" != "scribe" ] && protected_hit 'memory/session\.md'; then
-    block "BLOCKED: session.md is written by the Director or the scribe only."
+  if [ "$tool" = "Bash" ]; then
+    plain=$(normalize "$cmd")
+    protected_name "$plain" 'log-event' \
+      && block "BLOCKED: vault/log.jsonl is written by the Director only (log-event.sh). Return your verdict as text."
+    if protected_name "$plain" 'vault|task-tree|log\.jsonl|session\.md' && ! read_only_shell "$plain"; then
+      protected_name "$plain" 'task-tree' \
+        && block "BLOCKED: task-tree.json is written by the Director only. Return your verdict as text."
+      protected_name "$plain" 'log\.jsonl' \
+        && block "BLOCKED: vault/log.jsonl is written by the Director only (log-event.sh). Return your verdict as text."
+      protected_name "$plain" 'session\.md' \
+        && block "BLOCKED: session.md is written by the Director or the scribe only."
+      block "BLOCKED: a subagent's shell commands may only read vault/ (cat, grep, jq, git diff/log/show, no redirects). Use the Write tool for a vault file your manifest names."
+    fi
   fi
 fi
 
+[ "$tool" = "Bash" ] || allow
+[ -z "$cmd" ] && allow
+
+plain=$(normalize "$cmd")
+
+if secret_in_shell "$plain"; then
+  block "BLOCKED: this command touches a secret (.env, key, secrets/). Ask the human for the value you need instead."
+fi
+
+dangerous_target() {
+  case "$1" in
+    /|/*|\~|\~/*|\~*|\$*|\{*|.|./|..|../*|\*) return 0 ;;
+  esac
+  return 1
+}
+
 rm_catastrophic() {
-  local seg words w in_rm r
+  local seg words w in_rm r targets t
   while IFS= read -r seg; do
     read -ra words <<< "$seg"
-    in_rm=0 r=0
+    in_rm=0 r=0 targets=()
     for w in "${words[@]}"; do
       if [ "$in_rm" -eq 0 ]; then
         [ "$w" = rm ] && in_rm=1
@@ -87,60 +160,78 @@ rm_catastrophic() {
       case "$w" in
         --recursive) r=1 ;;
         --*) ;;
-        -*) [[ $w == *[rR]* ]] && r=1 ;;
-        *)
-          w="${w//\"/}"; w="${w//\'/}"
-          case "$w" in
-            /|/*|\~|\~/*|\$HOME|\$HOME/*|\$\{HOME\}|\$\{HOME\}/*|.|./|..|../*|\*) [ "$r" -eq 1 ] && return 0 ;;
-          esac ;;
+        -*) [[ $w == *r* ]] && r=1 ;;
+        *) targets+=("$w") ;;
       esac
     done
-  done < <(printf '%s\n' "$1" | tr ';&|' '\n')
+    [ "$r" -eq 1 ] || continue
+    for t in "${targets[@]}"; do
+      dangerous_target "$t" && return 0
+    done
+  done < <(segments "$1")
   return 1
 }
 
-[ "$tool" = "Bash" ] || allow
-[ -z "$cmd" ] && allow
+find_catastrophic() {
+  local seg words
+  while IFS= read -r seg; do
+    read -ra words <<< "$seg"
+    [ "${words[0]:-}" = find ] || continue
+    dangerous_target "${words[1]:-}" || continue
+    case " $seg " in *" -delete "*|*" -exec rm "*|*" -execdir rm "*|*" -ok rm "*) return 0 ;; esac
+  done < <(segments "$1")
+  return 1
+}
 
+if rm_catastrophic "$plain"; then
+  block "BLOCKED by guardrail: recursive rm of /, ~, a \$VARIABLE, . or .. — spell out a named subdirectory instead."
+fi
+if find_catastrophic "$plain"; then
+  block "BLOCKED by guardrail: find that deletes under /, ~, a \$VARIABLE, . or .. — spell out a named subdirectory instead."
+fi
+
+git_destructive='git[[:space:]]+(reset|clean|push|branch|checkout|restore|switch|stash)([[:space:]]|$)'
 deny_patterns=(
   ':[[:space:]]*>[[:space:]]*/'
   'mkfs'
-  'dd[[:space:]]+if='
+  '(^|[^[:alnum:]_-])dd[[:space:]]+if='
   '>[[:space:]]*/dev/sd'
   'git[[:space:]]+push.*--force'
-  'git[[:space:]]+push.*[[:space:]]-[a-zA-Z]*f[a-zA-Z]*([[:space:]]|$)'
+  'git[[:space:]]+push.*[[:space:]]-[a-z]*f[a-z]*([[:space:]]|$)'
   'git[[:space:]]+push.*[[:space:]]\+[^[:space:]]'
-  'git[[:space:]]+reset[[:space:]]+(.*[[:space:]])?--hard'
-  'git[[:space:]]+clean[[:space:]]+(.*[[:space:]])?-[a-zA-Z]*f'
+  'git[[:space:]]+push.*[[:space:]](--delete|-d|--mirror|--prune)([[:space:]]|$)'
+  'git[[:space:]]+push.*[[:space:]]:[^[:space:]]'
+  'git[[:space:]]+reset[[:space:]]+(.*[[:space:]])?(--hard|--merge|--keep)'
+  'git[[:space:]]+clean[[:space:]]+(.*[[:space:]])?-[a-z]*f'
   'git[[:space:]]+(checkout|restore)[[:space:]]+(.*[[:space:]])?\.([[:space:]]|$)'
-  'git[[:space:]]+branch[[:space:]]+(.*[[:space:]])?(-D|--delete[[:space:]]+--force|-d[[:space:]]+--force)[[:space:]]+(main|master)([[:space:]]|$)'
-  '(^|[;&|][[:space:]]*)sudo[[:space:]]'
-  '(curl|wget)[[:space:]].*\|[[:space:]]*(ba|z)?sh([[:space:]]|$)'
-  'chmod[[:space:]]+-R[[:space:]]+777'
+  'git[[:space:]]+(checkout|switch)[[:space:]]+(.*[[:space:]])?(-f|--force|--discard-changes)([[:space:]]|$)'
+  'git[[:space:]]+stash[[:space:]]+(drop|clear)'
+  'git[[:space:]]+branch[[:space:]]+(.*[[:space:]])?(-d|--delete)[[:space:]]+(.*[[:space:]])?(main|master)([[:space:]]|$)'
+  'git[[:space:]]+update-ref[[:space:]]+-d'
+  'git[[:space:]]+filter-(branch|repo)'
+  '(^|[^[:alnum:]_-])sudo[[:space:]]'
+  '\|[[:space:]]*(sudo[[:space:]]+)?(env[[:space:]]+)?(ba|z|da|k|fi|c|tc)?sh([[:space:]]|$)'
+  '(^|[;&|(][[:space:]]*)eval[[:space:]]'
+  '(^|[;&|][[:space:]]*)(\$\(|`)'
+  '(ba|z|da|k)?sh[[:space:]]+-c[[:space:]]+.*(\$\(|`|base64)'
+  'chmod[[:space:]]+(-r[[:space:]]+)?[0-7]*777'
   '--no-verify'
   'history[[:space:]]+-c'
-  '(^|[;&|][[:space:]]*)(shutdown|reboot)([[:space:]]|$)'
-)
-
-deny_patterns_nocase=(
-  'drop[[:space:]]+(table|database)'
+  '(^|[;&|][[:space:]]*)(shutdown|reboot|halt|poweroff)([[:space:]]|$)'
+  'drop[[:space:]]+(table|database|schema)'
   'truncate[[:space:]]+table'
 )
 
-if rm_catastrophic "$cmd"; then
-  block "BLOCKED by guardrail (recursive rm of /, ~, \$HOME, . or ..). Delete a named subdirectory instead."
-fi
-
 for p in "${deny_patterns[@]}"; do
-  if echo "$cmd" | grep -qE -- "$p"; then
+  if echo "$cmd" | lower | grep -qE -- "$p" || echo "$plain" | grep -qE -- "$p"; then
     block "BLOCKED by guardrail (pattern: $p). Use a reversible approach instead."
   fi
 done
 
-for p in "${deny_patterns_nocase[@]}"; do
-  if echo "$cmd" | grep -qiE -- "$p"; then
-    block "BLOCKED by guardrail (pattern: $p, any case). Use a reversible approach instead."
+while IFS= read -r seg; do
+  if echo "$seg" | grep -qE "$git_destructive" && echo "$seg" | grep -q '\$'; then
+    block "BLOCKED by guardrail: a destructive git command with a \$variable — the guard can't see what it expands to. Spell the arguments out."
   fi
-done
+done < <(segments "$cmd")
 
 allow

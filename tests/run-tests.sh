@@ -11,6 +11,7 @@ AGENTS_MD="$ROOT/scripts/agents-md.sh"
 LOG_EVENT="$ROOT/scripts/log-event.sh"
 FIND_COMMENTS="$ROOT/scripts/find-comments.sh"
 INSTALL="$ROOT/install.sh"
+VAULT_GUARD="$ROOT/scripts/vault-guard.sh"
 
 pass=0
 fail=0
@@ -133,7 +134,7 @@ expect_block "subagent cannot write log.jsonl from python" guard_bash "python3 -
 expect_block "subagent cannot hide a write in a command substitution" guard_bash 'cat $(cp x vault/task-tree.json)' builder
 expect_allow "subagent may pipe task-tree.json through jq" guard_bash 'jq .slices vault/task-tree.json | head' builder
 expect_allow "subagent may diff task-tree.json"          guard_bash 'git diff main -- vault/task-tree.json' builder
-expect_allow "scribe may cp into session.md"             guard_bash 'cp draft vault/memory/session.md' scribe
+expect_block "scribe's vault writes go through Write, not the shell" guard_bash 'cp draft vault/memory/session.md' scribe
 
 echo "== checkpoint.sh — branch discipline =="
 make_repo() {
@@ -659,6 +660,172 @@ else
   bad "install retires the old init-vault command and the renamed agent generator" "$(ls "$home/.claude/commands" "$home/.claude/scripts")"
 fi
 rm -rf "$home"
+
+echo "== guard.sh — bypasses that used to get through =="
+# shellcheck disable=SC2016
+{
+expect_block "blocks reset --hard behind git -C"          guard_bash 'git -C . reset --hard'
+expect_block "blocks a force push behind git -c"          guard_bash 'git -c core.x=y push --force'
+expect_block "blocks git split by empty quotes"           guard_bash 'g""it reset --hard'
+expect_block "blocks a quoted git"                        guard_bash "'git' push -f"
+expect_block "blocks git called by absolute path"         guard_bash '/usr/bin/git reset --hard'
+expect_block "blocks rm called by absolute path"          guard_bash '/bin/rm -rf /'
+expect_block "blocks a backslash-escaped rm"              guard_bash '\rm -rf /'
+expect_block "blocks rm in a subshell"                    guard_bash '(rm -rf /)'
+expect_block "blocks an uppercase RM, which macOS resolves to rm" guard_bash 'RM -rf /'
+expect_block "blocks rm with its flags after the target"  guard_bash 'rm / -rf'
+expect_block "blocks rm of an absolute system path"       guard_bash 'rm -rf /usr/lib'
+expect_block "blocks recursive rm of a \$VARIABLE the guard can't see" guard_bash 'rm -rf "${HOME:?}"'
+expect_block "blocks find -delete from /"                 guard_bash 'find / -delete'
+expect_block "blocks find -exec rm from ~"                guard_bash 'find ~ -exec rm -rf {} +'
+expect_block "blocks deleting a remote branch by :refspec" guard_bash 'git push origin :main'
+expect_block "blocks git push --delete"                   guard_bash 'git push --delete origin main'
+expect_block "blocks git push --mirror"                   guard_bash 'git push --mirror'
+expect_block "blocks decoded text piped into a shell"     guard_bash 'echo Z2l0 | base64 -d | sh'
+expect_block "blocks eval"                                guard_bash 'eval "$(echo hi)"'
+expect_block "blocks running a command substitution as the command" guard_bash '$(echo rm) -rf /'
+expect_block "blocks a destructive git command with a \$variable" guard_bash 'x=--hard; git reset $x'
+expect_block "blocks git stash clear"                     guard_bash 'git stash clear'
+expect_block "blocks a forced checkout"                   guard_bash 'git checkout -f main'
+expect_block "blocks reading .env from the shell"         guard_bash 'cat .env'
+expect_block "blocks reading an ssh key from the shell"   guard_bash 'cat ~/.ssh/id_rsa'
+expect_allow "allows rm -rf node_modules"                 guard_bash 'rm -rf node_modules'
+expect_allow "allows git -C on a worktree for a read"     guard_bash 'git -C .worktrees/S1 status'
+expect_allow "allows pushing HEAD to a named ref"         guard_bash 'git push origin HEAD:refs/heads/x'
+expect_allow "allows copying .env.example to .env"        guard_bash 'cp .env.example .env'
+expect_allow "allows adding .env to .gitignore"           guard_bash 'echo .env >> .gitignore'
+expect_allow "allows reading .env.example"                guard_bash 'cat .env.example'
+expect_allow "allows piping into sha256sum"               guard_bash 'sha256sum x | cut -c1-8'
+expect_allow "allows a commit message in quotes"          guard_bash 'git commit -m "fix: x"'
+expect_allow "allows reading a file under /usr"           guard_bash 'cat /usr/lib/os-release'
+expect_block "subagent cannot write a globbed task-tree"  guard_bash 'cp x vault/task-tree.j*' builder
+expect_block "subagent cannot write Task-Tree.json, the same file on macOS" guard_bash 'cp x vault/Task-Tree.json' builder
+expect_block "subagent cannot cd into vault and write"    guard_bash 'cd vault && cp ../x task-*' builder
+expect_block "subagent cannot build the vault path from a variable" guard_bash 'f=task-tree; cp x vault/$f.json' builder
+expect_block "subagent cannot check vault out of history" guard_bash 'git checkout HEAD~1 -- vault' builder
+expect_block "subagent cannot write vault through git diff --output" guard_bash 'git diff --output=vault/log.jsonl' builder
+expect_allow "subagent may grep stories.md"               guard_bash 'grep -n S001 vault/stories.md' builder
+expect_allow "subagent may run tests"                     guard_bash 'python -m pytest -q' builder
+}
+guard_raw() { printf '%s' "$1" | "$GUARD" >/dev/null 2>&1; }
+expect_block "subagent cannot NotebookEdit task-tree.json" guard_raw '{"tool_name":"NotebookEdit","agent_id":"a","agent_type":"builder","tool_input":{"notebook_path":"vault/task-tree.json"}}'
+expect_block "subagent cannot Write TASK-TREE.json"        guard_raw '{"tool_name":"Write","agent_id":"a","agent_type":"builder","tool_input":{"file_path":"vault/TASK-TREE.json"}}'
+expect_block "fails closed on a payload that isn't JSON"   guard_raw 'not json'
+expect_block "fails closed when a command arrives as an object" guard_raw '{"tool_name":"Bash","tool_input":{"command":{"x":"git reset --hard"}}}'
+expect_block "treats an unknown tool carrying a command as a shell call" guard_raw '{"tool_name":"runInTerminal2","tool_input":{"command":"git reset --hard"}}'
+expect_block "blocks the Read tool on .env"                guard_raw '{"tool_name":"Read","tool_input":{"file_path":"/p/.env"}}'
+expect_block "blocks Copilot's read_file on a .pem"        guard_raw '{"tool_name":"read_file","tool_input":{"filePath":"/p/cert.pem"}}'
+expect_allow "allows the Read tool on ordinary code"       guard_raw '{"tool_name":"Read","tool_input":{"file_path":"/p/src/app.py"}}'
+status=0; out=$(printf '%s' '{"hook_event_name":"beforeReadFile","file_path":"/p/.env.local"}' | "$GUARD" 2>/dev/null) || status=$?
+if [ "$status" -eq 2 ] && [ "$(echo "$out" | jq -r .permission)" = "deny" ]; then
+  ok "guard denies Cursor's beforeReadFile on .env.local with deny JSON"
+else
+  bad "guard denies Cursor's beforeReadFile on .env.local with deny JSON" "exit $status: $out"
+fi
+
+echo "== vault-guard.sh — Director-only files are restored whatever wrote them =="
+vg() {
+  local repo="$1" event="$2" agent="$3" tool="${4:-Bash}" cmd="${5:-true}"
+  jq -n --arg cwd "$repo" --arg e "$event" --arg a "$agent" --arg t "$tool" --arg c "$cmd" \
+    '{hook_event_name: $e, cwd: $cwd, tool_name: $t, tool_input: {command: $c}}
+     + (if $a == "" then {} else {agent_id: "agent-1", agent_type: $a} end)' | "$VAULT_GUARD" 2>&1
+}
+make_vault_repo() {
+  local d
+  d=$(make_repo)
+  mkdir -p "$d/vault/memory"
+  echo '{"slices":[{"id":"S001","status":"building"}]}' > "$d/vault/task-tree.json"
+  echo 'session v1' > "$d/vault/memory/session.md"
+  git -C "$d" add -A && git -C "$d" commit -q -m vault
+  (cd "$d" && "$VAULT_GUARD" --snapshot </dev/null)
+  echo "$d"
+}
+
+repo=$(make_vault_repo)
+echo '{"slices":[{"id":"S001","status":"done"}]}' > "$repo/vault/task-tree.json"
+status=0; out=$(vg "$repo" PostToolUse builder Bash 'python3 tamper.py') || status=$?
+if [ "$status" -eq 2 ] && echo "$out" | grep -q "RESTORED: vault/task-tree.json" \
+   && grep -q building "$repo/vault/task-tree.json"; then
+  ok "a subagent's write to task-tree.json is undone, however it was made"
+else
+  bad "a subagent's write to task-tree.json is undone, however it was made" "exit $status: $out"
+fi
+rm -rf "$repo"
+
+repo=$(make_vault_repo)
+echo '{"forged":true}' >> "$repo/vault/log.jsonl"
+status=0; out=$(vg "$repo" SubagentStop reviewer) || status=$?
+if [ "$status" -eq 2 ] && [ ! -s "$repo/vault/log.jsonl" ]; then
+  ok "a forged log.jsonl line is undone when the subagent stops"
+else
+  bad "a forged log.jsonl line is undone when the subagent stops" "exit $status: $out"
+fi
+rm -rf "$repo"
+
+repo=$(make_vault_repo)
+echo 'session v2' > "$repo/vault/memory/session.md"
+status=0; vg "$repo" PostToolUse scribe Write >/dev/null || status=$?
+echo 'session v3' > "$repo/vault/memory/session.md"
+status2=0; vg "$repo" PostToolUse builder >/dev/null || status2=$?
+if [ "$status" -eq 0 ] && [ "$status2" -eq 2 ] && grep -q 'session v2' "$repo/vault/memory/session.md"; then
+  ok "the scribe's session.md change is kept; a builder's is undone"
+else
+  bad "the scribe's session.md change is kept; a builder's is undone" "exit $status/$status2: $(cat "$repo/vault/memory/session.md")"
+fi
+rm -rf "$repo"
+
+repo=$(make_vault_repo)
+vg "$repo" PreToolUse "" Bash 'jq . vault/task-tree.json > t && mv t vault/task-tree.json' >/dev/null
+echo '{"slices":[]}' > "$repo/vault/task-tree.json"
+vg "$repo" PostToolUse "" Bash 'jq . vault/task-tree.json > t && mv t vault/task-tree.json' >/dev/null
+status=0; vg "$repo" PostToolUse builder >/dev/null || status=$?
+if [ "$status" -eq 0 ] && grep -q '"slices":\[\]' "$repo/vault/task-tree.json"; then
+  ok "the Director's own task-tree.json write is kept"
+else
+  bad "the Director's own task-tree.json write is kept" "exit $status: $(cat "$repo/vault/task-tree.json")"
+fi
+rm -rf "$repo"
+
+repo=$(make_vault_repo)
+vg "$repo" PreToolUse "" Edit >/dev/null
+status=0; out=$(vg "$repo" PostToolUse builder) || status=$?
+if [ "$status" -eq 0 ]; then ok "a subagent check waits while the Director is mid-write"; else bad "a subagent check waits while the Director is mid-write" "exit $status: $out"; fi
+rm -rf "$repo"
+
+repo=$(make_vault_repo)
+echo '{"slices":[]}' > "$repo/vault/task-tree.json"
+status=0; out=$(vg "$repo" PostToolUse "" Bash 'npm test') || status=$?
+status2=0; vg "$repo" PostToolUse builder >/dev/null || status2=$?
+if [ "$status" -eq 2 ] && echo "$out" | grep -q "VAULT CHANGED" && [ "$status2" -eq 0 ]; then
+  ok "an unexplained vault change is reported to the Director, then accepted as theirs"
+else
+  bad "an unexplained vault change is reported to the Director, then accepted as theirs" "exit $status/$status2: $out"
+fi
+rm -rf "$repo"
+
+repo=$(make_vault_repo)
+rm "$repo/vault/task-tree.json" && (cd "$repo" && "$VAULT_GUARD" --snapshot </dev/null)
+echo '{}' > "$repo/vault/task-tree.json"
+status=0; vg "$repo" PostToolUse builder >/dev/null || status=$?
+if [ "$status" -eq 2 ] && [ ! -e "$repo/vault/task-tree.json" ]; then
+  ok "a task-tree.json a subagent creates from nothing is removed"
+else
+  bad "a task-tree.json a subagent creates from nothing is removed" "exit $status"
+fi
+rm -rf "$repo"
+
+repo=$(make_vault_repo)
+git -C "$repo" worktree add -q "$repo/.worktrees/S009" -b slice/S009
+echo '{"slices":[]}' > "$repo/.worktrees/S009/vault/task-tree.json"
+printf '# P\n## Gate\n- gate.test: none\n' > "$repo/vault/project.md"
+git -C "$repo/.worktrees/S009" add -A && git -C "$repo/.worktrees/S009" commit -q -m tamper
+status=0; out=$(cd "$repo/.worktrees/S009" && "$GATE" 2>&1) || status=$?
+if [ "$status" -eq 1 ] && echo "$out" | grep -q "Director-only files" && echo "$out" | grep -q "vault/task-tree.json"; then
+  ok "gate fails a worktree branch that changes task-tree.json, before a squash-merge carries it into main"
+else
+  bad "gate fails a worktree branch that changes task-tree.json, before a squash-merge carries it into main" "exit $status: $out"
+fi
+rm -rf "$repo"
 
 echo ""
 echo "$pass passed, $fail failed"

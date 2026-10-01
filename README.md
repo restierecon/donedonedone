@@ -35,8 +35,8 @@ builds. Nothing after the grill should need you unless a slice escalates.
 | CLAUDE.md | Global protocol — the main session IS the Director |
 | agents/ | planner · builder · reviewer · auditor · scribe · retro (least-privilege tools, model-per-agent) |
 | skills/ | protocol-native: grill · slice-planning · parallel-dispatch · compaction · architecture-review · learning-loop · `/init-vault` · `/harvest` — plus a general engineering-practice library (see Credits) |
-| settings.json | Permission deny/ask lists + 4 hooks |
-| scripts/ | guard.sh (PreToolUse) · lint.sh (PostToolUse) · checkpoint.sh (Stop) · session-start.sh (SessionStart) · gate.sh (quiet lint/types/test/build runner + built-in TODO/FIXME and no-comments checks) · find-comments.sh (the comment detector behind that check) · log-event.sh (the Director's structured log.jsonl writer) · generate-agents.sh (Copilot/Cursor agents, install-time) · agents-md.sh (protocol block in a project's AGENTS.md, for Cursor/Copilot) |
+| settings.json | Permission deny/ask lists + hooks on 6 events |
+| scripts/ | guard.sh (PreToolUse) · vault-guard.sh (Pre/PostToolUse, SubagentStop — restores Director-only files) · lint.sh (PostToolUse) · checkpoint.sh (Stop) · session-start.sh (SessionStart) · gate.sh (quiet lint/types/test/build runner + built-in TODO/FIXME and no-comments checks) · find-comments.sh (the comment detector behind that check) · log-event.sh (the Director's structured log.jsonl writer) · generate-agents.sh (Copilot/Cursor agents, install-time) · agents-md.sh (protocol block in a project's AGENTS.md, for Cursor/Copilot) |
 | tests/ | Test harness for the hook scripts — run after any script edit; CI runs it too |
 | evals/ | 10-task benchmark + scorecard — run before trusting, re-run after any manifest edit |
 
@@ -147,28 +147,62 @@ These are design estimates, not measurements. To measure, run eval E1 against tw
 manifest commits and compare cost and token counts.
 
 ## Safety model
-- Deny/ask permission lists + PreToolUse tripwire (destructive commands can't run;
-  fails closed if jq is missing). guard.sh carries the settings.json Bash denies itself
-  (`git reset --hard`, `git clean -f`, force pushes, `sudo`, `curl | sh`, `chmod -R 777`,
-  DROP/TRUNCATE) because Cursor and Copilot never read settings.json; it also blocks
-  `git checkout/restore .`, deleting main, and a recursive rm of `/`, `~`, `$HOME`, `.`
-  or `..` however the flags are spelled. Relative `rm -rf ./build` stays allowed there
-  (settings.json still denies it under Claude Code).
-- Subagents can't write gate state — enforced mechanically via the hook's `agent_id`
-  field across Bash, Write, and Edit. A subagent Bash command that names
-  task-tree.json, log.jsonl or session.md is allowed only when it is plainly read-only
-  (`cat`, `head`, `grep`, `jq`, `git diff/log/show`… with no redirect or command
-  substitution); anything else that names them is blocked; reviewer/auditor have no write tools at all; the
-  planner can Write but is scoped to its draft plan file by its manifest (prompt
-  discipline, not enforcement — the hook still blocks it from task-tree.json). The same
-  hook keeps subagents out of vault/log.jsonl, including through log-event.sh
-- Checkpoints never auto-commit on main (main is always green)
+Two layers, because no pattern match over shell text can be complete (a variable, a
+glob or a script file hides what a command does):
+
+**1. guard.sh — blocks before the call runs** (PreToolUse, every tool; fails closed when
+jq is missing, the payload isn't JSON, or a field has the wrong type).
+- It matches both the raw command and a normalized one: quotes and backslashes stripped,
+  lowercased (macOS resolves `RM` to `rm`), `/bin/rm` → `rm`, and git's global options
+  (`-C dir`, `-c k=v`, `--git-dir`…) removed. So `g""it -C . reset --hard` is caught.
+- Blocked: the settings.json Bash denies, repeated here because Cursor and Copilot never
+  read settings.json (`git reset --hard`, `git clean -f`, force pushes, `sudo`,
+  `chmod 777`, DROP/TRUNCATE), plus remote branch deletion (`--delete`, `:branch`,
+  `--mirror`), `git checkout/restore .`, forced checkouts, `stash drop/clear`,
+  deleting main, history rewrites (`filter-branch`/`filter-repo`) and `--no-verify`.
+- Recursive `rm`, and `find -delete`/`-exec rm`, on `/`, an absolute path, `~`, `.`, `..`
+  or a `$VARIABLE` are blocked, however the flags are spelled or ordered. Relative
+  `rm -rf ./build` stays allowed there (settings.json still denies it under Claude Code).
+- Anything that hides the real command is blocked: a pipe into a shell, `eval`, a
+  command substitution run as the command, `sh -c` with a substitution, and a
+  destructive git command whose arguments contain a `$variable`.
+- Secret files (`.env*` except `.example/.sample/.template/.dist`, `*.pem`, `*.key`, ssh
+  keys, `secrets/`) are blocked for every tool and in shell commands, including Cursor's
+  `beforeReadFile`. `cp .env.example .env` and `.gitignore` edits stay allowed.
+- Subagents (identified by the hook's `agent_id`) can't Write/Edit/NotebookEdit
+  task-tree.json or log.jsonl, or session.md unless they are the scribe; matching is
+  case-insensitive, for macOS. A subagent shell command that mentions vault/ at all
+  must be plainly read-only (`cat`, `grep`, `jq`, `git diff/log/show`… with no redirect,
+  substitution or `--output`), and log-event.sh is off limits.
+
+**2. vault-guard.sh — undoes what got through, by content, not by syntax.** It snapshots
+the main checkout's task-tree.json, log.jsonl and memory/session.md (in `.git/`, at
+session start and after each Director call that may touch them). After every subagent
+tool call, and when a subagent stops, any change to those files is restored from the
+snapshot and the subagent is told. Only the scribe's session.md change is kept. A
+change that turns up during a Director call that shouldn't touch vault/ is reported to
+the Director and then accepted as theirs. gate.sh adds the worktree case: a slice branch
+that changes those files fails the gate before a squash-merge carries it into main.
+
+What this still doesn't stop: code the agent writes to a file and then runs (a script or
+a test can do anything the user can), and the narrow window where a subagent's write
+lands while a Director call that touches vault/ is in flight. Commands still run as
+you, so run `autonomy: full` only in a sandbox.
+
+Also:
+- reviewer/auditor have no write tools at all; the planner's Write is scoped to its
+  draft by its manifest (and the hooks above)
+- Checkpoints auto-commit only on `slice/*` branches (main is always green)
 - gitleaks scan before every checkpoint commit
 - `autonomy: full` is only legal in a sandbox; new projects start `supervised`
 
 ## Upgrading an existing install
 Pull, re-run `./install.sh`. It retires old `~/.claude/commands/init-vault.md` and
-`harvest.md` (now skills) to `.bak-<timestamp>` copies. In each existing project:
+`harvest.md` (now skills) to `.bak-<timestamp>` copies. If it kept your settings.json
+and left a `settings.json.new-<timestamp>`, merge its hooks: guard.sh now runs on every
+tool (no matcher), and vault-guard.sh runs on PreToolUse, PostToolUse,
+PostToolUseFailure and SubagentStop. Without them the vault restore layer is off.
+In each existing project:
 1. Add `gate.*` lines to `vault/project.md` (see Gate commands). `gate.test` is now
    required — the gate fails without it (`- gate.test: none` if there are no tests).
    Commit before running the gate: it now refuses uncommitted changes outside `vault/`.
@@ -222,8 +256,8 @@ What Cursor picks up with no conversion: `~/.claude/skills/` (all skills) and
   Cursor ignores Claude's `tools:` allowlist, so without these copies the reviewer and
   auditor could edit files. Same-named files here take precedence over `~/.claude/agents`.
   Models: `haiku` becomes `fast`; everything else becomes `inherit`.
-- `~/.cursor/hooks.json`: the same scripts on Cursor's events. `beforeShellExecution` →
-  guard.sh (answers with Cursor's allow/deny JSON), `afterFileEdit` → lint.sh,
+- `~/.cursor/hooks.json`: the same scripts on Cursor's events. `beforeShellExecution` and
+  `beforeReadFile` → guard.sh (answers with Cursor's allow/deny JSON), `afterFileEdit` → lint.sh,
   `stop` → checkpoint.sh, `sessionStart` → session-start.sh. An existing hooks.json is
   never overwritten; the new one lands next to it as `hooks.json.new-<timestamp>`.
 
@@ -269,7 +303,8 @@ Installed to `~/.claude/scripts/`. Each one's behavior is pinned by a named test
 | gate.sh | `gate.sh [lint\|types\|test\|build\|markers\|comments ...]` | Refuses a dirty tree (`GATE_ALLOW_DIRTY=1` overrides), an unknown step, or a missing `gate.test`. Runs the gate one line per step, a ≤ 30-line failure excerpt (`GATE_EXCERPT_LINES`), full log in `.gate/<step>.log`. Exit 0 all pass, 1 otherwise. From a worktree that predates project.md, it reads the main checkout's. |
 | find-comments.sh | `find-comments.sh --base <ref>` or `find-comments.sh <file>...` | Prints `path:line: text` for every comment added since `<ref>`, or in the given files. Exit 1 when it finds one, 2 on bad usage. |
 | log-event.sh | `log-event.sh <ID\|-> <event> <verdict> [--sha S] [--attempt N] [--category C]... [--signal TEXT]...` | Appends one JSON line to the main checkout's `vault/log.jsonl`. Up to 5 signals of 200 chars. Unknown events or categories exit 1 and list the valid ones. Prints `RETRO DUE` when a category recurs across slices. |
-| guard.sh | PreToolUse hook | Exit 2 blocks the call and feeds the reason back. Fails closed without jq. Understands Claude Code, VS Code Copilot (its own tool names; it ignores the matcher, so the hook sees every call) and Cursor (`beforeShellExecution`, answered with allow/deny JSON). |
+| guard.sh | PreToolUse hook (every tool) | Exit 2 blocks the call and feeds the reason back. Fails closed without jq or on a malformed payload. Understands Claude Code, VS Code Copilot (its own tool names; an unknown tool carrying a command is treated as a shell call) and Cursor (`beforeShellExecution` and `beforeReadFile`, answered with allow/deny JSON). See Safety model. |
+| vault-guard.sh | PreToolUse, PostToolUse, PostToolUseFailure, SubagentStop hook; `vault-guard.sh --snapshot` | Restores task-tree.json, log.jsonl and session.md in the main checkout when a subagent changes them (exit 2 tells it why); warns the Director about unexplained changes. Snapshots live in `.git/skeletoncrew-vault-guard/`. Claude Code only — other tools' payloads don't name the subagent. |
 | lint.sh | PostToolUse hook | Formats the edited file, exit 2 with lint errors. Reads Claude Code's `file_path`, Copilot's `filePath` and Cursor's top-level `file_path`; Cursor ignores the exit code, so there errors surface at the gate. |
 | checkpoint.sh | Stop hook | Commits progress on `slice/*` branches only (never main, a feature branch or a detached HEAD), inside worktrees too. Scans with `gitleaks git --staged` (v8.19+) or `gitleaks protect --staged` (older) and aborts on a finding. |
 | session-start.sh | SessionStart hook | Injects session.md, live slices, git status and leftover worktrees; plain text, or `{"additional_context": ...}` for Cursor. Refreshes the AGENTS.md protocol block. |
