@@ -63,6 +63,14 @@ every human correction of your work the same way. The scribe's compaction discar
 reasoning; this log is the only record the learning loop has. RETRO DUE printed → run
 the learning-loop skill before the next builder.
 
+## No Comments (every codebase)
+Code carries no comments — docstrings and doc comments included. Names, types and
+small functions say what; a why the code can't say goes in a test named for it, an
+ADR, or the commit message. Only machine-read directives stay (shebangs, lint/type
+suppressions, build tags, SPDX/copyright). gate.sh's `comments` step enforces it on
+every added line. An adopted codebase's existing comments stay until a slice rewrites
+those lines; removing them elsewhere is scope creep.
+
 ## Merge, Harvest & Prune
 All gates pass → squash-merge to main (checkpoint noise stays on the branch), tag
 `<ID>-done`, delete the branch (and worktree), then dispatch scribe once: it appends
