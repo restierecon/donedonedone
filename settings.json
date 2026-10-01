@@ -43,11 +43,18 @@
     ],
     "PreToolUse": [
       {
-        "matcher": "Bash|Write|Edit|MultiEdit",
         "hooks": [
           {
             "type": "command",
             "command": "~/.claude/scripts/guard.sh"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/scripts/vault-guard.sh"
           }
         ]
       }
@@ -61,6 +68,14 @@
             "command": "~/.claude/scripts/lint.sh"
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/scripts/vault-guard.sh"
+          }
+        ]
       }
     ],
     "Stop": [
@@ -69,6 +84,26 @@
           {
             "type": "command",
             "command": "~/.claude/scripts/checkpoint.sh"
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/scripts/vault-guard.sh"
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/scripts/vault-guard.sh"
           }
         ]
       }

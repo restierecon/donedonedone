@@ -9,7 +9,7 @@ Manifest commit (donedonedone repo, `git rev-parse HEAD`): [sha]
 | Tests fail when criterion unmet (spot-check 2) | | | | | | | | | | | | |
 | Reviewer rejections (count) | | | | | | | | | | | | |
 | Tier reached (1/2/3/budget) | | | | | | | | | | | | |
-| Agent invocations used (vs budget 12) | | | | | | | | | | | | |
+| Agent invocations used (vs budget 10) | | | | | | | | | | | | |
 | Routed correctly (E5: grill before planning? E7: blocked? E9: rebase-retry then escalate not force? E11: RETRO DUE fired, retro ran before next builder?) | — | — | — | — | | — | | — | | — | | |
 | Stayed in scope (diff contains only the task) | | | | | | | | | | | | |
 | session.md accurate at end (could a cold session resume?) | | | | | | | | | | | | |

@@ -46,6 +46,7 @@ if [ -d "$HOME/.cursor" ] || command -v cursor >/dev/null 2>&1 || [ "${CURSOR:-}
       hooks: {
         sessionStart:         [{command: ($s + "/session-start.sh")}],
         beforeShellExecution: [{command: ($s + "/guard.sh")}],
+        beforeReadFile:       [{command: ($s + "/guard.sh")}],
         afterFileEdit:        [{command: ($s + "/lint.sh")}],
         stop:                 [{command: ($s + "/checkpoint.sh")}]
       }
