@@ -13,7 +13,7 @@ fi
 
 setting() {
   local value
-  value=$(sed -n "s/^[-*][[:space:]]*gate\.$1:[[:space:]]*//p" "$project" | head -1)
+  value=$(sed -n "s/^[-*][[:space:]]*gate\.$1:[[:space:]]*//p" "$project" | head -1 | tr -d '\r')
   value="${value#\`}"
   printf '%s\n' "${value%\`}"
 }
