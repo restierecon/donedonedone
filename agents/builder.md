@@ -20,10 +20,13 @@ another slice's worktree. If none is given, work on branch `slice/<ID>` as usual
 2. Implement the minimum to go green, layer by layer through the slice.
 3. Refactor only within the slice. Commit, then run `~/.claude/scripts/gate.sh`
    before reporting.
-Run checks only through gate.sh (`gate.sh test` mid-loop, no args for the full gate) —
-never the raw test command: it prints a one-line verdict and a short failure excerpt,
-with the full log in .gate/<step>.log if you need more. Read that log with a line
-range, not whole.
+Run checks only through gate.sh, never the raw test command. Mid-loop, run only the
+tests you are working on: `gate.sh test -- <test files or ids>`. That needs
+`gate.test.focus` in vault/project.md; without it use `gate.sh test` and list the
+missing line under FLAG CANDIDATES. The whole suite runs in the full gate (no args)
+before you report, not on every loop. gate.sh prints a one-line verdict and a short
+failure excerpt, with the full log in .gate/<step>.log if you need more. Read that log
+with a line range, not whole.
 
 ## Rules
 - Follow existing project patterns — check hot memory and neighboring code before inventing
@@ -56,6 +59,14 @@ range, not whole.
   boundaries only (network, clock, fs) — everything inside runs real
 - Tests coupled to implementation details (break on a private rename = wrong target)
 - Happy-path-only suites — each criterion with a failure mode gets a failure test
+- Proving a criterion through a slower layer than it needs: module tests and in-process
+  API/CLI calls carry the criteria and failure modes; browser-driven tests (seconds
+  each) get at most one per slice, for its main path
+- Real waiting in tests — sleep, fixed delays, a TTL shortened and waited out. Inject
+  the clock (or fake timers) and advance it; await the event, not a duration
+- Expensive setup (schema, migrations, app boot, browser, container) rebuilt per test —
+  build it once per run and reset cheaply per test (rollback, truncate, fresh tmp dir);
+  no shared mutable state, fixed ports or fixed paths, so the runner can go parallel
 - Touching files outside the slice. Nearby improvements: note them in your report
   for vault/flags/, never make them.
 

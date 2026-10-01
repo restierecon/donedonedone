@@ -14,7 +14,7 @@ if [ -n "$top" ] && [ ! -f "$project" ]; then
   [ -n "$common" ] && project="$(dirname "$common")/vault/project.md"
 fi
 setting() {
-  [ -f "$project" ] && sed -n "s/^[-*][[:space:]]*gate\.comments\.$1:[[:space:]]*//p" "$project" | head -1 | sed "s/^\`//; s/\`\$//"
+  [ -f "$project" ] && sed -n "s/^[-*][[:space:]]*gate\.comments\.$1:[[:space:]]*//p" "$project" | head -1 | tr -d '\r' | sed "s/^\`//; s/\`\$//"
 }
 extra=$(setting directives)
 [ -n "$extra" ] && directives="$directives|$extra"

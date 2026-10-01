@@ -22,8 +22,8 @@ bad() { fail=$((fail + 1)); echo "  FAIL  $1 ($2)"; }
 guard_bash() {
   local extra='{}'
   [ -n "$2" ] && extra=$(jq -n --arg t "$2" '{agent_id: "agent-test-1", agent_type: $t}')
-  jq -n --arg cmd "$1" --argjson x "$extra" \
-    '{tool_name: "Bash", tool_input: {command: $cmd}} + $x' | "$GUARD" 2>/dev/null
+  printf '%s' "$1" | jq -Rs --argjson x "$extra" \
+    '{tool_name: "Bash", tool_input: {command: .}} + $x' | "$GUARD" 2>/dev/null
 }
 
 guard_file() {
@@ -101,12 +101,9 @@ expect_allow "guard allows a safe command sent as Copilot's run_in_terminal" \
 
 echo "== guard.sh — fail closed without jq =="
 fakebin=$(mktemp -d)
-for b in bash sh cat grep mktemp dirname; do
-  p=$(command -v "$b") && ln -s "$p" "$fakebin/$b"
-done
 status=0
 echo '{"tool_name":"Bash","tool_input":{"command":"ls"}}' \
-  | env PATH="$fakebin" bash "$GUARD" 2>/dev/null || status=$?
+  | env PATH="$fakebin" "$(command -v bash)" "$GUARD" 2>/dev/null || status=$?
 if [ "$status" -eq 2 ]; then ok "blocks when jq is missing"; else bad "blocks when jq is missing" "exit $status, expected 2"; fi
 rm -rf "$fakebin"
 
@@ -327,6 +324,112 @@ else
 fi
 rm -rf "$repo"
 
+echo "== gate.sh — focused runs and the test budget =="
+# shellcheck disable=SC2016
+repo=$(make_gate_repo '- gate.test: touch full-suite-ran
+- gate.test.focus: printf "<%s>" {}; echo')
+echo wip >> "$repo/file.txt"
+status=0
+# shellcheck disable=SC2016
+out=$(cd "$repo" && "$GATE" test -- 'tests/a b.py' -k 'x and $y' 2>&1) || status=$?
+# shellcheck disable=SC2016
+if [ "$status" -eq 0 ] && [ "$(cat "$repo/.gate/test.log")" = '<tests/a b.py><-k><x and $y>' ] && [ ! -e "$repo/full-suite-ran" ]; then
+  ok "a focused run puts its targets, each one quoted, where gate.test.focus has {}"
+else
+  bad "a focused run puts its targets, each one quoted, where gate.test.focus has {}" "exit $status: $out / $(cat "$repo/.gate/test.log")"
+fi
+if echo "$out" | grep -q "^FOCUSED: PASS" && ! echo "$out" | grep -q "^GATE:"; then
+  ok "a focused run works on a dirty tree because it never prints a GATE verdict"
+else
+  bad "a focused run works on a dirty tree because it never prints a GATE verdict" "$out"
+fi
+rm -rf "$repo"
+
+# shellcheck disable=SC2016
+repo=$(make_gate_repo '- gate.test: echo ok
+- gate.test.focus: printf "<%s>"')
+(cd "$repo" && "$GATE" test -- one two >/dev/null 2>&1)
+if [ "$(cat "$repo/.gate/test.log")" = "<one><two>" ]; then
+  ok "a focused run appends its targets when gate.test.focus has no {}"
+else
+  bad "a focused run appends its targets when gate.test.focus has no {}" "$(cat "$repo/.gate/test.log")"
+fi
+rm -rf "$repo"
+
+repo=$(make_gate_repo '- gate.test: echo ok
+- gate.test.focus: false {}')
+status=0; out=$(cd "$repo" && "$GATE" test -- tests/x 2>&1) || status=$?
+if [ "$status" -eq 1 ] && echo "$out" | grep -q "^test FAIL" && echo "$out" | grep -q "^FOCUSED: FAIL" && ! echo "$out" | grep -q "^GATE:"; then
+  ok "a failing focused run exits 1, still without a GATE verdict"
+else
+  bad "a failing focused run exits 1, still without a GATE verdict" "exit $status: $out"
+fi
+rm -rf "$repo"
+
+repo=$(make_gate_repo '- gate.test: touch full-suite-ran')
+status=0; out=$(cd "$repo" && "$GATE" test -- tests/x 2>&1) || status=$?
+if [ "$status" -eq 1 ] && echo "$out" | grep -q "no gate.test.focus" && [ ! -e "$repo/full-suite-ran" ]; then
+  ok "a focused run without gate.test.focus is an error, never a silent full-suite run"
+else
+  bad "a focused run without gate.test.focus is an error, never a silent full-suite run" "exit $status: $out"
+fi
+s1=0; (cd "$repo" && "$GATE" lint -- x >/dev/null 2>&1) || s1=$?
+s2=0; (cd "$repo" && "$GATE" -- x >/dev/null 2>&1) || s2=$?
+s3=0; out=$(cd "$repo" && "$GATE" test -- 2>&1) || s3=$?
+if [ "$s1" -eq 1 ] && [ "$s2" -eq 1 ] && [ "$s3" -eq 1 ] && echo "$out" | grep -q "no test targets"; then
+  ok "targets after -- go with the test step alone, and -- needs at least one"
+else
+  bad "targets after -- go with the test step alone, and -- needs at least one" "exits $s1/$s2/$s3: $out"
+fi
+rm -rf "$repo"
+
+clock=$(mktemp -d)
+# shellcheck disable=SC2016
+printf '%s\n' '#!/bin/bash' 'n=$(cat "$(dirname "$0")/calls" 2>/dev/null || echo 0)' \
+  'echo $((n + 1)) > "$(dirname "$0")/calls"' 'echo $((1000 + n * 600))' > "$clock/date"
+chmod +x "$clock/date"
+repo=$(make_gate_repo '- gate.test: echo ok
+- gate.test.focus: echo {}
+- gate.test.budget: 300')
+status=0; out=$(cd "$repo" && PATH="$clock:$PATH" "$GATE" test 2>&1) || status=$?
+if [ "$status" -eq 0 ] && echo "$out" | grep -qx "test PASS (600s) — over gate.test.budget (300s)" && echo "$out" | grep -q "^GATE: PASS"; then
+  ok "a suite over gate.test.budget still passes, flagged, since the slice may not be what slowed it"
+else
+  bad "a suite over gate.test.budget still passes, flagged, since the slice may not be what slowed it" "exit $status: $out"
+fi
+out=$(cd "$repo" && PATH="$clock:$PATH" "$GATE" test -- tests/x 2>&1)
+if echo "$out" | grep -qx "test PASS (600s)"; then
+  ok "a focused run is never held to gate.test.budget"
+else
+  bad "a focused run is never held to gate.test.budget" "$out"
+fi
+rm -rf "$repo"
+repo=$(make_gate_repo '- gate.test: echo ok
+- gate.test.budget: 3600')
+out=$(cd "$repo" && PATH="$clock:$PATH" "$GATE" test 2>&1)
+if echo "$out" | grep -qx "test PASS (600s)"; then ok "a suite within gate.test.budget is not flagged"; else bad "a suite within gate.test.budget is not flagged" "$out"; fi
+rm -rf "$repo"
+repo=$(make_gate_repo '- gate.test: touch full-suite-ran
+- gate.test.budget: 5m')
+status=0; out=$(cd "$repo" && "$GATE" test 2>&1) || status=$?
+if [ "$status" -eq 1 ] && echo "$out" | grep -q "gate.test.budget must be whole seconds" && [ ! -e "$repo/full-suite-ran" ]; then
+  ok "a gate.test.budget that isn't whole seconds fails before the suite runs"
+else
+  bad "a gate.test.budget that isn't whole seconds fails before the suite runs" "exit $status: $out"
+fi
+rm -rf "$repo" "$clock"
+
+repo=$(make_gate_repo '')
+printf '# Project\r\n## Gate\r\n- gate.test: echo ok\r\n- gate.test.focus: printf "<%%s>" {}\r\n- gate.test.budget: 300\r\n' > "$repo/vault/project.md"
+status=0; out=$(cd "$repo" && "$GATE" test 2>&1) || status=$?
+(cd "$repo" && "$GATE" test -- one >/dev/null 2>&1)
+if [ "$status" -eq 0 ] && echo "$out" | grep -q "^GATE: PASS" && [ "$(cat "$repo/.gate/test.log")" = "<one>" ]; then
+  ok "gate reads a CRLF project.md, which is how Git for Windows checks one out"
+else
+  bad "gate reads a CRLF project.md, which is how Git for Windows checks one out" "exit $status: $out / $(od -c "$repo/.gate/test.log" | head -2)"
+fi
+rm -rf "$repo"
+
 echo "== gate.sh — built-in markers step =="
 repo=$(make_gate_repo '')
 git -C "$repo" checkout -q -b slice/S001
@@ -471,6 +574,20 @@ out=$(cd "$repo" && GATE_BASE=trunk "$GATE" comments 2>&1)
 if echo "$out" | grep -q "^comments SKIP"; then ok "comments gate skips when the base branch is missing"; else bad "comments gate skips when the base branch is missing" "$out"; fi
 rm -rf "$repo"
 
+repo=$(make_gate_repo '')
+printf '# Project\r\n## Gate\r\n- gate.comments.skip: migrations/\r\n- gate.comments.directives: ^keep-me\r\n' > "$repo/vault/project.md"
+git -C "$repo" checkout -q -b slice/S021
+mkdir -p "$repo/migrations" && printf '# Generated by the framework\n' > "$repo/migrations/0001.py"
+printf 'z = 3  # keep-me: project directive\n' > "$repo/tool.py"
+git -C "$repo" add -A && git -C "$repo" commit -q -m "feat: clean slice"
+status=0; out=$(cd "$repo" && "$GATE" comments 2>&1) || status=$?
+if [ "$status" -eq 0 ] && echo "$out" | grep -q "^comments PASS"; then
+  ok "comments gate honours gate.comments.* lines from a CRLF project.md"
+else
+  bad "comments gate honours gate.comments.* lines from a CRLF project.md" "exit $status: $out"
+fi
+rm -rf "$repo"
+
 echo "== session-start.sh — resume context in one injection =="
 repo=$(make_repo)
 out=$(cd "$repo" && "$SESSION_START" </dev/null 2>&1)
@@ -567,6 +684,17 @@ if grep -q "^tools: \['read', 'edit', 'search', 'runCommands'\]" "$gen/copilot/b
 else
   bad "copilot collapses Write and Edit into one 'edit' toolset" "$(grep '^tools' "$gen/copilot/builder.agent.md")"
 fi
+if grep -qF 'Git\bin\bash.exe' "$gen/cursor/builder.md" && grep -qF 'Git\bin\bash.exe' "$gen/copilot/builder.agent.md" \
+   && grep -qF 'Git\bin\bash.exe' "$gen/copilot/orchestrator.agent.md"; then
+  ok "Cursor and Copilot agents say how to reach the bash scripts from PowerShell, Cursor's agent shell on Windows"
+else
+  bad "Cursor and Copilot agents say how to reach the bash scripts from PowerShell, Cursor's agent shell on Windows" "$(tail -2 "$gen/cursor/builder.md")"
+fi
+if grep -q "gate.sh once per slice" "$gen/copilot/orchestrator.agent.md" && ! grep -q "run gates" "$gen/copilot/orchestrator.agent.md"; then
+  ok "copilot orchestrator runs gate 2 itself, so it sees a test line over the budget"
+else
+  bad "copilot orchestrator runs gate 2 itself, so it sees a test line over the budget" "$(grep -n 'gate' "$gen/copilot/orchestrator.agent.md")"
+fi
 status=0; "$GENERATE" bogus >/dev/null 2>&1 || status=$?
 if [ "$status" -eq 1 ]; then ok "unknown target exits 1"; else bad "unknown target exits 1" "exit $status"; fi
 proj="$gen/proj"; mkdir -p "$proj"
@@ -576,6 +704,12 @@ if [ -n "$first" ] && [ -z "$second" ] && grep -q "Autonomous Engineering Protoc
   ok "agents-md creates AGENTS.md once and is a no-op when unchanged"
 else
   bad "agents-md creates AGENTS.md once and is a no-op when unchanged" "first=$first second=$second"
+fi
+# shellcheck disable=SC2016
+if grep -qF '& "$env:ProgramFiles\Git\bin\bash.exe" -c' "$proj/AGENTS.md"; then
+  ok "AGENTS.md tells Cursor and Copilot how to reach the bash scripts from PowerShell"
+else
+  bad "AGENTS.md tells Cursor and Copilot how to reach the bash scripts from PowerShell" "$(sed -n '2,6p' "$proj/AGENTS.md")"
 fi
 printf '# Mine above\n<!-- skeletoncrew:protocol:begin x -->\nstale\n<!-- skeletoncrew:protocol:end -->\n# Mine below\n' > "$proj/AGENTS.md"
 AGENTS_MD_SRC="$ROOT/CLAUDE.md" "$AGENTS_MD" "$proj" >/dev/null
@@ -629,6 +763,13 @@ else
   echo "  SKIP  python lint errors exit 2 (ruff not installed)"
 fi
 
+echo "== settings.json =="
+if jq -e '.env.CLAUDE_CODE_USE_POWERSHELL_TOOL == "0"' "$ROOT/settings.json" >/dev/null; then
+  ok "settings.json keeps Claude Code on Windows in Git Bash, the only shell guard.sh can read"
+else
+  bad "settings.json keeps Claude Code on Windows in Git Bash, the only shell guard.sh can read" "$(jq -c '.env' "$ROOT/settings.json")"
+fi
+
 echo "== install.sh — never clobbers what the user already has =="
 home=$(mktemp -d)
 mkdir -p "$home/.claude/commands" "$home/.claude/scripts" "$home/.cursor"
@@ -670,9 +811,15 @@ expect_block "blocks git split by empty quotes"           guard_bash 'g""it rese
 expect_block "blocks a quoted git"                        guard_bash "'git' push -f"
 expect_block "blocks git called by absolute path"         guard_bash '/usr/bin/git reset --hard'
 expect_block "blocks rm called by absolute path"          guard_bash '/bin/rm -rf /'
+expect_block "blocks rm.exe, which Git Bash on Windows runs as rm" guard_bash 'rm.exe -rf ~'
+expect_block "blocks git.exe force-pushing, as Windows spells it" guard_bash 'git.exe push --force origin main'
+expect_block "blocks rm called by a Windows drive path"   guard_bash 'C:/msys64/usr/bin/rm.exe -rf /'
+expect_block "blocks recursive rm of a Windows drive root" guard_bash 'rm -rf C:/'
+expect_block "blocks recursive rm of a backslashed Windows path" guard_bash 'rm -rf C:\Users\me'
+expect_allow "allows a program whose name only ends in rm.exe" guard_bash 'farm.exe --help'
 expect_block "blocks a backslash-escaped rm"              guard_bash '\rm -rf /'
 expect_block "blocks rm in a subshell"                    guard_bash '(rm -rf /)'
-expect_block "blocks an uppercase RM, which macOS resolves to rm" guard_bash 'RM -rf /'
+expect_block "blocks an uppercase RM, which macOS and Windows resolve to rm" guard_bash 'RM -rf /'
 expect_block "blocks rm with its flags after the target"  guard_bash 'rm / -rf'
 expect_block "blocks rm of an absolute system path"       guard_bash 'rm -rf /usr/lib'
 expect_block "blocks recursive rm of a \$VARIABLE the guard can't see" guard_bash 'rm -rf "${HOME:?}"'
@@ -699,7 +846,7 @@ expect_allow "allows piping into sha256sum"               guard_bash 'sha256sum 
 expect_allow "allows a commit message in quotes"          guard_bash 'git commit -m "fix: x"'
 expect_allow "allows reading a file under /usr"           guard_bash 'cat /usr/lib/os-release'
 expect_block "subagent cannot write a globbed task-tree"  guard_bash 'cp x vault/task-tree.j*' builder
-expect_block "subagent cannot write Task-Tree.json, the same file on macOS" guard_bash 'cp x vault/Task-Tree.json' builder
+expect_block "subagent cannot write Task-Tree.json, the same file on macOS and Windows" guard_bash 'cp x vault/Task-Tree.json' builder
 expect_block "subagent cannot cd into vault and write"    guard_bash 'cd vault && cp ../x task-*' builder
 expect_block "subagent cannot build the vault path from a variable" guard_bash 'f=task-tree; cp x vault/$f.json' builder
 expect_block "subagent cannot check vault out of history" guard_bash 'git checkout HEAD~1 -- vault' builder

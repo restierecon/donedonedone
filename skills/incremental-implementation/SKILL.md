@@ -36,7 +36,7 @@ Build in thin vertical slices — implement one piece, test it, verify it, then 
 For each slice:
 
 1. **Implement** the smallest complete piece of functionality
-2. **Test** — run the test suite (or write a test if none exists)
+2. **Test** — run the tests this increment touches, not the whole suite (or write a test if none exists). In a vault/ project: `gate.sh test -- <test files>`; the full suite runs once, in the full gate, before the work is reported
 3. **Verify** — confirm the slice works as expected (tests pass, build succeeds, manual check)
 4. **Commit** -- save your progress with a descriptive message (see `git-workflow-and-versioning` for atomic commit guidance)
 5. **Move to the next slice** — carry forward, don't restart
@@ -201,7 +201,7 @@ Be explicit about what's in scope and what's NOT in scope for each increment.
 After each increment, verify:
 
 - [ ] The change does one thing and does it completely
-- [ ] All existing tests still pass (`npm test`)
+- [ ] The increment's tests pass (the whole suite runs once, before the work is reported)
 - [ ] The build succeeds (`npm run build`)
 - [ ] Type checking passes (`npx tsc --noEmit`)
 - [ ] Linting passes (`npm run lint`)

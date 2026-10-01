@@ -1,14 +1,14 @@
 #!/bin/bash
 
 EVENTS="builder gate reviewer auditor merge tier3 escalation correction retro"
-CATEGORIES="criterion-unmet test-quality speculative-abstraction error-handling dead-code duplication scope-creep comments contract-mismatch dependency security logging gate-failure merge-conflict ambiguous-criteria human-correction other"
+CATEGORIES="criterion-unmet test-quality test-speed speculative-abstraction error-handling dead-code duplication scope-creep comments contract-mismatch dependency security logging gate-failure merge-conflict ambiguous-criteria human-correction other"
 MAX_SIGNALS=5
 MAX_CHARS=200
 
 usage() { echo "usage: $(basename "$0") <slice-id|-> <event> <verdict> [--sha S] [--attempt N] [--category C]... [--signal TEXT]..." >&2; exit 1; }
 in_list() { case " $2 " in *" $1 "*) return 0 ;; esac; return 1; }
 
-command -v jq >/dev/null 2>&1 || { echo "log-event.sh: jq is required (brew install jq)" >&2; exit 1; }
+command -v jq >/dev/null 2>&1 || { echo "log-event.sh: jq is required (brew install jq · winget install jqlang.jq · apt install jq)" >&2; exit 1; }
 [ $# -ge 3 ] || usage
 slice="$1" event="$2" verdict="$3"; shift 3
 in_list "$event" "$EVENTS" || { echo "log-event.sh: unknown event '$event' (one of: $EVENTS)" >&2; exit 1; }
