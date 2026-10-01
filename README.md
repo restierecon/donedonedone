@@ -279,9 +279,8 @@ this setup works with zero conversion once `./install.sh` has run:
 
 What doesn't carry over as-is: VS Code reads user-level agents from both
 `~/.claude/agents` and `~/.copilot/agents`, so you may see each agent listed twice.
-`install.sh` runs
-`scripts/generate-agents.sh copilot` to translate every agent in `agents/`
-into VS Code's native format at `~/.copilot/agents/`, plus a new `orchestrator` agent
+`install.sh` runs `scripts/generate-agents.sh copilot` to translate every agent in
+`agents/` into VS Code's native format at `~/.copilot/agents/`, plus a new `orchestrator` agent
 that plays the Director role (dispatches every agent above as a subagent — its
 `agents:` roster is generated from `agents/`, so a new agent needs no generator edit;
 VS Code has genuine subagent orchestration via that frontmatter field). The
