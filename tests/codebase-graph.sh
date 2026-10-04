@@ -20,8 +20,18 @@ new_repo() {
 }
 commit() { git -C "$1" add -A && git -C "$1" commit -q -m "${2:-change}"; }
 build() { (cd "$1" && "$PY" "$GRAPH" build "${@:2}" 2>&1); }
-imports_of() { "$PY" -c 'import json,sys; print(" ".join(json.load(open(sys.argv[1]))["files"][sys.argv[2]]["imports"]))' "$1/.gate/graph.json" "$2"; }
-field() { "$PY" -c 'import json,sys; g=json.load(open(sys.argv[1])); print(eval(sys.argv[2], {"g": g}))' "$1/.gate/graph.json" "$2"; }
+imports_of() { field "$1" '" ".join(e["to"][5:] for e in F(sys.argv[3])["out"] if e["kind"] == "import")' "$2"; }
+field() {
+  "$PY" -c 'import json,sys
+g = json.load(open(sys.argv[1]))
+E = g["entities"]
+F = lambda p: E["file:" + p]
+D = lambda d: E["dir:" + d]
+fn = lambda p, i=0: E[F(p)["children"][i]]
+importers = lambda p: sorted(i for i, e in E.items() for o in e["out"] if o["to"] == "file:" + p and o["kind"] == "import")
+kinds = lambda r: [f["kind"] for f in r["flags"]]
+print(eval(sys.argv[2]))' "$1/.gate/graph.json" "$2" "${3:-}"
+}
 expect() {
   if [ "$2" = "$3" ]; then ok "$1"; else bad "$1" "want '$3', got '$2'"; fi
 }
@@ -52,14 +62,14 @@ expect "python: absolute, aliased and relative imports resolve; stdlib json stay
   "$(imports_of "$repo" src/shop/pricing/__init__.py)" "src/shop/pricing/rules.py src/shop/pricing/util.py"
 expect "python: imports inside a docstring are ignored" "$(imports_of "$repo" tests/test_rules.py)" "src/shop/pricing/rules.py"
 expect "python: a package resolves from its root, not a deeper same-named fixture" \
-  "$(field "$repo" 'g["files"]["tests/fixtures/app/shop.py"]["imported_by"]')" "[]"
+  "$(field "$repo" 'importers("tests/fixtures/app/shop.py")')" "[]"
 expect "js/ts: relative imports resolve with extensions and index files; comments and packages don't" \
   "$(imports_of "$repo" web/app.ts)" "web/lib/index.ts web/lib/math.js"
-expect "js/ts: packages are recorded as externals" "$(field "$repo" 'g["files"]["web/app.ts"]["externals"]')" "['react']"
+expect "js/ts: packages are recorded as externals" "$(field "$repo" 'F("web/app.ts")["meta"]["externals"]')" "['react']"
 expect "go: an import under the go.mod module path reaches the package's non-test files" "$(imports_of "$repo" go/cmd/main.go)" "go/internal/tax/tax.go"
-expect "go: _test.go files in the package count as its tests" "$(field "$repo" 'g["files"]["go/internal/tax/tax.go"]["tested_by"]')" "['go/internal/tax/tax_test.go']"
+expect "go: _test.go files in the package count as its tests" "$(field "$repo" 'F("go/internal/tax/tax.go")["meta"]["tested by"]')" "['go/internal/tax/tax_test.go']"
 expect "java: a class import resolves by package path" "$(imports_of "$repo" java/src/main/java/shop/Cart.java)" "java/src/main/java/shop/core/Money.java"
-expect "test files are marked as tests" "$(field "$repo" '[p for p, n in sorted(g["files"].items()) if n["test"]]')" "['go/internal/tax/tax_test.go', 'tests/fixtures/app/shop.py', 'tests/test_rules.py']"
+expect "test files are marked as tests" "$(field "$repo" 'sorted(e["path"] for e in E.values() if e["kind"] == "file" and e["meta"]["test"])')" "['go/internal/tax/tax_test.go', 'tests/fixtures/app/shop.py', 'tests/test_rules.py']"
 rm -rf "$repo"
 
 repo=$(new_repo)
@@ -87,13 +97,13 @@ commit "$repo" init
 build "$repo" >/dev/null
 expect "a module cycle is found and its path printed" "$(field "$repo" 'g["module_cycles"]')" "[['core', 'db', 'core']]"
 expect "a file in a cycle says which import loop it is in" \
-  "$(field "$repo" '[f["why"] for f in g["files"]["db/store.py"]["flags"] if f["kind"] == "cycle"]')" "['import cycle: core/model.py → db/store.py → core/model.py']"
+  "$(field "$repo" '[f["why"] for f in F("db/store.py")["flags"] if f["kind"] == "cycle"]')" "['import cycle: core/model.py → db/store.py → core/model.py']"
 expect "five or more non-test dependents make a hub, with the reason" \
-  "$(field "$repo" '[f["why"] for f in g["modules"]["core"]["flags"] if f["kind"] == "hub"]')" "['6 non-test modules depend on it — a change here ripples to all of them']"
-expect "cycle makes a module high risk" "$(field "$repo" 'g["modules"]["db"]["risk"]')" "high"
-expect "fan-in, fan-out and instability are recorded" "$(field "$repo" '[g["modules"]["core"][k] for k in ("fan_in", "fan_out", "instability")]')" "[6, 1, 0.14]"
+  "$(field "$repo" '[f["why"] for f in D("core")["flags"] if f["kind"] == "hub"]')" "['6 non-test modules depend on it — a change here ripples to all of them']"
+expect "cycle makes a module high risk" "$(field "$repo" 'D("db")["risk"]')" "high"
+expect "fan-in, fan-out and instability are recorded" "$(field "$repo" '[D("core")["metrics"][k] for k in ("fan-in", "fan-out", "instability")]')" "[6, 1, 0.14]"
 expect "without a coverage report, code no test reaches through imports is flagged untested" \
-  "$(field "$repo" '[f["kind"] for f in g["files"]["core/model.py"]["flags"] if f["kind"] == "untested"]')" "['untested']"
+  "$(field "$repo" '[k for k in kinds(F("core/model.py")) if k == "untested"]')" "['untested']"
 mkdir -p "$repo/tests"
 printf 'from db import store
 def test_get():
@@ -102,7 +112,7 @@ def test_get():
 commit "$repo" test
 build "$repo" >/dev/null
 expect "a test that reaches code only through another module's import clears the flag" \
-  "$(field "$repo" '[f["kind"] for f in g["files"]["core/model.py"]["flags"] if f["kind"] == "untested"]')" "[]"
+  "$(field "$repo" '[k for k in kinds(F("core/model.py")) if k == "untested"]')" "[]"
 
 echo "== codebase-graph.py — impact =="
 out=$(cd "$repo" && "$PY" "$GRAPH" impact core/model.py)
@@ -116,7 +126,7 @@ git -C "$repo" checkout -q -b slice
 printf 'X = 1\n' > "$repo/f1/extra.py"
 commit "$repo" extra
 out=$(cd "$repo" && "$PY" "$GRAPH" impact --base main)
-if echo "$out" | grep -q "^Files:               1 source" && echo "$out" | grep -q "^Regression risk:     Low"; then
+if echo "$out" | grep -q "^Files:               1 mapped" && echo "$out" | grep -q "^Regression risk:     Low"; then
   ok "impact --base takes the changed files from the diff"
 else
   bad "impact --base takes the changed files from the diff" "$out"
@@ -137,7 +147,7 @@ git -C "$repo" checkout -q -b slice
 printf 'from src.infra.db import X\n' > "$repo/src/domain/orders/new.py"
 commit "$repo" new
 out=$(cd "$repo" && "$PY" "$GRAPH" check --rules rules.json --base main); status=$?
-if [ "$status" -eq 1 ] && echo "$out" | grep -q "src/domain/orders/new.py imports src/infra/db.py — src/domain/\*\* must not depend on src/infra/\*.py (ADR-002)" \
+if [ "$status" -eq 1 ] && echo "$out" | grep -q "src/domain/orders/new.py depends on src/infra/db.py — src/domain/\*\* must not depend on src/infra/\*.py (ADR-002)" \
    && ! echo "$out" | grep -q legacy.py; then
   ok "a new forbidden import fails, ** crosses directories, the old one isn't re-reported"
 else
@@ -176,6 +186,144 @@ out=$(cd "$repo" && "$PY" "$GRAPH" frobnicate 2>&1); status=$?
 expect "an unknown command is a usage error" "$status" "2"
 rm -rf "$repo"
 
+echo "== codebase-graph.py — any repo: name references, shell estimates, what it saw =="
+repo=$(new_repo)
+mkdir -p "$repo/bin/lib" "$repo/a" "$repo/b" "$repo/tests" "$repo/.github/workflows"
+cat > "$repo/bin/deploy.sh" <<'SH'
+#!/bin/bash
+source ./lib/log.sh
+"$(dirname "$0")/lib/common.sh" --check
+pick() {
+  if [ "$1" = a ]; then
+    echo a
+  elif [ "$1" = b ] && [ -n "$2" ]; then
+    echo b
+  fi
+  case "$1" in
+    x) echo x ;;
+    y) echo y ;;
+  esac
+}
+for t in 1 2; do pick "$t"; done
+SH
+printf 'log() { echo "$@"; }\n' > "$repo/bin/lib/log.sh"
+printf '#!/bin/sh\necho ok\n' > "$repo/bin/lib/common.sh"
+printf 'echo a\n' > "$repo/a/util.sh"
+printf 'echo b\n' > "$repo/b/util.sh"
+printf 'run util.sh then b/util.sh\n' > "$repo/bin/lib/notes.sh"
+printf 'jobs:\n  t:\n    steps:\n      - run: bin/deploy.sh\n' > "$repo/.github/workflows/ci.yml"
+# shellcheck disable=SC2016
+printf 'Run `deploy.sh` to ship.\n' > "$repo/README.md"
+printf '#!/bin/bash\n./bin/deploy.sh --dry-run\n' > "$repo/tests/run-tests.sh"
+commit "$repo" init
+out=$(build "$repo")
+edges() { field "$repo" 'sorted((e["to"][5:], e["kind"]) for e in F(sys.argv[3])["out"])' "$1"; }
+expect "shell: source, dirname-relative and plain path mentions become reference edges" "$(edges bin/deploy.sh)" "[('bin/lib/common.sh', 'reference'), ('bin/lib/log.sh', 'reference')]"
+expect "config: a CI file naming a script references it" "$(edges .github/workflows/ci.yml)" "[('bin/deploy.sh', 'reference')]"
+expect "docs: a README naming a file only mentions it" "$(edges README.md)" "[('bin/deploy.sh', 'mention')]"
+expect "an ambiguous bare name links nothing; a path that disambiguates links" "$(edges bin/lib/notes.sh)" "[('b/util.sh', 'reference')]"
+expect "a test script that runs a script counts as its test" "$(field "$repo" 'F("bin/deploy.sh")["meta"]["tested by"]')" "['tests/run-tests.sh']"
+expect "shell complexity is estimated per function, plus the script body" \
+  "$(field "$repo" '[(E[c]["label"], E[c]["metrics"]["complexity"], E[c]["meta"]["complexity"]) for c in F("bin/deploy.sh")["children"]]')" "[('pick', 6, 'estimated'), ('(script body)', 2, 'estimated')]"
+if echo "$out" | grep -q "^SEEN: 9 text files" && echo "$out" | grep -q "estimated" && ! echo "$out" | grep -q "WARNING"; then
+  ok "the summary says how much it saw and how, with no warning when code is covered"
+else
+  bad "the summary says how much it saw and how, with no warning when code is covered" "$out"
+fi
+expect "the viewer gets the seen breakdown" "$(field "$repo" 'sorted(g["seen"]["complexity"])')" "['estimated', 'n/a']"
+for i in 1 2 3 4 5 6; do for j in 1 2 3 4 5 6 7 8 9 10; do printf 'Write-Host %s\n' "$i$j"; done > "$repo/s$i.ps1"; done
+commit "$repo" ps
+out=$(build "$repo")
+if echo "$out" | grep -q "WARNING: .* of code lines have no complexity measure (.ps1)"; then
+  ok "a repo mostly in a language it can't measure says so instead of looking clean"
+else
+  bad "a repo mostly in a language it can't measure says so instead of looking clean" "$out"
+fi
+rm -rf "$repo"
+
+echo "== codebase-graph.py — setup lens: agents, skills, hooks, workflow =="
+setup_repo() {
+  local d
+  d=$(new_repo)
+  mkdir -p "$d/agents" "$d/skills/clean-diff" "$d/skills/orphan" "$d/skills/grill" "$d/scripts"
+  # shellcheck disable=SC2016
+  printf -- '---\nname: builder\ndescription: Builds one slice.\ntools: Read, Edit, Bash\nmodel: sonnet\n---\nRun the clean-diff skill, then `~/.claude/scripts/gate.sh`.\n' > "$d/agents/builder.md"
+  # shellcheck disable=SC2016
+  printf -- '---\nname: reviewer\ndescription: Reviews cold.\ntools: Read\nmodel: sonnet\n---\nRead the `builder` report.\n' > "$d/agents/reviewer.md"
+  printf -- '---\nname: clean-diff\ndescription: Strip slop.\n---\nBody.\n' > "$d/skills/clean-diff/SKILL.md"
+  printf -- '---\nname: orphan\ndescription: Nobody calls me.\n---\nBody.\n' > "$d/skills/orphan/SKILL.md"
+  printf -- '---\nname: grill\ndescription: Ask first.\n---\nBody.\n' > "$d/skills/grill/SKILL.md"
+  printf '#!/bin/bash\necho gate\n' > "$d/scripts/gate.sh"
+  printf '#!/bin/bash\necho guard\n' > "$d/scripts/guard.sh"
+  printf '#!/bin/bash\necho tool\n' > "$d/scripts/tool.sh"
+  printf 'Always start with the grill skill.\n' > "$d/CLAUDE.md"
+  printf '{"hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [{"type": "command", "command": "~/.claude/scripts/guard.sh"}]}], "Stop": [{"hooks": [{"type": "command", "command": "npx something"}]}]}}\n' > "$d/settings.json"
+  echo "$d"
+}
+repo=$(setup_repo)
+commit "$repo" init
+out=$(build "$repo"); status=$?
+expect "without workflow.json the lens groups components by kind and reports no problems" \
+  "$status:$(field "$repo" '[E[c]["label"] for c in E["setup:"]["children"]]')" "0:['Agents', 'Skills', 'Hooks (always on)', 'CLAUDE.md']"
+expect "an agent links to the skills and scripts its file names, with file:line evidence" \
+  "$(field "$repo" 'sorted((e["to"], e.get("where")) for e in E["agent:builder"]["out"])')" "[('file:scripts/gate.sh', 'agents/builder.md:7'), ('skill:clean-diff', 'agents/builder.md:7')]"
+expect "agents named in backticks link agent to agent" "$(field "$repo" '[e["to"] for e in E["agent:reviewer"]["out"]]')" "['agent:builder']"
+expect "frontmatter fills model and tools" "$(field "$repo" '[E["agent:builder"]["meta"]["model"], E["agent:builder"]["metrics"]["tools"]]')" "['sonnet', 3]"
+expect "a hook resolves its command to the script it runs, and shows its matcher" \
+  "$(field "$repo" '[E["hook:PreToolUse#0.0"]["label"], E["hook:PreToolUse#0.0"]["out"][0]["to"]]')" "['guard.sh (Bash)', 'file:scripts/guard.sh']"
+expect "a hook command outside the repo is marked unresolved, not an error" "$(field "$repo" 'kinds(E["hook:Stop#0.0"])')" "['unresolved']"
+cat > "$repo/workflow.json" <<'JSON'
+{"name": "Loop", "stages": [
+  {"id": "build", "uses": ["agent:builder", "skill:ghost"], "next": ["review", "nowhere"]},
+  {"id": "review", "uses": ["agent:reviewer"], "next": [{"to": "build", "label": "REJECTED"}]}
+]}
+JSON
+commit "$repo" workflow
+out=$(build "$repo"); status=$?
+if [ "$status" -eq 1 ] && echo "$out" | grep -q "ERROR stage build uses skill:ghost, which doesn't exist" \
+   && echo "$out" | grep -q "ERROR stage build goes next to nowhere, which isn't a stage" \
+   && echo "$out" | grep -q "ERROR skill:orphan is unreachable" && ! echo "$out" | grep -q "skill:grill is unreachable" \
+   && ! echo "$out" | grep -q "skill:clean-diff is unreachable" && echo "$out" | grep -q "3 problem(s), 1 warning(s)"; then
+  ok "workflow.json is verified: dangling uses, unknown stages and unreachable skills fail the build"
+else
+  bad "workflow.json is verified: dangling uses, unknown stages and unreachable skills fail the build" "$status: $out"
+fi
+expect "reachability follows the protocol and component links (grill via CLAUDE.md, clean-diff via builder)" \
+  "$(field "$repo" '[kinds(E["skill:grill"]), kinds(E["skill:clean-diff"]), [k for k in kinds(F("scripts/tool.sh")) if k == "unreachable"]]')" "[[], [], ['unreachable']]"
+expect "stages keep their declared order, flow and loop labels" \
+  "$(field "$repo" '[E["setup:"]["children"][:2], [(e["to"], e.get("label")) for e in E["stage:review"]["out"] if e["kind"] == "next"]]')" "[['stage:build', 'stage:review'], [('stage:build', 'REJECTED')]]"
+cat > "$repo/workflow.json" <<'JSON'
+{"name": "Loop", "stages": [
+  {"id": "build", "uses": ["agent:builder", "script:gate.sh"], "next": ["review"]},
+  {"id": "review", "uses": ["agent:reviewer"], "next": [{"to": "build", "label": "REJECTED"}]}
+], "on_demand": ["skill:orphan"]}
+JSON
+commit "$repo" fixed
+out=$(build "$repo"); status=$?
+if [ "$status" -eq 0 ] && echo "$out" | grep -q "^SETUP repo: Loop — 2 stages, 2 agents, 3 skills, 2 hooks · OK, 1 warning(s)"; then
+  ok "a complete workflow builds clean; an unreached script is a warning, not an error"
+else
+  bad "a complete workflow builds clean; an unreached script is a warning, not an error" "$status: $out"
+fi
+rm -rf "$repo"
+repo=$(new_repo)
+mkdir -p "$repo/.claude/agents" "$repo/src"
+printf -- '---\nname: helper\ndescription: Helps.\n---\nUse src/app.py.\n' > "$repo/.claude/agents/helper.md"
+printf 'def main():\n    return 1\n' > "$repo/src/app.py"
+commit "$repo" init
+build "$repo" >/dev/null
+expect "a project's own .claude/ setup gets its lens, linked into the code" \
+  "$(field "$repo" '[l["id"] for l in g["lenses"]] + [e["to"] for e in E["agent:.claude/helper"]["out"]]')" "['code', 'setup:.claude/', 'file:src/app.py']"
+rm -rf "$repo"
+
+echo "== codebase-graph.py — this repo's own workflow.json stays in sync =="
+out=$(cd "$ROOT" && "$PY" "$GRAPH" build --out "$(mktemp -d)" 2>&1); status=$?
+if [ "$status" -eq 0 ] && echo "$out" | grep -q "^SETUP repo: Autonomous engineering loop — .* · OK"; then
+  ok "every agent, skill and hook in this setup is reachable from workflow.json, and every name in it exists"
+else
+  bad "every agent, skill and hook in this setup is reachable from workflow.json, and every name in it exists" "$status: $(echo "$out" | grep -E 'SETUP|ERROR')"
+fi
+
 if "$PY" -c 'import lizard' >/dev/null 2>&1; then
   echo "== codebase-graph.py — complexity, churn and coverage (lizard present) =="
   repo=$(new_repo)
@@ -186,11 +334,11 @@ if "$PY" -c 'import lizard' >/dev/null 2>&1; then
   for n in 1 2 3 4; do printf 'x%s = 1\n' "$n" >> "$repo/hot.py"; commit "$repo" "c$n"; done
   printf 'SF:hot.py\nDA:1,1\nDA:2,1\nDA:3,0\nDA:4,0\nend_of_record\n' > "$repo/cov.lcov"
   build "$repo" --coverage cov.lcov >/dev/null
-  expect "complexity is measured per function" "$(field "$repo" 'g["files"]["hot.py"]["functions"][0]["ccn"]')" "11"
-  expect "churn counts commits touching the file" "$(field "$repo" 'g["files"]["hot.py"]["churn"]')" "4"
+  expect "complexity is measured per function" "$(field "$repo" 'fn("hot.py")["metrics"]["complexity"]')" "11"
+  expect "churn counts commits touching the file" "$(field "$repo" 'F("hot.py")["metrics"]["changes"]')" "4"
   expect "complex + frequently changed is a hotspot, with numbers in the reason" \
-    "$(field "$repo" '[f["why"].split(" — ")[0] for f in g["files"]["hot.py"]["flags"] if f["kind"] == "hotspot"]')" "['route() has complexity 11 and the file changed 4 times in 90 days']"
-  expect "coverage from an lcov report is attached (reusing crap-score.py's loaders)" "$(field "$repo" 'g["files"]["hot.py"]["coverage"]')" "0.5"
+    "$(field "$repo" '[f["why"].split(" — ")[0] for f in fn("hot.py")["flags"] if f["kind"] == "hotspot"]')" "['route() has complexity 11 and the file changed 4 times in 90 days']"
+  expect "coverage from an lcov report is attached (reusing crap-score.py's loaders)" "$(field "$repo" 'F("hot.py")["metrics"]["coverage"]')" "0.5"
   rm -rf "$repo"
 else
   echo "  SKIP  complexity, churn and coverage (pip install lizard)"

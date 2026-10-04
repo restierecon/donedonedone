@@ -31,7 +31,7 @@ jobs:
         run: scripts/validate-manifests.sh
       - name: scripts are executable in the repo
         run: |
-          bad=$(git ls-files -s scripts/ ':(glob)tests/*.sh' install.sh | grep -v ^100755 || true)
+          bad=$(git ls-files -s ':(glob)scripts/*.sh' ':(glob)scripts/*.py' ':(glob)tests/*.sh' install.sh | grep -v ^100755 || true)
           if [ -n "$bad" ]; then echo "not executable: $bad"; exit 1; fi
       - name: settings.json is valid JSON
         run: jq empty settings.json

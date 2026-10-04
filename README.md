@@ -43,7 +43,8 @@ builds. Nothing after the grill should need you unless a slice escalates.
 | agents/ | planner · builder · reviewer · auditor · retro (least-privilege tools, model-per-agent) |
 | skills/ | protocol-native: grill · slice-planning · risk-gate · parallel-dispatch · architecture-review · learning-loop · test-speed · crap-hotspots · mutation-survivors · clean-diff · harden-diff · blast-radius · `/codebase-map` · brief-contract · `/init-codebase` · `/harvest` · `/create-verification-skill` · `/maintain-verification-skill` (opt-in, `/`-only: a project-local `verify-*` skill that lets the reviewer reach live-verified evidence) — plus a general engineering-practice library, a principles index (19 pstack principles, read on demand) and pstack's prose skills: unslop · technical-writing (docs/README/ADR work) (see Credits) |
 | settings.json | Permission deny/ask lists + hooks on 6 events + env that keeps Claude Code on Windows in Git Bash |
-| scripts/ | guard.sh (PreToolUse) · vault-guard.sh (Pre/PostToolUse, SubagentStop — restores Director-only files) · lint.sh (PostToolUse) · checkpoint.sh (Stop) · session-start.sh (SessionStart) · codebase-graph.py + graph-viewer.html (module/file/function graph, change impact, `arch` fitness check, drill-down HTML map) · crap-score.py (lizard + coverage report → CRAP lines for `gate.crap`) · mutation-report.py (mutation tool report → mutant lines for `gate.mutation`) · gate.sh (quiet lint/types/test/build runner + diff-scoped CRAP, mutation, TODO/FIXME, no-comments and architecture-rule checks) · find-comments.sh (the comment detector behind that check) · log-event.sh (the Director's structured log.jsonl writer) · risk-gate.sh (scores each slice's risk, judges builder spawns and merges) · approve-risk.sh (the human's approval command — refuses inside an agent) · check-plan.sh (the Director's lint for a planner draft: fields, "Actor can" titles, resolvable acyclic `depends_on`, `auditor_triggers` from a fixed list, gates as a verdict or `skip: <reason>`) · generate-agents.sh (Copilot/Cursor agents, install-time) · agents-md.sh (protocol block in a project's AGENTS.md, for Cursor/Copilot) |
+| scripts/ | guard.sh (PreToolUse) · vault-guard.sh (Pre/PostToolUse, SubagentStop — restores Director-only files) · lint.sh (PostToolUse) · checkpoint.sh (Stop) · session-start.sh (SessionStart) · codebase-graph.py + codemap/ + graph-viewer.html (code and workflow map of any repo, change impact, `arch` fitness check, drill-down HTML) · crap-score.py (lizard + coverage report → CRAP lines for `gate.crap`) · mutation-report.py (mutation tool report → mutant lines for `gate.mutation`) · gate.sh (quiet lint/types/test/build runner + diff-scoped CRAP, mutation, TODO/FIXME, no-comments and architecture-rule checks) · find-comments.sh (the comment detector behind that check) · log-event.sh (the Director's structured log.jsonl writer) · risk-gate.sh (scores each slice's risk, judges builder spawns and merges) · approve-risk.sh (the human's approval command — refuses inside an agent) · check-plan.sh (the Director's lint for a planner draft: fields, "Actor can" titles, resolvable acyclic `depends_on`, `auditor_triggers` from a fixed list, gates as a verdict or `skip: <reason>`) · generate-agents.sh (Copilot/Cursor agents, install-time) · agents-md.sh (protocol block in a project's AGENTS.md, for Cursor/Copilot) |
+| workflow.json | This setup's stage order for the workflow map; verified by the map's build and CI |
 | tests/ | Test harness for the hook scripts — run after any script edit; CI runs it too |
 | evals/ | 16-task benchmark + scorecard — run before trusting, re-run after any manifest edit |
 
@@ -329,20 +330,34 @@ The step is plain gate.sh, so it behaves the same under Claude Code, Cursor and
 Copilot, including from PowerShell through Git Bash on Windows.
 
 ## Codebase map
-`/codebase-map` (or `python3 ~/.claude/scripts/codebase-graph.py build`) turns the
-committed tree into `.gate/graph.json` and a self-contained `.gate/graph.html`:
-repository → module (directory) → file → function, with imports and importers both
-ways, fan-in/fan-out, instability, complexity (lizard), churn (git log, 90 days),
-test reach or measured coverage (`--coverage`, any format crap-score.py reads), and
-cycles. Modules are colored by risk, and every highlight says why with its numbers
-("`make_response()` has complexity 16 and the file changed 3 times in 90 days").
-Click a module to see its dependencies and dependents, then drill into files and
-functions. It's regenerated on demand, never committed, so it can't drift.
+`/codebase-map` (or `python3 ~/.claude/scripts/codebase-graph.py build`) maps any
+repository from its committed tree into `.gate/graph.json` and a self-contained
+`.gate/graph.html`. It's regenerated on demand and never committed, so it can't drift.
 
-- **Change impact.** `codebase-graph.py impact --base main` prints a CHANGE IMPACT block
-  (files, modules, direct and indirect dependents, tests in reach, cycles touched,
-  estimated regression risk). The reviewer's blast-radius pass starts from it, then
-  greps for what static imports miss.
+- **Code lens.** Folder → file → function for every tracked text file. Links are
+  parsed imports (Python, JS/TS, Go, Java/Kotlin), references (a script, config or CI
+  file naming another file), and mentions (docs naming a file; shown, never a
+  dependency). Complexity is measured by lizard, estimated for shell, and reported as
+  not measured elsewhere. Also: churn (git log, 90 days), test reach or measured
+  coverage (`--coverage`, any format crap-score.py reads), and cycles. Every highlight
+  says why, with numbers ("`make_response()` has complexity 16 and the file changed 3
+  times in 90 days").
+- **It says what it saw.** The SEEN line splits the repo by how it was read (imports
+  parsed vs references scanned; complexity measured, estimated, not measured, n/a) and
+  warns when more than 30% of the code has no complexity measure. A map that can't see
+  a repo says so instead of looking clean.
+- **Workflow lens.** Wherever a repo holds a Claude Code setup (`agents/`, `skills/`,
+  `commands/`, hooks in `settings.json`, at the root or in `.claude/`), the map adds a
+  lens for it: stages → agents, skills and commands → hooks → scripts → functions. For
+  this repo, `workflow.json` declares the stage order (grill → plan → risk → dispatch →
+  build → gate → review → audit → merge → harvest → every 5 slices, with the loops),
+  and the build verifies it. A ref that doesn't exist, or an agent, skill or command
+  nothing reaches, fails the build. CI runs that check, so the file can't drift from
+  the setup.
+- **Change impact.** `codebase-graph.py impact --base main` prints a CHANGE IMPACT block:
+  dependents, tests in reach, docs mentioning the change, setup components touched,
+  cycles, and an estimated regression risk. The reviewer's blast-radius pass starts
+  from it, then greps for what the map can't see.
 - **Fitness rules.** Boundaries the human settles in `/grill` go in
   `vault/architecture.json`:
 
@@ -352,15 +367,19 @@ functions. It's regenerated on demand, never committed, so it can't drift.
   ```
 
   gate.sh's `arch` step reads the rules from `main` (a slice can't relax them on its
-  branch) and fails only on violations the diff introduces, so legacy debt never
-  blocks unrelated work. It shows up in the map instead.
+  branch) and fails only on violations the diff introduces. `forbid` covers imports
+  plus script and config references; `no_new_cycles` covers import cycles, so a message
+  string never fails a slice.
 - **Architecture review** runs the map first; its flags seed the review's candidates,
   which are confirmed by the deletion test before they become cards.
-- **Limits.** Imports are found by regex for Python, JS/TS (relative paths), Go and
-  Java/Kotlin. Other languages get complexity and churn without edges. Path aliases,
-  dynamic imports and DI wiring are invisible. Callers are per file, not per function.
-  Flags are signals for a human or reviewer to judge, not gate failures; only explicit
-  rules fail the gate.
+- **Limits:**
+  - Name references find literal paths and names, not string-built ones. Path aliases,
+    dynamic imports and DI wiring are invisible.
+  - Callers are per file, not per function.
+  - Shell complexity is an estimate.
+  - Large repos make large pages (Django: 5,600 files, a 24 MB HTML file, about 14 s).
+  - Flags are signals for a human or reviewer to judge, not gate failures. Only
+    explicit rules fail the gate.
 
 ## No comments
 No codebase built with this setup carries comments: no line comments, block comments,
@@ -654,7 +673,7 @@ end to end); codebase-graph.py's in `tests/codebase-graph.sh`.
 | Script | Usage | What it does |
 |---|---|---|
 | crap-score.py | `crap-score.py <coverage file> [-x <glob>]... [paths]` | Prints `<path>:<start>-<end> <score> <name>` per function for `gate.crap`: lizard complexity joined with LCOV, Cobertura, JaCoCo or coverage.py JSON line coverage. Unknown report format or missing lizard exits non-zero. |
-| codebase-graph.py | `codebase-graph.py build [--rev R] [--days N] [--coverage F] [--rules F] [--out D]` · `impact (--base R \| <files>…)` · `check --rules F --base R` | `build` writes `graph.json` + `graph.html` (from graph-viewer.html) to `.gate/` and prints a ≤ 15-line summary; `impact` prints the CHANGE IMPACT block; `check` exits 1 listing each forbidden import or new module cycle edge HEAD adds over the base, and backs gate.sh's `arch` step. Reads committed trees only (`git cat-file`). Bad usage exits 2. |
+| codebase-graph.py | `codebase-graph.py build [--rev R] [--days N] [--coverage F] [--rules F] [--out D]` · `impact (--base R \| <files>…)` · `check --rules F --base R` | Entry point for the `codemap/` package. `build` writes `graph.json` + `graph.html` (from graph-viewer.html) to `.gate/` and prints a ≤ 20-line summary with the SEEN breakdown, exiting 1 when a setup's workflow.json has errors; `impact` prints the CHANGE IMPACT block; `check` exits 1 listing each forbidden dependency or new import-cycle edge HEAD adds over the base, and backs gate.sh's `arch` step. Reads committed trees only (`git cat-file`). Bad usage exits 2. |
 | mutation-report.py | `mutation-report.py <report \| ->` | Prints `<path>:<line> <killed\|survived\|timeout\|no-coverage> <description>` per mutant for `gate.mutation`, or `no-mutants`: reads mutation-testing-report-schema JSON, PIT XML, cargo-mutants outcomes.json, Gremlins JSON, or mutmut 3 results (`-` for stdin). Unknown format exits non-zero. |
 | gate.sh | `gate.sh [lint\|types\|test\|build\|crap\|mutation\|markers\|comments\|scope\|arch ...]` or `gate.sh test -- <targets>` | Refuses a dirty tree (`GATE_ALLOW_DIRTY=1` overrides), an unknown step, or a missing `gate.test`. With `-- <targets>`, runs only those tests through `gate.test.focus` and ends `FOCUSED:`, never `GATE:`. Flags a passing test step slower than `gate.test.budget`. Fails a function the diff touches whose `gate.crap` score is over `gate.crap.max`, and a diff whose added lines' mutants score under `gate.mutation.min`. Runs the gate one line per step, a ≤ 30-line failure excerpt (`GATE_EXCERPT_LINES`), full log in `.gate/<step>.log`. Exit 0 all pass, 1 otherwise. From a worktree that predates project.md, it reads the main checkout's. |
 | find-comments.sh | `find-comments.sh --base <ref>` or `find-comments.sh <file>...` | Prints `path:line: text` for every comment added since `<ref>`, or in the given files. Exit 1 when it finds one, 2 on bad usage. |

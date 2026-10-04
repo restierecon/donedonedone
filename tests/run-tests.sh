@@ -7,7 +7,7 @@ if [ "${1:-}" = "--check-installed" ]; then
   drift=0
   diff -uB "$ROOT/CLAUDE.md" <(grep -v '^@' "$dest/CLAUDE.md") || drift=1
   for d in agents scripts; do
-    for f in "$ROOT/$d"/*; do diff -u "$f" "$dest/$d/$(basename "$f")" || drift=1; done
+    for f in "$ROOT/$d"/*; do diff -ru -x __pycache__ "$f" "$dest/$d/$(basename "$f")" || drift=1; done
   done
   for s in "$ROOT"/skills/*/; do diff -ru "$s" "$dest/skills/$(basename "$s")" || drift=1; done
   if [ "$drift" -eq 0 ]; then echo "installed copy matches repo"; else echo "DRIFT: repo and $dest differ (see diffs above)" >&2; fi
@@ -594,7 +594,7 @@ git -C "$repo" checkout -q -b slice/S900
 printf 'from app.web import routes\n' >> "$repo/app/domain/order.py"
 git -C "$repo" commit -q -am "feat: reach into web"
 status=0; out=$(cd "$repo" && "$GATE" arch 2>&1) || status=$?
-if [ "$status" -eq 1 ] && echo "$out" | grep -q "^arch FAIL" && echo "$out" | grep -q "app/domain/order.py imports app/web/routes.py" \
+if [ "$status" -eq 1 ] && echo "$out" | grep -q "^arch FAIL" && echo "$out" | grep -q "app/domain/order.py depends on app/web/routes.py" \
    && echo "$out" | grep -q "new module cycle edge app/domain → app/web" && echo "$out" | grep -q "^GATE: FAIL (arch)"; then
   ok "arch fails a forbidden import and the cycle it creates"
 else
@@ -1319,6 +1319,14 @@ if [ "$(jq -r .mine "$home/.claude/settings.json")" = "true" ] && ls "$home"/.cl
 else
   bad "install keeps an existing settings.json and drops the new one beside it" "$(ls "$home/.claude")"
 fi
+mapped=$(mktemp -d)
+git -C "$mapped" init -q -b main && printf 'echo hi\n' > "$mapped/a.sh" && git -C "$mapped" add -A && git -C "$mapped" -c user.email=t@t -c user.name=t commit -q -m i
+if (cd "$mapped" && "$home/.claude/scripts/codebase-graph.py" build >/dev/null 2>&1) && [ -f "$mapped/.gate/graph.html" ] && [ ! -d "$home/.claude/scripts/codemap/__pycache__" ]; then
+  ok "the installed codebase-graph.py runs with its codemap package and leaves no bytecode behind"
+else
+  bad "the installed codebase-graph.py runs with its codemap package and leaves no bytecode behind" "$(ls "$home/.claude/scripts")"
+fi
+rm -rf "$mapped"
 if grep -q "my own global rules" "$home"/.claude/CLAUDE.md.bak-* 2>/dev/null && cmp -s "$ROOT/CLAUDE.md" "$home/.claude/CLAUDE.md"; then
   ok "install backs up a differing CLAUDE.md before replacing it"
 else

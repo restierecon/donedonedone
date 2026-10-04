@@ -43,6 +43,8 @@ for old in \
   fi
 done
 cp "$SRC"/scripts/*.sh "$SRC"/scripts/*.py "$SRC"/scripts/*.html "$DEST/scripts/"
+rm -rf "$DEST/scripts/codemap"
+cp -R "$SRC/scripts/codemap" "$DEST/scripts/codemap"
 chmod +x "$DEST"/scripts/*.sh "$DEST"/scripts/*.py
 cp -R "$SRC"/skills/* "$DEST/skills/"
 
