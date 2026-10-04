@@ -1,7 +1,16 @@
 #!/bin/bash
 
 input=$(cat)
-files=$(echo "$input" | jq -r '[.tool_input.file_path, .tool_input.filePath, .file_path, .tool_input.replacements[]?.filePath?, (.tool_input.input | strings | scan("(?m)^\\*\\*\\* (?:Add|Update) File: (.+)$") | .[0])] | map(strings) | unique | .[]' 2>/dev/null)
+event=$(echo "$input" | jq -r '.hook_event_name // empty' 2>/dev/null)
+case "$(echo "$input" | jq -r '.tool_name // empty' 2>/dev/null)" in
+  Read|Grep|Glob|LS|NotebookRead|read_file|readFile|list_dir|listDirectory|file_search|grep_search|semantic_search) exit 0 ;;
+esac
+if [ "$event" = "postToolUse" ]; then
+  msg=$(printf '%s' "$input" | jq -c 'del(.hook_event_name)' | "$0" 2>&1 >/dev/null) \
+    || jq -cn --arg m "$msg" '{additional_context: $m}'
+  exit 0
+fi
+files=$(echo "$input" | jq -r '[.tool_input.file_path, .tool_input.filePath, .tool_input.path, .file_path, .tool_input.replacements[]?.filePath?, (.tool_input.input | strings | scan("(?m)^\\*\\*\\* (?:Add|Update) File: (.+)$") | .[0])] | map(strings) | unique | .[]' 2>/dev/null)
 
 lint_file() {
   local file="$1" errors=""

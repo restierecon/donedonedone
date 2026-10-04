@@ -24,11 +24,12 @@ cursor=0
 case "$event" in
   beforeShellExecution) cursor=1; tool="Bash"; cmd=$(field '.command') ;;
   beforeReadFile) cursor=1; tool="Read"; file_path=$(field '.file_path') ;;
+  preToolUse) cursor=1 ;;
 esac
 
 block() {
   echo "$1" >&2
-  [ "$cursor" -eq 1 ] && jq -cn --arg m "$1" '{permission: "deny", agentMessage: $m, userMessage: $m}'
+  [ "$cursor" -eq 1 ] && jq -cn --arg m "$1" '{permission: "deny", agent_message: $m, user_message: $m, agentMessage: $m, userMessage: $m}'
   exit 2
 }
 allow() {
@@ -37,7 +38,7 @@ allow() {
 }
 
 case "$tool" in
-  Bash|runTerminalCommand|run_in_terminal) tool="Bash" ;;
+  Bash|Shell|runTerminalCommand|run_in_terminal) tool="Bash" ;;
   Agent|Task|runSubagent) tool="Agent" ;;
   Read|Grep|Glob|LS|NotebookRead|read_file|readFile|list_dir|listDirectory|file_search|grep_search) tool="Read" ;;
   *)

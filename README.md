@@ -552,8 +552,8 @@ this setup works with zero conversion once `./install.sh` has run:
   hooks and every script fires twice. The scripts read VS Code's own tool names and
   payloads: `run_in_terminal`, camelCase `filePath`, every file in
   `multi_replace_string_in_file` and `apply_patch`, and `runSubagent`'s `agentName`
-  for the brief and risk checks. VS Code has no matchers, so `lint.sh` skips anything
-  that isn't a file it lints. `session-start.sh` answers with `hookSpecificOutput` JSON,
+  for the brief and risk checks. VS Code has no matchers, so `lint.sh` skips read-only
+  tools itself and never reformats a file the agent only read. `session-start.sh` answers with `hookSpecificOutput` JSON,
   the only SessionStart form VS Code reads. The named tests in `tests/run-tests.sh` pin
   each mapping.
 
@@ -585,20 +585,27 @@ What Cursor picks up with no conversion: `~/.claude/skills/` (all skills) and
   Cursor ignores Claude's `tools:` allowlist, so without these copies the reviewer and
   auditor could edit files. Same-named files here take precedence over `~/.claude/agents`.
   Models: `haiku` becomes `fast`; everything else becomes `inherit`.
-- `~/.cursor/hooks.json`: the same scripts on Cursor's events. `beforeShellExecution` and
-  `beforeReadFile` → guard.sh (answers with Cursor's allow/deny JSON), `afterFileEdit` → lint.sh,
-  `stop` → checkpoint.sh, `sessionStart` → session-start.sh. An existing hooks.json is
-  never overwritten; the new one lands next to it as `hooks.json.new-<timestamp>`.
+- `~/.cursor/hooks.json`: the same scripts on Cursor's events. `preToolUse`,
+  `beforeShellExecution` and `beforeReadFile` → guard.sh with `failClosed: true` (a crash or
+  timeout blocks instead of allowing; answers with Cursor's allow/deny JSON), so file writes,
+  deletes and `Task` spawns are checked as well as shell and reads. `preToolUse`,
+  `postToolUse`, `postToolUseFailure` and `subagentStop` → vault-guard.sh. `postToolUse` →
+  lint.sh, whose errors come back to the agent as `additional_context`; `afterFileEdit` →
+  lint.sh as well, for formatting. `stop` → checkpoint.sh, `sessionStart` → session-start.sh.
+  An existing hooks.json is never overwritten; the new one lands next to it as
+  `hooks.json.new-<timestamp>`.
 
 Cursor never reads CLAUDE.md and has no file-based global rules; it reads the project's
 `AGENTS.md`. See "AGENTS.md" below.
 
 Known gaps under Cursor:
-- **Vault-integrity check isn't enforced.** Cursor's hook payloads don't say which
-  subagent is acting, so "subagents can't write task-tree.json or log.jsonl" is prompt
-  discipline there, not a hook.
-- **Lint errors don't reach the agent.** `afterFileEdit` runs after the edit and Cursor
-  ignores its exit code. Files still get formatted; errors surface at `gate.sh`.
+- **Subagent writes are reported, not blocked.** Cursor's tool payloads don't say which
+  subagent is acting, so guard.sh can't refuse a subagent's task-tree.json write up front.
+  vault-guard.sh restores Director-only files when a subagent stops and tells the Director
+  about any vault change it didn't make.
+- **Running twice with third-party configs on.** Cursor's "Include third-party Plugins,
+  Skills, and other configs" toggle also runs `~/.claude/settings.json` hooks, so each
+  script fires twice. Harmless (every script is idempotent), just slower.
 - **Session context injection may not work.** Cursor has a reported bug where
   `sessionStart`'s `additional_context` isn't injected. If the agent doesn't see its
   live slices, it can read `vault/task-tree.json` and `git log` itself.

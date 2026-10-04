@@ -90,9 +90,13 @@ if [ -d "$HOME/.cursor" ] || command -v cursor >/dev/null 2>&1 || [ "${CURSOR:-}
       version: 1,
       hooks: {
         sessionStart:         [{command: ($s + "/session-start.sh")}],
-        beforeShellExecution: [{command: ($s + "/guard.sh")}],
-        beforeReadFile:       [{command: ($s + "/guard.sh")}],
+        preToolUse:           [{command: ($s + "/guard.sh"), failClosed: true}, {command: ($s + "/vault-guard.sh")}],
+        beforeShellExecution: [{command: ($s + "/guard.sh"), failClosed: true}],
+        beforeReadFile:       [{command: ($s + "/guard.sh"), failClosed: true}],
         afterFileEdit:        [{command: ($s + "/lint.sh")}],
+        postToolUse:          [{command: ($s + "/lint.sh")}, {command: ($s + "/vault-guard.sh")}],
+        postToolUseFailure:   [{command: ($s + "/vault-guard.sh")}],
+        subagentStop:         [{command: ($s + "/vault-guard.sh")}],
         stop:                 [{command: ($s + "/checkpoint.sh")}]
       }
     }' > "$hooks_tmp"

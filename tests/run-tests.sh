@@ -2239,6 +2239,102 @@ else
 fi
 rm -rf "$home"
 
+echo "== Cursor generic tool hooks — preToolUse, postToolUse, failClosed =="
+cursor_tool() {
+  local extra="${3:-}"
+  [ -n "$extra" ] || extra='{}'
+  jq -n --arg tool "$1" --argjson input "$2" --argjson x "$extra" \
+    '{hook_event_name: "preToolUse", tool_name: $tool, tool_input: $input, workspace_roots: ["/tmp"]} + $x' | "$GUARD" 2>/dev/null
+}
+status=0; out=$(cursor_tool Write '{"file_path":"vault/risk-policy.json","content":"{}"}') || status=$?
+if [ "$status" -eq 2 ] && [ "$(echo "$out" | jq -r .permission)" = "deny" ]; then
+  ok "guard denies a Cursor preToolUse Write to a human-only file with deny JSON + exit 2"
+else
+  bad "guard denies a Cursor preToolUse Write to a human-only file with deny JSON + exit 2" "exit $status: $out"
+fi
+status=0; out=$(cursor_tool Shell '{"command":"git push --force origin main"}') || status=$?
+if [ "$status" -eq 2 ] && [ "$(echo "$out" | jq -r .permission)" = "deny" ]; then
+  ok "guard denies a force push sent as Cursor's preToolUse Shell"
+else
+  bad "guard denies a force push sent as Cursor's preToolUse Shell" "exit $status: $out"
+fi
+status=0; out=$(cursor_tool Task "$(jq -n --arg p "${FULL_BRIEF/VERIFY: x/}" '{subagent_type: "builder", prompt: $p}')") || status=$?
+if [ "$status" -eq 2 ] && echo "$out" | jq -r .agent_message | grep -q VERIFY; then
+  ok "guard denies a Cursor Task spawn whose builder brief is missing a header"
+else
+  bad "guard denies a Cursor Task spawn whose builder brief is missing a header" "exit $status: $out"
+fi
+status=0; out=$(cursor_tool Read '{"file_path":"src/app.ts"}') || status=$?
+if [ "$status" -eq 0 ] && [ "$(echo "$out" | jq -r .permission)" = "allow" ]; then
+  ok "guard answers an ordinary Cursor preToolUse with allow JSON"
+else
+  bad "guard answers an ordinary Cursor preToolUse with allow JSON" "exit $status: $out"
+fi
+
+repo=$(make_vault_repo)
+out=$(jq -n --arg cwd "$repo" '{hook_event_name: "preToolUse", cwd: $cwd, tool_name: "Shell", tool_input: {command: "npm test"}}' | "$VAULT_GUARD" 2>/dev/null)
+echo '{"slices":[]}' > "$repo/vault/task-tree.json"
+status=0; out2=$(jq -n --arg cwd "$repo" '{hook_event_name: "postToolUse", cwd: $cwd, tool_name: "Shell", tool_input: {command: "npm test"}}' | "$VAULT_GUARD" 2>/dev/null) || status=$?
+if [ "$(echo "$out" | jq -r .permission)" = "allow" ] && [ "$status" -eq 0 ] \
+   && echo "$out2" | jq -r .additional_context | grep -q "VAULT CHANGED"; then
+  ok "vault-guard answers Cursor's preToolUse with allow JSON and reports vault drift as postToolUse additional_context"
+else
+  bad "vault-guard answers Cursor's preToolUse with allow JSON and reports vault drift as postToolUse additional_context" "exit $status: $out / $out2"
+fi
+rm -rf "$repo"
+
+repo=$(make_vault_repo)
+echo '{"slices":[{"id":"S001","status":"done"}]}' > "$repo/vault/task-tree.json"
+out=$(jq -n --arg cwd "$repo" '{hook_event_name: "subagentStop", cwd: $cwd, agent_id: "a1", agent_type: "builder"}' | "$VAULT_GUARD" 2>/dev/null)
+if [ -z "$out" ] && grep -q building "$repo/vault/task-tree.json"; then
+  ok "vault-guard restores task-tree.json on Cursor's subagentStop"
+else
+  bad "vault-guard restores task-tree.json on Cursor's subagentStop" "$out $(cat "$repo/vault/task-tree.json")"
+fi
+rm -rf "$repo"
+
+fakebin=$(mktemp -d)
+tmpdir=$(mktemp -d)
+# shellcheck disable=SC2016
+printf '#!/bin/bash\n[ "$1" = format ] && touch "%s/formatted"\n[ "$1" = check ] && { echo "E999 fake lint error"; exit 1; }\nexit 0\n' "$tmpdir" > "$fakebin/ruff"
+chmod +x "$fakebin/ruff"
+touch "$tmpdir/b.py"
+status=0
+out=$(jq -n --arg f "$tmpdir/b.py" '{hook_event_name: "postToolUse", tool_name: "Write", tool_input: {file_path: $f}}' \
+  | PATH="$fakebin:$PATH" "$LINT" 2>/dev/null) || status=$?
+if [ "$status" -eq 0 ] && echo "$out" | jq -r .additional_context | grep -q "E999"; then
+  ok "lint hands Cursor's postToolUse its errors as additional_context, the field Cursor shows the agent"
+else
+  bad "lint hands Cursor's postToolUse its errors as additional_context, the field Cursor shows the agent" "exit $status: $out"
+fi
+rm -f "$tmpdir/formatted"
+status=0
+for t in Read read_file; do
+  jq -n --arg t "$t" --arg f "$tmpdir/b.py" '{tool_name: $t, tool_input: {file_path: $f, filePath: $f}}' \
+    | PATH="$fakebin:$PATH" "$LINT" >/dev/null 2>&1 || status=$?
+done
+if [ "$status" -eq 0 ] && [ ! -e "$tmpdir/formatted" ]; then
+  ok "lint never formats a file a Cursor or VS Code tool only read (neither runs matchers)"
+else
+  bad "lint never formats a file a Cursor or VS Code tool only read (neither runs matchers)" "exit $status"
+fi
+rm -rf "$fakebin" "$tmpdir"
+
+home=$(mktemp -d)
+mkdir -p "$home/.cursor"
+HOME="$home" "$INSTALL" >/dev/null 2>&1
+ch="$home/.cursor/hooks.json"
+missing=$(jq -r '.hooks[][].command' "$ch" 2>/dev/null | while IFS= read -r c; do [ -x "$c" ] || echo "$c"; done)
+if [ -z "$missing" ] && jq -e '.version == 1
+     and ([.hooks.preToolUse[], .hooks.beforeShellExecution[], .hooks.beforeReadFile[]] | map(select(.command | endswith("/guard.sh"))) | length == 3 and all(.failClosed == true))
+     and ([.hooks.preToolUse[], .hooks.postToolUse[], .hooks.postToolUseFailure[], .hooks.subagentStop[]] | map(select(.command | endswith("/vault-guard.sh"))) | length == 4)
+     and ([.hooks.postToolUse[] | select(.command | endswith("/lint.sh"))] | length == 1)' "$ch" >/dev/null 2>&1; then
+  ok "install wires guard (fail-closed), vault-guard and lint onto Cursor's generic tool events"
+else
+  bad "install wires guard (fail-closed), vault-guard and lint onto Cursor's generic tool events" "missing: $missing $(cat "$ch" 2>/dev/null)"
+fi
+rm -rf "$home"
+
 echo ""
 echo "$pass passed, $fail failed"
 [ "$fail" -eq 0 ]
