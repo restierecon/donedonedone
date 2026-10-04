@@ -1849,6 +1849,20 @@ lg "$repo" S001 gate FAIL --patch-id "$P1"
 expect_block "a later gate FAIL blocks the merge" guard_in "$repo" 'git merge --squash slice/S001'
 lg "$repo" S001 gate PASS --patch-id "$P1"
 expect_allow "allows the merge again once the gate passes" guard_in "$repo" 'git merge --squash slice/S001'
+same_second() { jq -cn --arg v "$1" --arg p "$P1" --arg t "$2" '{ts: $t, slice: "S001", event: "gate", verdict: $v, patch_id: $p}' >> "$repo/vault/log.jsonl"; }
+same_second PASS 2099-01-01T00:00:00Z
+same_second FAIL 2099-01-01T00:00:00Z
+same_second PASS 2099-01-01T00:00:00Z
+expect_allow "a PASS repeated in the same second after a FAIL still counts (identical lines are not collapsed)" guard_in "$repo" 'git merge --squash slice/S001'
+wt=$(mktemp -d) && rmdir "$wt"
+git -C "$repo" worktree add -q "$wt" slice/S001
+jq -cn --arg p "$P1" '{ts: "2099-01-01T00:00:01Z", slice: "S001", event: "gate", verdict: "FAIL", patch_id: $p}' >> "$wt/vault/log.jsonl"
+git -C "$wt" commit -q -am "log a FAIL on the slice branch"
+git -C "$repo" worktree remove --force "$wt"
+expect_block "a verdict committed only on the slice branch still counts at merge" guard_in "$repo" 'git merge --squash slice/S001'
+same_second PASS 2099-01-01T00:00:02Z
+expect_allow "a later PASS in the working log supersedes the branch's FAIL" guard_in "$repo" 'git merge --squash slice/S001'
+git -C "$repo" branch -q -f slice/S001 slice/S001~1
 slice_change "$repo" S001 "more low work"
 expect_block "verdicts on an older patch_id don't carry to a changed diff" guard_in "$repo" 'git merge --squash slice/S001'
 
