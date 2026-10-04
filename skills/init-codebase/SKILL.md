@@ -44,6 +44,8 @@ only what is missing, and always run step 6.
    `- gate.lint: <cmd>` · `- gate.types: <cmd>` · `- gate.test: <cmd>` (with a
    per-test timeout where the runner offers one, e.g. `--timeout=10` with pytest-timeout) ·
    `- gate.build: <cmd>` (quiet flags preferred, e.g. `pytest -q`) ·
+   `- gate.a11y: <cmd>` for a project with a UI — an accessibility check that exits
+   non-zero on a WCAG 2 AA violation (README → Gate commands has a Playwright + axe line) ·
    `- gate.test.focus: <cmd>` with `{}` where test files or ids go (`pytest -q {}`,
    `npx vitest run {}`, `go test {}`) — builders run only their own tests mid-loop ·
    `- gate.test.budget: <seconds>` — the gate flags a full suite slower than this ·

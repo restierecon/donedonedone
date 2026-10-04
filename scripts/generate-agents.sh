@@ -122,8 +122,8 @@ builder to follow ~/.claude/skills/harden-diff/SKILL.md (brief-contract skill). 
 carries a risk assessment: run ~/.claude/scripts/risk-gate.sh assess <ID> before its
 builder and risk-gate.sh check <ID> merge before merging, and follow
 ~/.claude/skills/risk-gate/SKILL.md for the controls each class needs. Human approvals
-come only from approve-risk.sh run by a human in their own terminal; never run it or
-write its ledger. Record gate verdicts, vault/task-tree.json updates and
+come only from approve-risk.sh and approve-ui.sh run by a human in their own terminal;
+never run them or write their ledger. Record gate verdicts, vault/task-tree.json updates and
 vault/log.jsonl lines (through ~/.claude/scripts/log-event.sh) yourself; subagents
 report back as text only, never editing vault files directly.
 AGENT
