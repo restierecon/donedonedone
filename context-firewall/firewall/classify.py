@@ -210,7 +210,7 @@ def classify_argv(argv: List[str]) -> Optional[Classification]:
         return Classification("package-manager", f"{tool} {args[0]}", argv=argv)
     if tool in BUILD_TOOLS:
         return Classification("build", tool, argv=argv)
-    if tool in LINT_TOOLS or tool == "gate":
+    if tool in LINT_TOOLS:
         return Classification("lint", tool, argv=argv)
     if tool in ("ls",):
         return Classification("directory-listing", "ls", "medium", argv=argv)
@@ -263,6 +263,8 @@ def classify(result: CommandResult) -> Classification:
         for i, (sep, segment) in enumerate(segments):
             argv = words(segment)
             if not argv:
+                continue
+            if sep == "|" and base(argv[0]) in ("cat", "tee") and len(argv) == 1:
                 continue
             if sep == "|" and base(argv[0]) in FILTERS:
                 filtered = True

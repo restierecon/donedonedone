@@ -387,6 +387,32 @@ else
 fi
 rm -rf "$repo"
 
+repo=$(make_gate_repo '- gate.test: cat fixture.txt; exit 1')
+cp "$ROOT/context-firewall/tests/fixtures/pytest_fail.out" "$repo/fixture.txt"
+git -C "$repo" add fixture.txt && git -C "$repo" commit -qm fixture
+out=$(cd "$repo" && "$GATE" test 2>&1)
+lines=$(echo "$out" | wc -l)
+if echo "$out" | grep -q "^  \[ddd\] test | art-" && echo "$out" | grep -q "1. test_session_refresh" \
+   && echo "$out" | grep -q "Passed: 60  Failed: 3  Skipped: 1" && [ "$lines" -le 33 ] && [ -d "$repo/.ddd" ] \
+   && ! git -C "$repo" status --porcelain --untracked-files=all | grep -q '\.ddd'; then
+  ok "failing test step excerpt goes through the context firewall, store stays out of git"
+else
+  bad "failing test step excerpt goes through the context firewall, store stays out of git" "$lines lines: $out"
+fi
+out=$(cd "$repo" && GATE_FIREWALL=0 "$GATE" test 2>&1)
+if ! echo "$out" | grep -q "\[ddd\]" && echo "$out" | grep -q "AssertionError"; then
+  ok "GATE_FIREWALL=0 keeps the plain grep excerpt"
+else
+  bad "GATE_FIREWALL=0 keeps the plain grep excerpt" "$out"
+fi
+out=$(cd "$repo" && GATE_EXCERPT_LINES=8 "$GATE" test 2>&1)
+if [ "$(echo "$out" | grep -c '^  ')" -le 8 ] && echo "$out" | grep -q "^  \[ddd\] \(full output\|omitted\)"; then
+  ok "firewall excerpt respects GATE_EXCERPT_LINES and keeps the retrieval line"
+else
+  bad "firewall excerpt respects GATE_EXCERPT_LINES and keeps the retrieval line" "$out"
+fi
+rm -rf "$repo"
+
 repo=$(make_gate_repo '- gate.test: seq 1 100; exit 1')
 out=$(cd "$repo" && "$GATE" test 2>&1)
 if echo "$out" | grep -q "  100$" && ! echo "$out" | grep -q "  1$"; then
