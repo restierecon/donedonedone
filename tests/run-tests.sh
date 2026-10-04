@@ -665,8 +665,10 @@ if [ "$status" -eq 1 ] && echo "$out" | grep -q "must not depend on app/web"; th
 else
   bad "arch reads rules from main, so a slice can't relax them on its branch" "exit $status: $out"
 fi
-rel_gate=$(cd "$repo/app" && python3 -c 'import os, sys; print(os.path.relpath(sys.argv[1]))' "$GATE")
-status=0; out=$(cd "$repo/app" && "$rel_gate" arch 2>&1) || status=$?
+tools="$repo-tools"
+cp -R "$ROOT/scripts" "$tools"
+status=0; out=$(cd "$repo/app" && "../../$(basename "$tools")/gate.sh" arch 2>&1) || status=$?
+rm -rf "$tools"
 if [ "$status" -eq 1 ] && echo "$out" | grep -q "must not depend on app/web" && ! echo "$out" | grep -qi "can't open file"; then
   ok "arch works when gate.sh is called by a relative path from a subdirectory"
 else
