@@ -181,6 +181,22 @@ require_hardening() {
     || block "BLOCKED: slice $slice crosses trust boundaries ($triggers), so the builder brief's STANDING must name the harden-diff skill (brief-contract skill)."
 }
 
+require_ui_contract() {
+  local tree slice contract root standing
+  tree=$(task_tree) || return 0
+  slice=$(printf '%s\n' "$1" | sed -n 's/^SLICE:[[:space:]]*\([^[:space:]]*\).*/\1/p' | head -1)
+  contract=$(jq -r --arg id "$slice" '[.slices[]? | select(.id == $id)][0].ui_contract // empty | strings' "$tree" 2>/dev/null) \
+    || block "BLOCKED: vault/task-tree.json is not valid JSON, so the builder brief's UI contract can't be checked. Failing closed."
+  [ -n "$contract" ] || return 0
+  root=$(dirname "$(dirname "$tree")")
+  head -1 "$root/$contract" 2>/dev/null | grep -q '^status: approved ' \
+    || block "BLOCKED: slice $slice builds to $contract, which is missing or not approved by the human. Take it back to /grill (ui-prototype skill)."
+  standing=$(printf '%s\n' "$1" | awk '/^[A-Z]+:/ { on = ($0 ~ /^STANDING:/) } on')
+  if ! printf '%s\n' "$standing" | grep -q 'frontend-ui-engineering' || ! printf '%s\n' "$standing" | grep -qF "$contract"; then
+    block "BLOCKED: slice $slice renders UI, so the builder brief's STANDING must name the frontend-ui-engineering skill and the approved contract $contract (brief-contract skill)."
+  fi
+}
+
 require_risk() {
   local tree slice dir out status class brief_class model
   tree=$(task_tree) || return 0
@@ -216,6 +232,7 @@ if [ "$tool" = "Agent" ] || [ "$tool" = "Task" ]; then
         && block "BLOCKED: brief is missing required header(s): ${missing[*]}. See the brief-contract skill; STANDING pastes vault/standing-orders.md verbatim."
       if [ "$(field '.tool_input.subagent_type')" = "builder" ]; then
         require_hardening "$prompt"
+        require_ui_contract "$prompt"
         require_risk "$prompt"
       fi
       ;;

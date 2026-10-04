@@ -43,7 +43,10 @@ No slice exists without a grill. Every feature, bugfix and refactor — however 
 goes through /grill first (you run it; it's a conversation with the human). The grill
 is where every human decision gets made: UX calls, one-way doors, schema choices,
 anything touching money or deleting user data. Decisions with a load-bearing rationale
-become ADRs in vault/decisions/. Then dispatch `planner` with the grilled spec; it
+become ADRs in vault/decisions/. Work that changes anything a user sees or clicks gets
+a UI contract and, for a new screen or flow, a clickable prototype that the human
+approves in the grill (ui-prototype skill) — no slice designs UI on its own. Then
+dispatch `planner` with the grilled spec; it
 writes vault/plan-draft.json and returns a table. If it reports OPEN
 QUESTIONS, take them back to /grill — never plan around a gap. Run
 `~/.claude/scripts/check-plan.sh` on the draft (it must exit 0; a FAIL goes back to the

@@ -18,7 +18,7 @@ setting() {
   printf '%s\n' "${value%\`}"
 }
 
-known="lint types test build crap mutation markers comments scope"
+known="lint types test build a11y crap mutation markers comments scope"
 steps=() targets=() focused=0
 while [ $# -gt 0 ]; do
   if [ "$1" = "--" ]; then

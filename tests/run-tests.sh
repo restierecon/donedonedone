@@ -312,10 +312,16 @@ cat > "$hrepo/vault/task-tree.json" <<'JSON'
             "rationale": "share link reads another cart", "hazards": [],
             "scope": {"change": "add a share link", "files": ["src/*"], "unchanged": [], "regressions": []},
             "rollback": "revert the squash commit"}},
-  {"id": "S022", "title": "Shopper can print a cart"}
+  {"id": "S022", "title": "Shopper can print a cart"},
+  {"id": "S023", "title": "Shopper can see an empty cart", "auditor_triggers": [], "ui_contract": "vault/ui/cart/contract.md",
+   "risk": {"dimensions": {"blast_radius": 1, "reversibility": 1, "security": 3, "complexity": 1, "uncertainty": 1},
+            "rationale": "renders the cart", "hazards": [],
+            "scope": {"change": "empty cart state", "files": ["src/*"], "unchanged": [], "regressions": []},
+            "rollback": "revert the squash commit"}}
 ]}
 JSON
-(cd "$hrepo" && "$ROOT/scripts/risk-gate.sh" assess S020 >/dev/null && "$ROOT/scripts/risk-gate.sh" assess S021 >/dev/null)
+(cd "$hrepo" && "$ROOT/scripts/risk-gate.sh" assess S020 >/dev/null && "$ROOT/scripts/risk-gate.sh" assess S021 >/dev/null \
+  && "$ROOT/scripts/risk-gate.sh" assess S023 >/dev/null)
 git -C "$hrepo" worktree add -q -b slice/S021 "$hrepo/.worktrees/S021" 2>/dev/null
 guard_builder_in() {
   jq -n --arg cwd "$1" --arg p "$2" \
@@ -348,6 +354,19 @@ reviewer_status=0
 jq -n --arg cwd "$hrepo" --arg p "${HARD_BRIEF/harden-diff/a}" \
   '{tool_name: "Agent", cwd: $cwd, tool_input: {subagent_type: "reviewer", prompt: $p}}' | "$GUARD" >/dev/null 2>&1 || reviewer_status=$?
 if [ "$reviewer_status" -eq 0 ]; then ok "only builder briefs carry the harden-diff check"; else bad "only builder briefs carry the harden-diff check" "exit $reviewer_status"; fi
+UI_BRIEF=$'SLICE: S023\nGOAL: x\nSCOPE: x\nACCEPTANCE: x\nVERIFY: x\nFORBIDDEN: x\nREPORT: x\nRISK: moderate\nSTANDING:\n1. Load the frontend-ui-engineering skill and build to vault/ui/cart/contract.md.'
+expect_block "a UI slice whose contract file is missing is blocked" guard_builder_in "$hrepo" "$UI_BRIEF"
+mkdir -p "$hrepo/vault/ui/cart"
+printf 'status: draft\n# Cart\n' > "$hrepo/vault/ui/cart/contract.md"
+expect_block "a UI slice whose contract is still a draft is blocked" guard_builder_in "$hrepo" "$UI_BRIEF"
+printf 'status: approved 2026-10-04 — "yes"\n# Cart\n' > "$hrepo/vault/ui/cart/contract.md"
+expect_allow "a UI slice with an approved contract named in STANDING spawns" guard_builder_in "$hrepo" "$UI_BRIEF"
+expect_block "a UI slice's STANDING must name frontend-ui-engineering" \
+  guard_builder_in "$hrepo" "${UI_BRIEF/frontend-ui-engineering/a}"
+expect_block "a UI slice's STANDING must name the contract path" \
+  guard_builder_in "$hrepo" "${UI_BRIEF/vault\/ui\/cart\/contract.md/the contract}"
+expect_allow "a UI slice dispatched into a worktree reads the contract from the main checkout" \
+  guard_builder_in "$hrepo/.worktrees/S021" "$UI_BRIEF"
 printf 'not json' > "$hrepo/vault/task-tree.json"
 expect_block "an unreadable task-tree.json fails closed" guard_builder_in "$hrepo" "$HARD_BRIEF"
 git -C "$hrepo" worktree remove --force "$hrepo/.worktrees/S021" 2>/dev/null
@@ -437,6 +456,26 @@ if [ "$status" -eq 1 ] && echo "$out" | grep -q "uncommitted changes" && [ "$sta
   ok "a dirty tree fails, so a PASS always describes the SHA it names"
 else
   bad "a dirty tree fails, so a PASS always describes the SHA it names" "exit $status/$status_allowed: $out"
+fi
+rm -rf "$repo"
+
+repo=$(make_gate_repo '- gate.test: echo ok
+- gate.a11y: echo "button#save: color-contrast violation (2.1:1)"; exit 1')
+status=0; out=$(cd "$repo" && "$GATE" 2>&1) || status=$?
+if [ "$status" -eq 1 ] && echo "$out" | grep -q "^a11y FAIL" && echo "$out" | grep -q "color-contrast" \
+   && echo "$out" | grep -q "^GATE: FAIL (a11y)"; then
+  ok "a failing gate.a11y fails the gate and shows the violation"
+else
+  bad "a failing gate.a11y fails the gate and shows the violation" "exit $status: $out"
+fi
+rm -rf "$repo"
+
+repo=$(make_gate_repo '- gate.test: echo ok')
+out=$(cd "$repo" && "$GATE" a11y 2>&1)
+if echo "$out" | grep -q "^a11y SKIP (no gate.a11y"; then
+  ok "a project without gate.a11y skips the a11y step"
+else
+  bad "a project without gate.a11y skips the a11y step" "$out"
 fi
 rm -rf "$repo"
 
@@ -1142,7 +1181,7 @@ PLANS=$(mktemp -d)
 cat > "$PLANS/good.json" <<'JSON'
 [
   {"id": "S010", "title": "Shopper can save a cart", "so_that": "I don't lose my picks",
-   "status": "todo", "depends_on": [], "auditor_triggers": [], "acceptance_criteria": ["cart persists across reload"],
+   "status": "todo", "depends_on": [], "auditor_triggers": [], "ui_contract": null, "acceptance_criteria": ["cart persists across reload"],
    "verify": "tests/cart_test.sh", "retry_count": 0,
    "risk": {"dimensions": {"blast_radius": 1, "reversibility": 1, "security": 0, "complexity": 1, "uncertainty": 1},
             "rationale": "one module, a pattern the cart already uses", "hazards": [],
@@ -1151,7 +1190,8 @@ cat > "$PLANS/good.json" <<'JSON'
             "rollback": "revert the squash commit; nothing stored server-side"},
    "gates": {"self_review": null, "automated": "PASS", "reviewer": "APPROVED", "auditor": "skip: no auth, data access or external calls"}},
   {"id": "S011", "title": "Shopper can share a saved cart", "so_that": "a friend can buy for me",
-   "status": "todo", "depends_on": ["S010", "S001", "S002"], "auditor_triggers": ["data-access", "user-input"], "acceptance_criteria": ["share link opens the cart"],
+   "status": "todo", "depends_on": ["S010", "S001", "S002"], "auditor_triggers": ["data-access", "user-input"],
+   "ui_contract": "vault/ui/cart-share/contract.md", "acceptance_criteria": ["share link opens the cart"],
    "verify": "tests/share_test.sh", "retry_count": 0,
    "risk": {"dimensions": {"blast_radius": 2, "reversibility": 1, "security": 3, "complexity": 2, "uncertainty": 1},
             "rationale": "a link exposes one cart to another user", "hazards": [],
@@ -1174,6 +1214,8 @@ proj=$(mktemp -d)
 mkdir -p "$proj/vault"
 printf '# Stories\n\n## S001 — User can sign in\nAs a user...\n' > "$proj/vault/stories.md"
 echo '{"slices": [{"id": "S002"}]}' > "$proj/vault/task-tree.json"
+mkdir -p "$proj/vault/ui/cart-share"
+printf 'status: approved 2026-10-04 — "ship it"\n# Share cart\n' > "$proj/vault/ui/cart-share/contract.md"
 expect_plan() {
   local out status=0
   out=$(cd "$proj" && "$CHECK_PLAN" "$PLANS/$2" 2>&1) || status=$?
@@ -1196,6 +1238,14 @@ expect_plan "missing verify step fails"    missing-verify.json  1 "S010: missing
 expect_plan "missing auditor_triggers fails, so no slice skips the hardening decision" missing-triggers.json 1 "S010: auditor_triggers must be an array"
 expect_plan "an auditor trigger outside the vocabulary fails" unknown-trigger.json 1 'S011: auditor_trigger "database" unknown'
 expect_plan "a missing draft fails"        nope.json            1 "no plan at"
+jq '.[0] |= del(.ui_contract)'          "$PLANS/good.json" > "$PLANS/missing-ui.json"
+jq '.[1].ui_contract = "src/ui.md"'     "$PLANS/good.json" > "$PLANS/bad-ui-path.json"
+jq '.[1].ui_contract = "vault/ui/nope/contract.md"' "$PLANS/good.json" > "$PLANS/absent-ui.json"
+expect_plan "missing ui_contract fails, so no slice skips the UI decision" missing-ui.json 1 "S010: missing ui_contract"
+expect_plan "a ui_contract outside vault/ui/<slug>/contract.md fails" bad-ui-path.json 1 'S011: ui_contract "src/ui.md" must be null'
+expect_plan "a ui_contract that does not exist fails" absent-ui.json 1 "S011: ui_contract vault/ui/nope/contract.md does not exist"
+printf 'status: draft\n# Share cart\n' > "$proj/vault/ui/cart-share/contract.md"
+expect_plan "a draft ui_contract fails until the human approves it" good.json 1 "S011: ui_contract vault/ui/cart-share/contract.md is not approved"
 rm -rf "$proj" "$PLANS"
 if grep -q '^tools: Read, Grep, Glob, Write$' "$ROOT/agents/planner.md"; then ok "planner keeps no shell: the Director runs check-plan.sh"; else bad "planner keeps no shell: the Director runs check-plan.sh" "tools changed"; fi
 for s in clean-diff harden-diff mutation-survivors; do

@@ -21,7 +21,8 @@ and paths to vault/project.md and vault/stories.md.
    are mapping boundaries, not reviewing code — stop reading once boundaries are clear.
 3. Draft slices per the slice-planning skill: "Actor can …" title, `so_that`,
    `depends_on`, `auditor_triggers` (the trust boundaries the slice crosses, `[]` for
-   none — when unsure, list it), ≤ 7 acceptance criteria each, parallel-safety decided per pair. Every
+   none — when unsure, list it), `ui_contract` (the approved contract path the spec
+   names for a slice that renders UI, `null` otherwise), ≤ 7 acceptance criteria each, parallel-safety decided per pair. Every
    slice must be buildable without a human decision; one that isn't means the grill
    left a gap — report it as an open question, don't draft the slice.
 4. Give every slice a `risk` assessment (risk-gate skill): rate the five dimensions 0-4
@@ -33,7 +34,8 @@ and paths to vault/project.md and vault/stories.md.
 5. Write the slices as a JSON array (task-tree.json slice shape) to
    vault/plan-draft.json. That is the only file you write. The Director
    runs `check-plan.sh` on it (fields, "Actor can" title, a `verify` step, every
-   `depends_on` resolving, no cycles, `auditor_triggers` from the known list, no bare
+   `depends_on` resolving, no cycles, `auditor_triggers` from the known list, every
+   `ui_contract` an approved contract file, no bare
    "skip" gate, a valid risk assessment with every hazard its wording suggests
    declared or ruled out); a draft it rejects comes
    back to you with the output.

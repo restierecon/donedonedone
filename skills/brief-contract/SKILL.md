@@ -59,6 +59,12 @@ slice's `auditor_triggers`:
 - no such slice, or no `auditor_triggers` field — the spawn is refused. Copy the
   approved slice into task-tree.json, or add the field, then dispatch.
 
+A slice whose `ui_contract` is set needs one more STANDING order, naming the skill and
+the exact contract path: `<n>. Load the frontend-ui-engineering skill and build to
+vault/ui/<feature-slug>/contract.md (prototype and screenshots beside it).` guard.sh
+refuses the spawn when the order is missing or the contract's first line isn't
+`status: approved …` — an unapproved design goes back to /grill, not to a builder.
+
 ```
 SLICE: S021
 GOAL: Shopper can share a saved cart

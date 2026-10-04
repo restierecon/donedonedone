@@ -113,6 +113,16 @@ Global store (Zustand, Redux)    → Complex client state shared app-wide
 
 **Avoid prop drilling deeper than 3 levels.** If you're passing props through components that don't use them, introduce context or restructure the component tree.
 
+## Building to an Approved UI Contract
+
+When the slice has a UI contract (ui-prototype skill), it is the spec: its states,
+hierarchy, copy and responsive rules are decided, and this skill only says how to
+build them well. Build every state the slice's criteria claim, with the project's
+components and tokens; read the prototype and its screenshots for intent, never copy
+its markup or CSS. Anything in this skill that conflicts with the contract loses to
+the contract; a contract that can't be built as written is a SCOPE-EXPANSION, not a
+redesign.
+
 ## Design System Adherence
 
 ### Avoid the AI Aesthetic
@@ -129,6 +139,12 @@ AI-generated UI has recognizable patterns. Avoid all of them:
 | Oversized padding everywhere | Equal generous padding destroys visual hierarchy and wastes screen space | Consistent spacing scale |
 | Stock card grids | Uniform grids are a layout shortcut that ignores information priority and scanning patterns | Purpose-driven layouts |
 | Shadow-heavy design | Layered shadows add depth that competes with content and slows rendering on low-end devices | Subtle or no shadows unless the design system specifies |
+| Colored side stripe on cards and alerts | A 2-4px left border is a stock accent that carries no meaning | A label, an icon with text, or whitespace |
+| Backdrop blur on every overlay and navbar | Costs rendering time and drops text over busy backgrounds below 4.5:1 contrast | Solid surfaces from the design system; blur only where the design asks for it |
+| Hero metric (big number, label, three small stats, gradient) | The same template on every product, whatever the data means | Show the numbers the actor acts on, in the order they act on them |
+| Modal for every action | Breaks the user's place, adds focus-trap and close handling, hides context | Inline edit, a side panel, or a new page; a dialog only for a blocking decision |
+| Every action the same weight | Edit, Delete, Share, Archive, Export as equal buttons give no hint what matters | One primary action; secondary actions quieter or in a menu; destructive ones apart |
+| Default prose styling | Unbranded type with the stock link blue and gray code blocks | The project's type scale, link and code styles |
 
 ### Spacing and Layout
 

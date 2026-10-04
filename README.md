@@ -41,14 +41,15 @@ builds. Nothing after the grill should need you unless a slice escalates.
 |---|---|
 | CLAUDE.md | Global protocol — the main session IS the Director |
 | agents/ | planner · builder · reviewer · auditor · retro (least-privilege tools, model-per-agent) |
-| skills/ | protocol-native: grill · slice-planning · risk-gate · parallel-dispatch · architecture-review · learning-loop · test-speed · crap-hotspots · mutation-survivors · clean-diff · harden-diff · blast-radius · brief-contract · `/init-codebase` · `/harvest` · `/create-verification-skill` · `/maintain-verification-skill` (opt-in, `/`-only: a project-local `verify-*` skill that lets the reviewer reach live-verified evidence) — plus a general engineering-practice library, a principles index (19 pstack principles, read on demand) and pstack's prose skills: unslop · technical-writing (docs/README/ADR work) (see Credits) |
+| skills/ | protocol-native: grill · ui-prototype · slice-planning · risk-gate · parallel-dispatch · architecture-review · learning-loop · test-speed · crap-hotspots · mutation-survivors · clean-diff · harden-diff · blast-radius · brief-contract · `/init-codebase` · `/harvest` · `/create-verification-skill` · `/maintain-verification-skill` (opt-in, `/`-only: a project-local `verify-*` skill that lets the reviewer reach live-verified evidence) — plus a general engineering-practice library, a principles index (19 pstack principles, read on demand) and pstack's prose skills: unslop · technical-writing (docs/README/ADR work) (see Credits) |
 | settings.json | Permission deny/ask lists + hooks on 6 events + env that keeps Claude Code on Windows in Git Bash |
-| scripts/ | guard.sh (PreToolUse) · vault-guard.sh (Pre/PostToolUse, SubagentStop — restores Director-only files) · lint.sh (PostToolUse) · checkpoint.sh (Stop) · session-start.sh (SessionStart) · crap-score.py (lizard + coverage report → CRAP lines for `gate.crap`) · mutation-report.py (mutation tool report → mutant lines for `gate.mutation`) · gate.sh (quiet lint/types/test/build runner + diff-scoped CRAP, mutation, TODO/FIXME and no-comments checks) · find-comments.sh (the comment detector behind that check) · log-event.sh (the Director's structured log.jsonl writer) · risk-gate.sh (scores each slice's risk, judges builder spawns and merges) · approve-risk.sh (the human's approval command — refuses inside an agent) · check-plan.sh (the Director's lint for a planner draft: fields, "Actor can" titles, resolvable acyclic `depends_on`, `auditor_triggers` from a fixed list, gates as a verdict or `skip: <reason>`) · generate-agents.sh (Copilot/Cursor agents, install-time) · agents-md.sh (protocol block in a project's AGENTS.md, for Cursor/Copilot) |
+| scripts/ | guard.sh (PreToolUse) · vault-guard.sh (Pre/PostToolUse, SubagentStop — restores Director-only files) · lint.sh (PostToolUse) · checkpoint.sh (Stop) · session-start.sh (SessionStart) · crap-score.py (lizard + coverage report → CRAP lines for `gate.crap`) · mutation-report.py (mutation tool report → mutant lines for `gate.mutation`) · gate.sh (quiet lint/types/test/build/a11y runner + diff-scoped CRAP, mutation, TODO/FIXME and no-comments checks) · find-comments.sh (the comment detector behind that check) · log-event.sh (the Director's structured log.jsonl writer) · risk-gate.sh (scores each slice's risk, judges builder spawns and merges) · approve-risk.sh (the human's approval command — refuses inside an agent) · check-plan.sh (the Director's lint for a planner draft: fields, "Actor can" titles, resolvable acyclic `depends_on`, `auditor_triggers` from a fixed list, every `ui_contract` an approved contract, gates as a verdict or `skip: <reason>`) · generate-agents.sh (Copilot/Cursor agents, install-time) · agents-md.sh (protocol block in a project's AGENTS.md, for Cursor/Copilot) |
 | tests/ | Test harness for the hook scripts — run after any script edit; CI runs it too |
 | evals/ | 16-task benchmark + scorecard — run before trusting, re-run after any manifest edit |
 
 ## The loop
-grill (mandatory; settles every human decision) → planner (vertical slices, all
+grill (mandatory; settles every human decision, including UI: a contract and a
+clickable prototype the human approves before any slice is planned) → planner (vertical slices, all
 autonomous, each with a risk assessment) → risk gate (score, class, controls; critical
 stops for a human) → per slice on its own branch:
 builder (minimum necessary change, test-first) → gate.sh once (incl. `scope`) → reviewer
@@ -128,6 +129,36 @@ Enforcement is mechanical, not prose:
 
 The dial below adds oversight on top; it never removes a control the risk class requires.
 
+## UI prototype gate
+Left alone, a builder designs UI from its training data's average: card grids, side
+stripes, modals for everything, the happy path only. So UI is decided in the grill,
+by the human, before planning (`ui-prototype` skill):
+
+1. The grill classifies UI impact: **none**, **minor** (a change that follows a pattern
+   the app already has) or **major** (a new screen, flow or layout).
+2. Minor and major work get a contract, `vault/ui/<feature>/contract.md`: purpose,
+   hierarchy, every state (loading, empty, error, ...) with its copy, interactions,
+   responsive rules, tokens and components, accessibility. Major work also gets
+   `prototype.html`, one clickable file that uses the project's tokens and real copy
+   and has a switcher for every state, plus screenshots at 375, 768 and 1280px.
+3. The human approves it explicitly, and the contract's first line becomes
+   `status: approved <date> — "<their words>"`.
+4. Every slice that renders it carries `"ui_contract": "<path>"` (others `null`).
+   `check-plan.sh` refuses a slice whose contract is missing or not approved;
+   `guard.sh` refuses its builder unless STANDING names `frontend-ui-engineering` and
+   the contract path.
+5. The builder builds the states with the project's real components. The reviewer
+   compares each state with the approved screenshots on structure (regions, order,
+   primary action, copy), not pixels: production code never matches a prototype pixel
+   for pixel, so a pixel threshold against the prototype could never pass. A missing
+   state or a changed hierarchy is CRITICAL.
+6. `gate.a11y` (optional, see Gate commands) runs an accessibility checker on every slice.
+
+A contract that turns out to be unbuildable goes back to the grill as a new
+revision. The builder never redesigns it. The approval is recorded by the Director
+from your words in the conversation, not by `approve-risk.sh`. Hold the Director to it
+the way you'd hold it to an ADR.
+
 ## Autonomy dial (`vault/project.md`)
 - **supervised** (default) — every slice pauses for your approval after its gates
 - **semi** — green slices merge; an escalation or an auditor finding pauses the queue
@@ -161,7 +192,18 @@ A third built-in, `scope`, fails a slice branch whose diff leaves the slice's ap
 `risk.scope.files` (see Risk gate); it reports SKIP off a `slice/<ID>` branch or
 without a task tree.
 
-Run `gate.sh test` for one step, no arguments for all nine (the six above plus `crap`, `mutation` and `scope`); a misspelled step name is an
+An optional `a11y` step runs any accessibility checker that exits non-zero on a
+violation, e.g. axe over the app's pages from Playwright:
+
+```markdown
+- gate.a11y: npx playwright test tests/a11y --reporter=line
+```
+
+where each test in `tests/a11y` opens one page in each contract state and asserts
+`(await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa']).analyze()).violations`
+is empty (`@axe-core/playwright`). Without the line it reports SKIP.
+
+Run `gate.sh test` for one step, no arguments for all ten (the seven above plus `crap`, `mutation` and `scope`); a misspelled step name is an
 error, not a SKIP. Full logs land in `.gate/` (gitignored). The gate refuses to run on
 uncommitted changes outside `vault/` so `GATE: PASS @ sha=<sha> patch_id=<id>` always
 describes that SHA. The patch-id hashes the diff against the base outside `vault/`

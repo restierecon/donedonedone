@@ -41,6 +41,14 @@ third-party API) that will run in production, add an explicit acceptance criteri
 for it: "logs entry/exit with a correlation ID" or equivalent. Observability is not
 an afterthought slice — it ships with the behavior it observes.
 
+## UI slices
+A slice that renders any part of an approved UI contract (ui-prototype skill) sets
+`"ui_contract": "vault/ui/<feature-slug>/contract.md"`; every other slice sets
+`"ui_contract": null`. Its acceptance criteria name the contract states it delivers
+(loading, empty, error, ...) — a state no slice claims is a gap in the plan. A UI
+slice whose contract is missing or still `status: draft` can't be drafted: return it
+to /grill.
+
 ## Every slice is autonomous
 There is no human-in-the-loop slice type. The grill settles every decision a human
 would want — ambiguous requirements, UX calls, schema choices that are expensive to
@@ -74,7 +82,7 @@ Normally run by the `planner` agent, which writes the slices as a JSON array to
 vault/plan-draft.json; the Director copies approved slices into
 vault/task-tree.json. Slice shape:
 { "id": "S00n", "title": "Actor can ...", "so_that": "...",
-  "status": "todo", "depends_on": [], "auditor_triggers": [], "acceptance_criteria": ["..."],
+  "status": "todo", "depends_on": [], "auditor_triggers": [], "ui_contract": null, "acceptance_criteria": ["..."],
   "verify": "the command or demo that proves the criteria", "retry_count": 0,
   "risk": {"dimensions": {"blast_radius": 1, "reversibility": 1, "security": 0, "complexity": 1, "uncertainty": 1},
            "rationale": "...", "hazards": [], "ruled_out": {},
