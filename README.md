@@ -45,7 +45,7 @@ builds. Nothing after the grill should need you unless a slice escalates.
 | settings.json | Permission deny/ask lists + hooks on 6 events + env that keeps Claude Code on Windows in Git Bash |
 | scripts/ | guard.sh (PreToolUse) · vault-guard.sh (Pre/PostToolUse, SubagentStop — restores Director-only files) · lint.sh (PostToolUse) · checkpoint.sh (Stop) · session-start.sh (SessionStart) · crap-score.py (lizard + coverage report → CRAP lines for `gate.crap`) · gate.sh (quiet lint/types/test/build runner + diff-scoped CRAP, TODO/FIXME and no-comments checks) · find-comments.sh (the comment detector behind that check) · log-event.sh (the Director's structured log.jsonl writer) · check-plan.sh (the Director's lint for a planner draft: fields, "Actor can" titles, resolvable acyclic `depends_on`, gates as a verdict or `skip: <reason>`) · generate-agents.sh (Copilot/Cursor agents, install-time) · agents-md.sh (protocol block in a project's AGENTS.md, for Cursor/Copilot) |
 | tests/ | Test harness for the hook scripts — run after any script edit; CI runs it too |
-| evals/ | 10-task benchmark + scorecard — run before trusting, re-run after any manifest edit |
+| evals/ | 14-task benchmark + scorecard — run before trusting, re-run after any manifest edit |
 
 ## The loop
 grill (mandatory; settles every human decision) → planner (vertical slices, all
