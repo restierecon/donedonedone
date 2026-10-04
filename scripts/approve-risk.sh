@@ -1,4 +1,6 @@
 #!/bin/bash
+# shellcheck source=/dev/null
+[ -f "$(dirname "$0")/jq-text.sh" ] && . "$(dirname "$0")/jq-text.sh"
 
 usage() {
   echo "usage: approve-risk.sh <authorize|merge|downgrade> <slice-id>" >&2

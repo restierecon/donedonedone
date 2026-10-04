@@ -667,6 +667,9 @@ nothing below. CI runs the whole test harness on Windows (Git Bash) and macOS
   and an older clone checked out with Git's default CRLF line endings can't run them.
 - **Your projects** can stay CRLF. gate.sh strips the `\r` that Git for Windows leaves
   on every `gate.*` line in `vault/project.md`.
+- **jq** from winget is a native `jq.exe`, which ends every output line with `\r\n`.
+  `scripts/jq-text.sh` detects that once per script and strips the `\r`, so IDs,
+  hashes, patch-ids and paths from jq compare equal (it keeps jq's exit status).
 - **Claude Code** uses Git Bash for its Bash tool when Git for Windows is installed. Set
   the path explicitly, since hooks have been reported to fall back to cmd.exe without it.
   In `~/.claude/settings.json`:

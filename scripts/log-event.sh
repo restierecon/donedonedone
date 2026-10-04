@@ -1,4 +1,6 @@
 #!/bin/bash
+# shellcheck source=/dev/null
+[ -f "$(dirname "$0")/jq-text.sh" ] && . "$(dirname "$0")/jq-text.sh"
 
 EVENTS="builder gate reviewer auditor merge tier3 escalation correction retro risk scope rollback"
 CATEGORIES="criterion-unmet test-quality test-speed speculative-abstraction error-handling dead-code duplication scope-creep comments contract-mismatch dependency security logging gate-failure merge-conflict ambiguous-criteria human-correction scope-expansion risk-underestimate other"
