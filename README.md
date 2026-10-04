@@ -43,7 +43,7 @@ builds. Nothing after the grill should need you unless a slice escalates.
 | agents/ | planner · builder · reviewer · auditor · scribe · retro (least-privilege tools, model-per-agent) |
 | skills/ | protocol-native: grill · slice-planning · parallel-dispatch · compaction · architecture-review · learning-loop · test-speed · crap-hotspots · `/init-vault` · `/harvest` — plus a general engineering-practice library (see Credits) |
 | settings.json | Permission deny/ask lists + hooks on 6 events + env that keeps Claude Code on Windows in Git Bash |
-| scripts/ | guard.sh (PreToolUse) · vault-guard.sh (Pre/PostToolUse, SubagentStop — restores Director-only files) · lint.sh (PostToolUse) · checkpoint.sh (Stop) · session-start.sh (SessionStart) · gate.sh (quiet lint/types/test/build runner + diff-scoped CRAP, TODO/FIXME and no-comments checks) · find-comments.sh (the comment detector behind that check) · log-event.sh (the Director's structured log.jsonl writer) · generate-agents.sh (Copilot/Cursor agents, install-time) · agents-md.sh (protocol block in a project's AGENTS.md, for Cursor/Copilot) |
+| scripts/ | guard.sh (PreToolUse) · vault-guard.sh (Pre/PostToolUse, SubagentStop — restores Director-only files) · lint.sh (PostToolUse) · checkpoint.sh (Stop) · session-start.sh (SessionStart) · crap-score.py (lizard + coverage report → CRAP lines for `gate.crap`) · gate.sh (quiet lint/types/test/build runner + diff-scoped CRAP, TODO/FIXME and no-comments checks) · find-comments.sh (the comment detector behind that check) · log-event.sh (the Director's structured log.jsonl writer) · generate-agents.sh (Copilot/Cursor agents, install-time) · agents-md.sh (protocol block in a project's AGENTS.md, for Cursor/Copilot) |
 | tests/ | Test harness for the hook scripts — run after any script edit; CI runs it too |
 | evals/ | 10-task benchmark + scorecard — run before trusting, re-run after any manifest edit |
 
@@ -135,11 +135,10 @@ CRAP (Change Risk Anti-Patterns) scores each function by complexity and missing
 coverage: `comp² × (1 − cov)³ + comp`, where `comp` is cyclomatic complexity and `cov`
 the covered fraction. A fully covered function scores its complexity; an untested one
 roughly its complexity squared. The metric and the threshold of 30 come from crap4j
-(Alberto Savoia and Bob Evans). Two optional lines turn it on; the scorer is yours
-(see the starting points below):
+(Alberto Savoia and Bob Evans). Two optional lines turn it on:
 
 ```markdown
-- gate.crap: python scripts/crap.py coverage.json
+- gate.crap: python3 ~/.claude/scripts/crap-score.py coverage.lcov src
 - gate.crap.max: 30
 ```
 
@@ -156,12 +155,42 @@ roughly its complexity squared. The metric and the threshold of 30 come from cra
   command just wrote; after a failed `test` it reports SKIP, since that coverage is
   stale. The full output stays in `.gate/crap.log` for the reviewer, which NITs touched
   functions over half the max.
-- The setup ships no scorer: each stack has its own complexity and coverage sources.
-  Starting points, none of them tested here: PHPUnit's Clover report carries a `crap`
-  attribute per method; JaCoCo's XML has per-method complexity and line counters;
-  [lizard](https://github.com/terryyin/lizard) gives per-function complexity and
-  ranges for ~30 languages, to join with coverage.py JSON, Istanbul JSON or LCOV;
-  Go has gocyclo plus `go test -coverprofile`.
+- Any command that prints that format works. The setup ships one:
+  **`crap-score.py <coverage file> [-x <glob>]... [source paths]`**. It takes each
+  function's cyclomatic complexity and line range from
+  [lizard](https://github.com/terryyin/lizard) (`pip install lizard`; covers Java,
+  JavaScript/TypeScript/JSX/TSX, Python and ~25 more languages) and its coverage from the
+  report your tests already write: LCOV, Cobertura XML, JaCoCo XML or coverage.py JSON,
+  detected from the file. It needs Python 3 and lizard, and nothing else.
+  - Coverage is **line** coverage over the function's own lines. It leaves out the first
+    line (a Python `def` runs at import even when the body never does) and the lines of
+    any function nested inside (a React component's handlers are scored on their own).
+    crap4j used path coverage, so scores here can be a little lower on branchy one-liners.
+  - A file the coverage report never mentions counts as untested.
+  - Report paths are matched to source files by their trailing path, so absolute paths
+    (Jest), Windows paths, and JaCoCo's package paths (`shop/Pricing.java`) all resolve.
+  - It skips `node_modules`, `target`, `build`, `dist`, `coverage`, virtualenvs and
+    `vault/`. Add `-x` for anything else (test files that coverage leaves out).
+
+### Per-stack setup
+Every report file the test command writes must be gitignored. Otherwise the next gate
+run sees an untracked file and refuses the dirty tree. On Windows, write `python` or
+`py -3` in place of `python3`. CI runs the first three on every push, against sample
+projects in `tests/fixtures/crap/`, through the real gate (`tests/crap-stacks.sh`).
+Each one must pass a change to tested code and fail an untested complexity-6 function
+at CRAP 42.
+
+| Stack | `gate.test` | `gate.crap` |
+|---|---|---|
+| Python: pytest + coverage.py *(CI)* | `python3 -m coverage run -m pytest -q && python3 -m coverage lcov -q -o coverage.lcov` | `python3 ~/.claude/scripts/crap-score.py coverage.lcov src` |
+| React: Vitest *(CI)* | `npx vitest run --coverage`, with `coverage: { provider: "v8", reporter: ["lcov"], include: ["src/**"] }` in vitest.config | `python3 ~/.claude/scripts/crap-score.py coverage/lcov.info -x '*.test.*' src` |
+| Java: Maven + JaCoCo *(CI)* | `mvn -q -B test`, with jacoco-maven-plugin's `prepare-agent` and its `report` goal bound to the `test` phase (see `tests/fixtures/crap/java/pom.xml`) | `python3 ~/.claude/scripts/crap-score.py target/site/jacoco/jacoco.xml src/main/java` |
+| Python: pytest-cov | `python3 -m pytest -q --cov=src --cov-report=lcov:coverage.lcov` | as above |
+| React: Jest | `npx jest --coverage --coverageReporters=lcov` | `python3 ~/.claude/scripts/crap-score.py coverage/lcov.info -x '*.test.*' src` |
+| Java: Gradle + JaCoCo | `./gradlew test jacocoTestReport`, with `jacocoTestReport { reports { xml.required = true } }` | `python3 ~/.claude/scripts/crap-score.py build/reports/jacoco/test/jacocoTestReport.xml src/main/java` |
+
+The last three rows write the same report formats as the CI-tested rows. Their
+commands are not run in CI.
 
 The step is plain gate.sh, so it behaves the same under Claude Code, Cursor and
 Copilot, including from PowerShell through Git Bash on Windows.
@@ -416,10 +445,12 @@ vault projects, and every vault project carries AGENTS.md.
 
 ## Scripts
 Installed to `~/.claude/scripts/`. Each one's behavior is pinned by a named test in
-`tests/run-tests.sh`.
+`tests/run-tests.sh`; crap-score.py's in `tests/crap-score.sh` (formats) and
+`tests/crap-stacks.sh` (Python, React and Java end to end).
 
 | Script | Usage | What it does |
 |---|---|---|
+| crap-score.py | `crap-score.py <coverage file> [-x <glob>]... [paths]` | Prints `<path>:<start>-<end> <score> <name>` per function for `gate.crap`: lizard complexity joined with LCOV, Cobertura, JaCoCo or coverage.py JSON line coverage. Unknown report format or missing lizard exits non-zero. |
 | gate.sh | `gate.sh [lint\|types\|test\|build\|crap\|markers\|comments ...]` or `gate.sh test -- <targets>` | Refuses a dirty tree (`GATE_ALLOW_DIRTY=1` overrides), an unknown step, or a missing `gate.test`. With `-- <targets>`, runs only those tests through `gate.test.focus` and ends `FOCUSED:`, never `GATE:`. Flags a passing test step slower than `gate.test.budget`. Fails a function the diff touches whose `gate.crap` score is over `gate.crap.max`. Runs the gate one line per step, a ≤ 30-line failure excerpt (`GATE_EXCERPT_LINES`), full log in `.gate/<step>.log`. Exit 0 all pass, 1 otherwise. From a worktree that predates project.md, it reads the main checkout's. |
 | find-comments.sh | `find-comments.sh --base <ref>` or `find-comments.sh <file>...` | Prints `path:line: text` for every comment added since `<ref>`, or in the given files. Exit 1 when it finds one, 2 on bad usage. |
 | log-event.sh | `log-event.sh <ID\|-> <event> <verdict> [--sha S] [--attempt N] [--category C]... [--signal TEXT]...` | Appends one JSON line to the main checkout's `vault/log.jsonl`. Up to 5 signals of 200 chars. Unknown events or categories exit 1 and list the valid ones. Prints `RETRO DUE` when a category recurs across slices. |

@@ -28,8 +28,8 @@ for old in init-vault harvest; do
     echo "  retired commands/$old.md (now the $old skill) → $old.md.bak-$TS"
   fi
 done
-cp "$SRC"/scripts/*.sh "$DEST/scripts/"
-chmod +x "$DEST"/scripts/*.sh
+cp "$SRC"/scripts/*.sh "$SRC"/scripts/*.py "$DEST/scripts/"
+chmod +x "$DEST"/scripts/*.sh "$DEST"/scripts/*.py
 cp -R "$SRC"/skills/* "$DEST/skills/"
 
 rm -f "$DEST/scripts/generate-copilot-agents.sh"
