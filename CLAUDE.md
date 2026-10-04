@@ -53,7 +53,9 @@ run concurrently: load the parallel-dispatch skill before starting a wave
    test. A claim, not evidence: gates 2-3 verify it
 2. Automated: you run `gate.sh` once, in the slice's checkout, at the builder's SHA.
    A test line `over gate.test.budget` still passes: open one pending-review entry
-   for it (test-speed skill) unless one is open — a slice never fixes the suite
+   for it (test-speed skill) unless one is open — a slice never fixes the suite.
+   A `crap` FAIL goes back to the builder; hotspots outside the diff go to the
+   crap-hotspots skill (~/.claude/skills/crap-hotspots/SKILL.md)
 3. Reviewer: APPROVED — hand it the SHA and the gate result line; it re-runs only if
    HEAD moved
 4. Auditor: CLEARED (only if triggers match; otherwise skip)

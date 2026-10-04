@@ -47,9 +47,13 @@ jobs:
           git -C "$demo" config user.email ci@example.com
           git -C "$demo" config user.name ci
           mkdir -p "$demo/vault"
-          printf '%s\n' '# Demo' '## Gate' '- gate.test: echo ok' '- gate.test.focus: printf "<%s>" {}' > "$demo/vault/project.md"
+          printf '%s\n' '# Demo' '## Gate' '- gate.test: echo ok' '- gate.test.focus: printf "<%s>" {}' '- gate.crap: printf "demo.txt:1-1 2.5 f\r\n"' > "$demo/vault/project.md"
           git -C "$demo" add -A
           git -C "$demo" commit -q -m init
+          git -C "$demo" checkout -q -b slice/S001
+          echo touched > "$demo/demo.txt"
+          git -C "$demo" add -A
+          git -C "$demo" commit -q -m "feat: touch demo.txt"
       - name: gate.sh from PowerShell 7 through Git Bash, as AGENTS.md tells Cursor and Copilot
         if: runner.os == 'Windows'
         shell: pwsh
@@ -68,3 +72,19 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit 1 }
           $log = (Get-Content -Raw .gate/test.log).Trim()
           if ($log -ne '<one><two words>') { Write-Error "test.log was: $log"; exit 1 }
+      - name: gate.sh crap step from PowerShell 7 through Git Bash
+        if: runner.os == 'Windows'
+        shell: pwsh
+        working-directory: ${{ runner.temp }}/demo
+        run: |
+          $out = & "$env:ProgramFiles\Git\bin\bash.exe" -c '~/.claude/scripts/gate.sh crap'
+          if ($LASTEXITCODE -ne 0) { Write-Error ($out -join "`n"); exit 1 }
+          if (-not ($out -match 'crap PASS .* highest touched: f 2\.5')) { Write-Error ($out -join "`n"); exit 1 }
+      - name: gate.sh crap step from Windows PowerShell 5.1 through Git Bash
+        if: runner.os == 'Windows'
+        shell: powershell
+        working-directory: ${{ runner.temp }}/demo
+        run: |
+          $out = & "$env:ProgramFiles\Git\bin\bash.exe" -c '~/.claude/scripts/gate.sh crap'
+          if ($LASTEXITCODE -ne 0) { Write-Error ($out -join "`n"); exit 1 }
+          if (-not ($out -match 'crap PASS .* highest touched: f 2\.5')) { Write-Error ($out -join "`n"); exit 1 }

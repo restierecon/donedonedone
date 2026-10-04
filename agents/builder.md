@@ -79,7 +79,10 @@ A clean failure report is success; thrashing is not.
 Checks with a command behind them, not a second review of your own design — the
 reviewer reads the diff cold, and grading your own work is where leniency creeps in.
 1. `~/.claude/scripts/gate.sh` (all steps) passes at the SHA you report. Its `markers`
-   step fails on any TODO/FIXME/XXX your diff adds, its `comments` step on any comment.
+   step fails on any TODO/FIXME/XXX your diff adds, its `comments` step on any comment,
+   its `crap` step on any function you touch scoring over `gate.crap.max`. Fix a `crap`
+   FAIL by testing the function's untested branches or splitting it — never by
+   excluding paths, lowering what `gate.crap` measures, or raising the max.
 2. Every criterion names the test that proves it. No such test = NOT MET, whatever
    the code does.
 A failing check → fix and re-run; each re-run counts toward Termination's limit.
