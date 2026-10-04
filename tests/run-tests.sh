@@ -2164,6 +2164,81 @@ rm -rf "$cg"
 if grep -q '/create-verification-skill' "$ROOT/skills/init-codebase/SKILL.md"; then ok "init-codebase offers /create-verification-skill"; else bad "init-codebase offers /create-verification-skill" "missing"; fi
 if grep -q '/maintain-verification-skill' "$ROOT/skills/architecture-review/SKILL.md"; then ok "architecture-review suggests /maintain-verification-skill"; else bad "architecture-review suggests /maintain-verification-skill" "missing"; fi
 
+echo "== VS Code Local harness — native hooks file, its payloads and its edit tools =="
+patch_input() { jq -n --arg p "$1" '{input: ("*** Begin Patch\n*** Update File: " + $p + "\n@@\n-a\n+b\n*** End Patch")}'; }
+expect_block "guard blocks a .env edit inside VS Code's multi_replace_string_in_file" \
+  copilot_call multi_replace_string_in_file '{"replacements":[{"filePath":"src/a.ts"},{"filePath":"config/.env"}]}'
+expect_block "guard blocks a risk-policy edit sent as VS Code's apply_patch" \
+  copilot_call apply_patch "$(patch_input vault/risk-policy.json)"
+expect_allow "guard allows an ordinary apply_patch" \
+  copilot_call apply_patch "$(patch_input src/app.ts)"
+expect_block "guard blocks a builder brief missing headers sent as VS Code's runSubagent" \
+  copilot_call runSubagent "$(jq -n --arg p "${FULL_BRIEF/VERIFY: x/}" '{agentName: "builder", prompt: $p}')"
+expect_allow "guard allows a full reviewer brief sent as VS Code's runSubagent" \
+  copilot_call runSubagent "$(jq -n --arg p "$FULL_BRIEF" '{agentName: "reviewer", prompt: $p}')"
+
+fakebin=$(mktemp -d)
+# shellcheck disable=SC2016
+printf '#!/bin/bash\n[ "$1" = check ] && { echo "E999 fake lint error"; exit 1; }\nexit 0\n' > "$fakebin/ruff"
+chmod +x "$fakebin/ruff"
+tmpdir=$(mktemp -d)
+touch "$tmpdir/a.txt" "$tmpdir/b.py"
+status=0
+jq -n --arg a "$tmpdir/a.txt" --arg b "$tmpdir/b.py" '{tool_input: {replacements: [{filePath: $a}, {filePath: $b}]}}' \
+  | PATH="$fakebin:$PATH" "$LINT" >/dev/null 2>&1 || status=$?
+if [ "$status" -eq 2 ]; then ok "lint checks every file in VS Code's multi_replace_string_in_file"; else bad "lint checks every file in VS Code's multi_replace_string_in_file" "exit $status"; fi
+status=0
+patch_input "$tmpdir/b.py" | jq '{tool_input: .}' | PATH="$fakebin:$PATH" "$LINT" >/dev/null 2>&1 || status=$?
+if [ "$status" -eq 2 ]; then ok "lint checks a file VS Code's apply_patch updates"; else bad "lint checks a file VS Code's apply_patch updates" "exit $status"; fi
+rm -rf "$fakebin" "$tmpdir"
+
+repo=$(make_repo)
+echo '{"slices":[{"id":"S004","title":"User can sync","status":"todo","depends_on":[]}]}' > "$repo/vault/task-tree.json"
+out=$(cd /tmp && jq -n --arg r "$repo" '{hook_event_name: "SessionStart", source: "new", cwd: $r}' | "$SESSION_START" 2>/dev/null)
+if [ "$(echo "$out" | jq -r '.hookSpecificOutput.hookEventName' 2>/dev/null)" = "SessionStart" ] \
+   && echo "$out" | jq -r '.hookSpecificOutput.additionalContext' | grep -q "S004 · todo"; then
+  ok "session-start answers a SessionStart payload with hookSpecificOutput JSON, which VS Code and Claude Code both read"
+else
+  bad "session-start answers a SessionStart payload with hookSpecificOutput JSON, which VS Code and Claude Code both read" "$out"
+fi
+rm -rf "$repo"
+
+repo=$(make_vault_repo)
+vs_edit() {
+  jq -n --arg cwd "$repo" --arg e "$1" '{hook_event_name: $e, cwd: $cwd, tool_name: "multi_replace_string_in_file",
+    tool_input: {replacements: [{filePath: "src/a.ts"}, {filePath: "vault/task-tree.json"}]}}' | "$VAULT_GUARD" 2>&1
+}
+vs_edit PreToolUse >/dev/null
+echo '{"slices":[]}' > "$repo/vault/task-tree.json"
+status=0; out=$(vs_edit PostToolUse) || status=$?
+if [ "$status" -eq 0 ] && grep -q '"slices":\[\]' "$repo/vault/task-tree.json"; then
+  ok "vault-guard keeps the Director's task-tree.json edit made through VS Code's multi_replace_string_in_file"
+else
+  bad "vault-guard keeps the Director's task-tree.json edit made through VS Code's multi_replace_string_in_file" "exit $status: $out"
+fi
+rm -rf "$repo"
+
+home=$(mktemp -d)
+HOME="$home" "$INSTALL" >/dev/null 2>&1
+hooks="$home/.copilot/hooks/donedonedone.json"
+missing=$(jq -r '.hooks[][].command' "$hooks" 2>/dev/null | while IFS= read -r c; do [ -x "$c" ] || echo "$c"; done)
+if jq -e '(has("version") | not)
+      and (.hooks | keys == ["PostToolUse","PreToolUse","SessionStart","Stop","SubagentStop"])
+      and ([.hooks[][] | .type == "command" and .timeout == 60] | all)' "$hooks" >/dev/null 2>&1 \
+   && [ -z "$missing" ] && jq -r '.hooks.PreToolUse[].command' "$hooks" | grep -q 'guard.sh$'; then
+  ok "install writes VS Code's native hooks file with absolute paths to the installed scripts"
+else
+  bad "install writes VS Code's native hooks file with absolute paths to the installed scripts" "missing: $missing $(cat "$hooks" 2>/dev/null)"
+fi
+echo '{"mine": true}' > "$hooks"
+HOME="$home" "$INSTALL" >/dev/null 2>&1
+if [ "$(jq -r .mine "$hooks")" = "true" ] && ls "$home"/.copilot/hooks/donedonedone.json.new-* >/dev/null 2>&1; then
+  ok "install keeps an existing VS Code hooks file and drops the new one beside it, outside *.json"
+else
+  bad "install keeps an existing VS Code hooks file and drops the new one beside it, outside *.json" "$(ls "$home/.copilot/hooks")"
+fi
+rm -rf "$home"
+
 echo ""
 echo "$pass passed, $fail failed"
 [ "$fail" -eq 0 ]

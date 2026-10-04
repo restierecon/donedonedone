@@ -7,7 +7,7 @@ input=""
 [ "$mode" = "hook" ] && input=$(cat)
 event="" agent_id="" agent_type="" tool="" cmd="" file_path="" cwd=""
 if [ -n "$input" ]; then
-  eval "$(echo "$input" | jq -r '@sh "event=\(.hook_event_name // "") agent_id=\(.agent_id // "") agent_type=\(.agent_type // "") tool=\(.tool_name // "") cmd=\(.tool_input.command // "") file_path=\(.tool_input.file_path // .tool_input.filePath // .tool_input.notebook_path // .tool_input.path // "") cwd=\(.cwd // "")"' 2>/dev/null)"
+  eval "$(echo "$input" | jq -r '@sh "event=\(.hook_event_name // "") agent_id=\(.agent_id // "") agent_type=\(.agent_type // "") tool=\(.tool_name // "") cmd=\(.tool_input.command // "") file_path=\([.tool_input.file_path, .tool_input.filePath, .tool_input.notebook_path, .tool_input.path, .tool_input.replacements[]?.filePath?, (.tool_input.input | strings | scan("(?m)^\\*\\*\\* (?:Add|Update|Delete) File: (.+)$") | .[0])] | map(strings) | unique | join("\n")) cwd=\(.cwd // "")"' 2>/dev/null)"
 fi
 if [ -n "$cwd" ] && [ -d "$cwd" ]; then cd "$cwd" || exit 0; fi
 
