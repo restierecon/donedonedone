@@ -7,6 +7,8 @@ from ..models import Compressed, Section
 from .common import clip, lines_of
 
 WITH_LINE = re.compile(r"^((?:[A-Za-z]:[\\/])?[^:\n]*?[^:\n\s]):(\d+):(?:(\d+):)?(.*)$")
+PATHISH = re.compile(r"[./\\]|^[A-Z][\w-]*file$|^[\w-]+$")
+TIMESTAMPISH = re.compile(r"^\[?\d{4}-\d{2}-\d{2}[T ]\d{2}$|^\d{2}$")
 CONTEXT_LINE = re.compile(r"^((?:[A-Za-z]:[\\/])?[^:\n]*?\.[\w]+)-(\d+)-(.*)$")
 HEADING_MATCH = re.compile(r"^(\d+)(?::(\d+))?:(.*)$")
 HEADING_CONTEXT = re.compile(r"^(\d+)-(.*)$")
@@ -42,6 +44,15 @@ def query_of(argv: List[str]) -> str:
     return ""
 
 
+def _pathish(path: str) -> bool:
+    return bool(PATHISH.search(path)) and not TIMESTAMPISH.match(path) and " " not in path.strip()
+
+
+def _located(line: str) -> bool:
+    match = WITH_LINE.match(line)
+    return bool(match) and _pathish(match.group(1))
+
+
 def parse(lines: List[str]) -> Tuple[Dict[str, List[Tuple[int, int, str]]], List[str], str]:
     files: Dict[str, List[Tuple[int, int, str]]] = {}
     order: List[str] = []
@@ -55,7 +66,7 @@ def parse(lines: List[str]) -> Tuple[Dict[str, List[Tuple[int, int, str]]], List
         files[path].append((raw_line, line_no, text))
 
     non_empty = [line for line in lines if line.strip()]
-    flat = sum(1 for line in non_empty[:500] if WITH_LINE.match(line))
+    flat = sum(1 for line in non_empty[:500] if _located(line))
     headed = sum(1 for line in non_empty[:500] if HEADING_MATCH.match(line))
     if headed > flat:
         style = "heading"
@@ -77,7 +88,7 @@ def parse(lines: List[str]) -> Tuple[Dict[str, List[Tuple[int, int, str]]], List
         style = "path:line"
         for idx, line in enumerate(lines, 1):
             match = WITH_LINE.match(line)
-            if match:
+            if match and _pathish(match.group(1)):
                 add(match.group(1), idx, int(match.group(2)), match.group(4))
         return files, order, style
     bare = sum(1 for line in non_empty[:500] if NO_LINE.match(line))
@@ -136,6 +147,15 @@ def compress(text: str, ctx: Dict) -> Optional[Compressed]:
         rest = ranked[max_files:]
         body.append(f"... {len(rest)} more files with {sum(len(files[p]) for p in rest)} matches (--section matches)")
     out.sections.append(Section("matches", body, priority=10, title=None, verbatim=False, essential=True))
+    used = {raw for hits in files.values() for raw, _, _ in hits}
+    other = [(i, line) for i, line in enumerate(lines, 1) if line.strip() and i not in used and not (style == "heading" and (line.strip() in files or line == "--" or HEADING_CONTEXT.match(line)))]
+    if other:
+        out.headline.append(f"Lines that are not matches: {len(other)} (shown below)")
+        out.sections.append(Section("other", [f"L{i}: {clip(text, ctx['maxLineChars'])}" for i, text in other[:40]] + ([f"... {len(other) - 40} more (--section other)"] if len(other) > 40 else []), priority=8, title="NOT MATCH LINES", essential=True))
+    if not total and not other:
+        return None
+    if total < 0.5 * (total + len(other)):
+        return None
     out.related_files.extend(order[:200])
     return out
 

@@ -222,7 +222,7 @@ TRACE_JS = re.compile(r"^\s+at .+[:(].+:\d+(:\d+)?\)?\s*$", re.M)
 TRACE_JAVA = re.compile(r"^\s+at [\w$.<>]+\([\w$.]+:\d+\)\s*$", re.M)
 TRACE_NET = re.compile(r"^\s+at .+ in .+:line \d+\s*$", re.M)
 DIFF = re.compile(r"^diff --git ", re.M)
-LOCATION = re.compile(r"^[^\s:][^:\n]*:\d+[:-]", re.M)
+LOCATION = re.compile(r"^(?:[A-Za-z]:)?[^\s:]*[\w-]\.[A-Za-z][\w]{0,7}:\d+[:-]", re.M)
 TIMESTAMP = re.compile(r"^\[?\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}|^\[?\d{2}:\d{2}:\d{2}", re.M)
 TEST_SUMMARY = re.compile(
     r"^=+ .*\b(passed|failed|error)\b.* in [\d.]+s|^Tests?:\s+\d+|^Test Files\s+\d+|^\s*\d+ passing \(|^# (pass|fail) \d+|"
@@ -248,10 +248,10 @@ def sniff(text: str) -> Optional[Classification]:
         return Classification("stack-trace", "contains a stack trace", "medium")
     lines = head.splitlines()[:2000]
     if len(lines) >= 20:
-        if len(LOCATION.findall(head)) >= 0.6 * len(lines):
-            return Classification("search", "path:line lines", "low")
         if sum(1 for line in lines if TIMESTAMP.match(line)) >= 0.5 * len(lines):
             return Classification("generic-log", "timestamped lines", "medium")
+        if len(LOCATION.findall(head)) >= 0.6 * len(lines):
+            return Classification("search", "path:line lines", "low")
     return None
 
 

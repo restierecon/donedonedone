@@ -9,7 +9,7 @@ CLIP_MARK = re.compile(r" \.\.\.\[\+\d+ chars\]$")
 LINE_REF = re.compile(r"^L\d+(-\d+)?: ")
 SIGNAL = re.compile(
     r"\b(error|errors|fail|failed|failure|fatal|exception|panic|traceback|denied|refused|not found|"
-    r"cannot|could not|unable to|segmentation fault|timed? ?out|warn|warning|deprecated)\b",
+    r"cannot|could not|unable to|segmentation fault|timed? ?out|warn|warning|deprecated)\b|[\u2716\u2717\u2718\u274c\u00d7\u26a0]",
     re.I,
 )
 STRONG = re.compile(r"\b(error|fail|failed|failure|fatal|exception|panic|traceback|denied|refused|cannot|unable to)\b", re.I)
