@@ -5,8 +5,8 @@
     {
       "id": "grill",
       "label": "Grill",
-      "description": "Settle every human decision before any slice exists: UX calls, one-way doors, risks. Decisions become ADRs; boundaries become fitness rules.",
-      "uses": ["skill:grill", "skill:codebase-map"],
+      "description": "Settle every human decision before any slice exists: UX calls (with an approved UI contract and prototype), one-way doors, risks. Decisions become ADRs; boundaries become fitness rules.",
+      "uses": ["skill:grill", "skill:ui-prototype", "script:approve-ui.sh", "skill:codebase-map"],
       "next": ["plan"]
     },
     {

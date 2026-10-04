@@ -195,6 +195,15 @@ expect_allow "subagent may diff task-tree.json"          guard_bash 'git diff ma
 expect_block "planner's vault writes go through Write, not the shell" guard_bash 'cp draft vault/plan-draft.json' planner
 
 echo "== checkpoint.sh — branch discipline =="
+approve_ui_in() {
+  local h
+  h=$(cd "$1" && "$ROOT/scripts/ui-approval.sh" hash "$2") || return 1
+  mkdir -p "$1/.git/donedonedone"
+  jq -cn --arg c "$2" --arg h "$h" --arg d "${3:-approve}" --arg ts "${4:-2026-10-04T10:00:00Z}" \
+    '{ts: $ts, kind: "ui", contract: $c, decision: $d, hash: $h, approver: "human@test", user: "human"}' \
+    >> "$1/.git/donedonedone/approvals.jsonl"
+}
+
 make_repo() {
   local d
   d=$(mktemp -d)
@@ -312,10 +321,16 @@ cat > "$hrepo/vault/task-tree.json" <<'JSON'
             "rationale": "share link reads another cart", "hazards": [],
             "scope": {"change": "add a share link", "files": ["src/*"], "unchanged": [], "regressions": []},
             "rollback": "revert the squash commit"}},
-  {"id": "S022", "title": "Shopper can print a cart"}
+  {"id": "S022", "title": "Shopper can print a cart"},
+  {"id": "S023", "title": "Shopper can see an empty cart", "auditor_triggers": [], "ui_contract": "vault/ui/cart/contract.md",
+   "risk": {"dimensions": {"blast_radius": 1, "reversibility": 1, "security": 3, "complexity": 1, "uncertainty": 1},
+            "rationale": "renders the cart", "hazards": [],
+            "scope": {"change": "empty cart state", "files": ["src/*"], "unchanged": [], "regressions": []},
+            "rollback": "revert the squash commit"}}
 ]}
 JSON
-(cd "$hrepo" && "$ROOT/scripts/risk-gate.sh" assess S020 >/dev/null && "$ROOT/scripts/risk-gate.sh" assess S021 >/dev/null)
+(cd "$hrepo" && "$ROOT/scripts/risk-gate.sh" assess S020 >/dev/null && "$ROOT/scripts/risk-gate.sh" assess S021 >/dev/null \
+  && "$ROOT/scripts/risk-gate.sh" assess S023 >/dev/null)
 git -C "$hrepo" worktree add -q -b slice/S021 "$hrepo/.worktrees/S021" 2>/dev/null
 guard_builder_in() {
   jq -n --arg cwd "$1" --arg p "$2" \
@@ -348,6 +363,28 @@ reviewer_status=0
 jq -n --arg cwd "$hrepo" --arg p "${HARD_BRIEF/harden-diff/a}" \
   '{tool_name: "Agent", cwd: $cwd, tool_input: {subagent_type: "reviewer", prompt: $p}}' | "$GUARD" >/dev/null 2>&1 || reviewer_status=$?
 if [ "$reviewer_status" -eq 0 ]; then ok "only builder briefs carry the harden-diff check"; else bad "only builder briefs carry the harden-diff check" "exit $reviewer_status"; fi
+UI_BRIEF=$'SLICE: S023\nGOAL: x\nSCOPE: x\nACCEPTANCE: x\nVERIFY: x\nFORBIDDEN: x\nREPORT: x\nRISK: moderate\nSTANDING:\n1. Load the frontend-ui-engineering skill and build to vault/ui/cart/contract.md.'
+expect_block "a UI slice whose contract file is missing is blocked" guard_builder_in "$hrepo" "$UI_BRIEF"
+mkdir -p "$hrepo/vault/ui/cart"
+printf '# Cart\n' > "$hrepo/vault/ui/cart/contract.md"
+expect_block "a UI slice whose contract no human approved is blocked" guard_builder_in "$hrepo" "$UI_BRIEF"
+approve_ui_in "$hrepo" vault/ui/cart/contract.md
+expect_allow "a UI slice with an approved contract named in STANDING spawns" guard_builder_in "$hrepo" "$UI_BRIEF"
+expect_block "a UI slice's STANDING must name frontend-ui-engineering" \
+  guard_builder_in "$hrepo" "${UI_BRIEF/frontend-ui-engineering/a}"
+expect_block "a UI slice's STANDING must name the contract path" \
+  guard_builder_in "$hrepo" "${UI_BRIEF/vault\/ui\/cart\/contract.md/the contract}"
+expect_allow "a UI slice dispatched into a worktree reads the contract from the main checkout" \
+  guard_builder_in "$hrepo/.worktrees/S021" "$UI_BRIEF"
+echo '<p>changed</p>' > "$hrepo/vault/ui/cart/prototype.html"
+expect_block "a UI slice is blocked once its folder changes after approval" guard_builder_in "$hrepo" "$UI_BRIEF"
+msg=$(jq -n --arg cwd "$hrepo" --arg p "$UI_BRIEF" \
+  '{tool_name: "Agent", cwd: $cwd, tool_input: {subagent_type: "builder", prompt: $p}}' | "$GUARD" 2>&1 >/dev/null)
+if echo "$msg" | grep -q 'approve-ui.sh vault/ui/cart/contract.md'; then
+  ok "the block names the approve-ui.sh command the human runs"
+else
+  bad "the block names the approve-ui.sh command the human runs" "got: $msg"
+fi
 printf 'not json' > "$hrepo/vault/task-tree.json"
 expect_block "an unreadable task-tree.json fails closed" guard_builder_in "$hrepo" "$HARD_BRIEF"
 git -C "$hrepo" worktree remove --force "$hrepo/.worktrees/S021" 2>/dev/null
@@ -437,6 +474,26 @@ if [ "$status" -eq 1 ] && echo "$out" | grep -q "uncommitted changes" && [ "$sta
   ok "a dirty tree fails, so a PASS always describes the SHA it names"
 else
   bad "a dirty tree fails, so a PASS always describes the SHA it names" "exit $status/$status_allowed: $out"
+fi
+rm -rf "$repo"
+
+repo=$(make_gate_repo '- gate.test: echo ok
+- gate.a11y: echo "button#save: color-contrast violation (2.1:1)"; exit 1')
+status=0; out=$(cd "$repo" && "$GATE" 2>&1) || status=$?
+if [ "$status" -eq 1 ] && echo "$out" | grep -q "^a11y FAIL" && echo "$out" | grep -q "color-contrast" \
+   && echo "$out" | grep -q "^GATE: FAIL (a11y)"; then
+  ok "a failing gate.a11y fails the gate and shows the violation"
+else
+  bad "a failing gate.a11y fails the gate and shows the violation" "exit $status: $out"
+fi
+rm -rf "$repo"
+
+repo=$(make_gate_repo '- gate.test: echo ok')
+out=$(cd "$repo" && "$GATE" a11y 2>&1)
+if echo "$out" | grep -q "^a11y SKIP (no gate.a11y"; then
+  ok "a project without gate.a11y skips the a11y step"
+else
+  bad "a project without gate.a11y skips the a11y step" "$out"
 fi
 rm -rf "$repo"
 
@@ -1193,13 +1250,48 @@ else
 fi
 rm -rf "$gen"
 
+echo "== ui-approval.sh / approve-ui.sh — human-only UI approval =="
+APPROVE_UI="$ROOT/scripts/approve-ui.sh"
+UI_CHECK="$ROOT/scripts/ui-approval.sh"
+urepo=$(make_repo)
+mkdir -p "$urepo/vault/ui/notes"
+printf '# Notes\n' > "$urepo/vault/ui/notes/contract.md"
+echo '<p>proto</p>' > "$urepo/vault/ui/notes/prototype.html"
+ui_check() { (cd "$urepo" && "$UI_CHECK" check "${1:-vault/ui/notes/contract.md}" 2>&1); }
+status=0; out=$(ui_check) || status=$?
+if [ "$status" -eq 1 ] && echo "$out" | grep -q "never approved"; then ok "an unapproved contract is NOT APPROVED"; else bad "an unapproved contract is NOT APPROVED" "exit $status: $out"; fi
+approve_ui_in "$urepo" vault/ui/notes/contract.md
+status=0; out=$(ui_check) || status=$?
+if [ "$status" -eq 0 ] && echo "$out" | grep -q "^UI: APPROVED vault/ui/notes/contract.md hash=.* by human@test"; then ok "a human approval of the current folder is APPROVED"; else bad "a human approval of the current folder is APPROVED" "exit $status: $out"; fi
+mkdir -p "$urepo/vault/ui/notes/shots" && echo png > "$urepo/vault/ui/notes/shots/empty-375.png"
+status=0; out=$(ui_check) || status=$?
+if [ "$status" -eq 1 ] && echo "$out" | grep -q "changed since"; then ok "adding a file to the folder after approval invalidates it"; else bad "adding a file to the folder after approval invalidates it" "exit $status: $out"; fi
+rm -rf "$urepo/vault/ui/notes/shots"
+status=0; ui_check >/dev/null || status=$?
+if [ "$status" -eq 0 ]; then ok "restoring the approved folder restores the approval"; else bad "restoring the approved folder restores the approval" "exit $status"; fi
+approve_ui_in "$urepo" vault/ui/notes/contract.md deny 2026-10-04T11:00:00Z
+status=0; out=$(ui_check) || status=$?
+if [ "$status" -eq 1 ] && echo "$out" | grep -q "last decision was 'deny'"; then ok "a later denial overrides an earlier approval"; else bad "a later denial overrides an earlier approval" "exit $status: $out"; fi
+status=0; out=$(ui_check src/ui.md) || status=$?
+if [ "$status" -eq 2 ] && echo "$out" | grep -q "must be vault/ui/<feature-slug>/contract.md"; then ok "a contract path outside vault/ui fails closed"; else bad "a contract path outside vault/ui fails closed" "exit $status: $out"; fi
+lines_before=$(wc -l < "$urepo/.git/donedonedone/approvals.jsonl")
+status=0; out=$(cd "$urepo" && CLAUDECODE=1 "$APPROVE_UI" vault/ui/notes/contract.md 2>&1) || status=$?
+if [ "$status" -eq 1 ] && echo "$out" | grep -q "agent's shell"; then ok "approve-ui.sh refuses inside an agent's shell"; else bad "approve-ui.sh refuses inside an agent's shell" "exit $status: $out"; fi
+status=0; out=$(cd "$urepo" && echo "APPROVE UI notes" | env -u CLAUDECODE "$APPROVE_UI" vault/ui/notes/contract.md 2>&1) || status=$?
+if [ "$status" -eq 1 ] && echo "$out" | grep -q "interactive terminal" && [ "$(wc -l < "$urepo/.git/donedonedone/approvals.jsonl")" -eq "$lines_before" ]; then
+  ok "approve-ui.sh refuses piped input and writes nothing"
+else
+  bad "approve-ui.sh refuses piped input and writes nothing" "exit $status: $out"
+fi
+rm -rf "$urepo"
+
 echo "== check-plan.sh — plan draft validation =="
 CHECK_PLAN="$ROOT/scripts/check-plan.sh"
 PLANS=$(mktemp -d)
 cat > "$PLANS/good.json" <<'JSON'
 [
   {"id": "S010", "title": "Shopper can save a cart", "so_that": "I don't lose my picks",
-   "status": "todo", "depends_on": [], "auditor_triggers": [], "acceptance_criteria": ["cart persists across reload"],
+   "status": "todo", "depends_on": [], "auditor_triggers": [], "ui_contract": null, "acceptance_criteria": ["cart persists across reload"],
    "verify": "tests/cart_test.sh", "retry_count": 0,
    "risk": {"dimensions": {"blast_radius": 1, "reversibility": 1, "security": 0, "complexity": 1, "uncertainty": 1},
             "rationale": "one module, a pattern the cart already uses", "hazards": [],
@@ -1208,7 +1300,8 @@ cat > "$PLANS/good.json" <<'JSON'
             "rollback": "revert the squash commit; nothing stored server-side"},
    "gates": {"self_review": null, "automated": "PASS", "reviewer": "APPROVED", "auditor": "skip: no auth, data access or external calls"}},
   {"id": "S011", "title": "Shopper can share a saved cart", "so_that": "a friend can buy for me",
-   "status": "todo", "depends_on": ["S010", "S001", "S002"], "auditor_triggers": ["data-access", "user-input"], "acceptance_criteria": ["share link opens the cart"],
+   "status": "todo", "depends_on": ["S010", "S001", "S002"], "auditor_triggers": ["data-access", "user-input"],
+   "ui_contract": "vault/ui/cart-share/contract.md", "acceptance_criteria": ["share link opens the cart"],
    "verify": "tests/share_test.sh", "retry_count": 0,
    "risk": {"dimensions": {"blast_radius": 2, "reversibility": 1, "security": 3, "complexity": 2, "uncertainty": 1},
             "rationale": "a link exposes one cart to another user", "hazards": [],
@@ -1228,9 +1321,13 @@ jq '.[0] |= del(.verify)'               "$PLANS/good.json" > "$PLANS/missing-ver
 jq '.[0] |= del(.auditor_triggers)'     "$PLANS/good.json" > "$PLANS/missing-triggers.json"
 jq '.[1].auditor_triggers = ["database"]' "$PLANS/good.json" > "$PLANS/unknown-trigger.json"
 proj=$(mktemp -d)
+git -C "$proj" init -q -b main
 mkdir -p "$proj/vault"
 printf '# Stories\n\n## S001 — User can sign in\nAs a user...\n' > "$proj/vault/stories.md"
 echo '{"slices": [{"id": "S002"}]}' > "$proj/vault/task-tree.json"
+mkdir -p "$proj/vault/ui/cart-share"
+printf '# Share cart\n' > "$proj/vault/ui/cart-share/contract.md"
+approve_ui_in "$proj" vault/ui/cart-share/contract.md
 expect_plan() {
   local out status=0
   out=$(cd "$proj" && "$CHECK_PLAN" "$PLANS/$2" 2>&1) || status=$?
@@ -1253,6 +1350,14 @@ expect_plan "missing verify step fails"    missing-verify.json  1 "S010: missing
 expect_plan "missing auditor_triggers fails, so no slice skips the hardening decision" missing-triggers.json 1 "S010: auditor_triggers must be an array"
 expect_plan "an auditor trigger outside the vocabulary fails" unknown-trigger.json 1 'S011: auditor_trigger "database" unknown'
 expect_plan "a missing draft fails"        nope.json            1 "no plan at"
+jq '.[0] |= del(.ui_contract)'          "$PLANS/good.json" > "$PLANS/missing-ui.json"
+jq '.[1].ui_contract = "src/ui.md"'     "$PLANS/good.json" > "$PLANS/bad-ui-path.json"
+jq '.[1].ui_contract = "vault/ui/nope/contract.md"' "$PLANS/good.json" > "$PLANS/absent-ui.json"
+expect_plan "missing ui_contract fails, so no slice skips the UI decision" missing-ui.json 1 "S010: missing ui_contract"
+expect_plan "a ui_contract outside vault/ui/<slug>/contract.md fails" bad-ui-path.json 1 'S011: ui_contract "src/ui.md" must be null'
+expect_plan "a ui_contract that does not exist fails" absent-ui.json 1 "S011: NOT APPROVED vault/ui/nope/contract.md — no such contract"
+echo '<p>v2</p>' > "$proj/vault/ui/cart-share/prototype.html"
+expect_plan "a ui_contract edited after the human approved it fails" good.json 1 "S011: NOT APPROVED vault/ui/cart-share/contract.md"
 rm -rf "$proj" "$PLANS"
 if grep -q '^tools: Read, Grep, Glob, Write$' "$ROOT/agents/planner.md"; then ok "planner keeps no shell: the Director runs check-plan.sh"; else bad "planner keeps no shell: the Director runs check-plan.sh" "tools changed"; fi
 for s in clean-diff harden-diff mutation-survivors; do
@@ -1864,6 +1969,8 @@ expect_allow "anyone may read the approvals ledger"            guard_file Read '
 expect_block "the Director can't append to the ledger in shell" guard_in "$repo" 'echo "{}" >> .git/donedonedone/approvals.jsonl'
 expect_block "the Director can't run approve-risk.sh"          guard_in "$repo" 'scripts/approve-risk.sh merge S001'
 expect_block "the Director can't fake a pty for approve-risk.sh" guard_in "$repo" 'script -qc "approve-risk.sh merge S001" /dev/null'
+expect_block "the Director can't run approve-ui.sh"            guard_in "$repo" 'scripts/approve-ui.sh vault/ui/cart/contract.md'
+expect_allow "the Director may run the read-only ui-approval.sh check" guard_in "$repo" 'scripts/ui-approval.sh check vault/ui/cart/contract.md'
 expect_block "the Director can't re-snapshot human-only files" guard_in "$repo" 'scripts/vault-guard.sh --human-snapshot'
 expect_block "the Director can't overwrite the policy in shell" guard_in "$repo" 'printf x > vault/risk-policy.json'
 expect_allow "the Director may commit the policy a human edited" guard_in "$repo" 'git add vault/risk-policy.json && git commit -m "chore: risk policy"'
@@ -2015,11 +2122,11 @@ fi
 if grep -q 'PRESERVED line' "$ROOT/agents/reviewer.md" && grep -q 'risk.scope.files' "$ROOT/agents/reviewer.md"; then ok "reviewer checks scope and preserved behavior"; else bad "reviewer checks scope and preserved behavior" "missing"; fi
 if grep -q 'Never propose loosening' "$ROOT/agents/retro.md" && grep -q 'risk-gate.sh calibrate' "$ROOT/skills/learning-loop/SKILL.md"; then ok "retro reads calibration and never loosens thresholds"; else bad "retro reads calibration and never loosens thresholds" "missing"; fi
 if grep -q '"risk":' "$ROOT/skills/slice-planning/SKILL.md" && grep -q '^RISK: ' "$ROOT/skills/brief-contract/SKILL.md" && grep -q 'risk' "$ROOT/agents/planner.md"; then ok "planner, slice shape and builder brief carry the risk assessment"; else bad "planner, slice shape and builder brief carry the risk assessment" "missing"; fi
-for f in "$ROOT/scripts/risk-gate.sh" "$ROOT/scripts/approve-risk.sh"; do
+for f in "$ROOT/scripts/risk-gate.sh" "$ROOT/scripts/approve-risk.sh" "$ROOT/scripts/approve-ui.sh" "$ROOT/scripts/ui-approval.sh"; do
   if [ -x "$f" ]; then ok "$(basename "$f") is executable"; else bad "$(basename "$f") is executable" "mode"; fi
 done
 gen=$(mktemp -d); "$GENERATE" copilot "$gen" >/dev/null
-if grep -q 'risk-gate.sh check <ID> merge' "$gen/orchestrator.agent.md" && grep -q 'never run it' "$gen/orchestrator.agent.md"; then ok "the Copilot orchestrator runs the risk gate and never approves"; else bad "the Copilot orchestrator runs the risk gate and never approves" "missing"; fi
+if grep -q 'risk-gate.sh check <ID> merge' "$gen/orchestrator.agent.md" && grep -q 'never run them' "$gen/orchestrator.agent.md" && grep -q 'approve-ui.sh' "$gen/orchestrator.agent.md"; then ok "the Copilot orchestrator runs the risk gate and never approves"; else bad "the Copilot orchestrator runs the risk gate and never approves" "missing"; fi
 rm -rf "$gen"
 
 echo "== validate-manifests.sh — imported skills carry their LICENSE =="

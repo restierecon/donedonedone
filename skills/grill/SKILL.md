@@ -26,12 +26,17 @@ this order, skipping what's already answered:
    rolled back, which secrets, money or personal data does it touch, how many users does
    a mistake reach? The answers become each slice's hazards, rollback and safeguards
    (risk-gate skill), and a critical one needs the human's authorization before it builds.
-7. **Human-judgment sweep** — before stopping, check for anything a builder would have
+7. **UI impact** — does anything a user sees or clicks change? Classify it
+   none / minor / major (ui-prototype skill). Anything but none: run that skill now —
+   contract, prototype, the human's `approve-ui.sh` — before you stop. Layout,
+   hierarchy, states and copy are settled there, not by a builder.
+8. **Human-judgment sweep** — before stopping, check for anything a builder would have
    to ask about: UX wording/layout calls, money, deleting user data, schema choices.
    Every slice this spec produces runs autonomously, so the answer has to be here.
 
 ## Stopping rule
-Stop when a new question would not change the slice plan and item 7 finds nothing.
+Stop when a new question would not change the slice plan, item 7's contract (if any)
+is approved, and item 8 finds nothing.
 Typically 5-10 questions. Grilling is mandatory for all work, but scale it: a one-slice
 bugfix gets one confirming question (expected behavior + what must not change).
 
@@ -55,4 +60,4 @@ vault/flags/pending-review.md, never a silent fix.
 ## Output
 A grilled spec (in conversation, ≤ 30 lines): actor-outcome statement, decided
 behaviors including unhappy paths, the out-of-scope "no" list, one-way doors with the
-decision taken on each. Then dispatch the planner agent with it.
+decision taken on each, and `UI: none` or `UI: <minor|major> — <contract path> (approved)`. Then dispatch the planner agent with it.

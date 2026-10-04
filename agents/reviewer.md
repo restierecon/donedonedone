@@ -84,6 +84,15 @@ the slice branch elsewhere, since sibling worktrees share the same repo.
 - [ ] Nothing in `risk.scope.unchanged` regressed: each behavior has a test in the
       builder's PRESERVED line that exists and ran green — missing = CRITICAL
 - [ ] Frontend calls match backend routes; schema matches models (contract check)
+- [ ] UI slice (the slice has a `ui_contract`): every contract state the criteria
+      claim renders, with the contract's hierarchy, copy and responsive behavior. With
+      a verify-* skill, drive each state at 375, 768 and 1280px and compare it with the
+      approved screenshots beside the contract — judge structure (regions, order,
+      primary action, copy, states), not pixels; real components and data never match
+      a prototype exactly. Without one, judge from the code and say so. A missing state,
+      a changed primary action or hierarchy, or a dialog where the contract says inline
+      = CRITICAL; an AI default from the frontend-ui-engineering table that the contract
+      didn't ask for = CRITICAL; spacing or token drift = NIT
 - [ ] No new dependency without justification; lockfile committed if deps changed
 - [ ] Builder's CLEANED line present. When the brief's STANDING names harden-diff, its
       HARDENED line maps every one of the slice's auditor_triggers to a test that exists

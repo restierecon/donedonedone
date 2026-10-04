@@ -24,6 +24,11 @@ another slice's worktree. If none is given, work on branch `slice/<ID>` as usual
 1. From the acceptance criteria, write tests FIRST. Each criterion maps to at least
    one test that fails while the criterion is unmet. Run them — confirm they fail.
 2. Implement the minimum to go green, layer by layer through the slice.
+   When STANDING names a UI contract, read it, open its prototype.html and screenshots,
+   and build those states, that hierarchy and that copy with the project's own
+   components and tokens — the prototype is a reference, never code to copy. A contract
+   you can't build as written is SCOPE-EXPANSION naming the conflict, never a
+   redesign of your own.
 3. Refactor only within the slice. When STANDING names harden-diff, run the
    harden-diff skill. Then run the clean-diff skill on your diff. Commit, then run
    `~/.claude/scripts/gate.sh` before reporting.
