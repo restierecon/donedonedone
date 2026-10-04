@@ -82,6 +82,7 @@ jobs:
       - name: hook script tests
         run: tests/run-tests.sh
       - uses: actions/setup-python@v6
+        if: ${{ !cancelled() }}
         with:
           python-version: '3.12'
       - name: CRAP scorer tests
@@ -91,9 +92,10 @@ jobs:
       - name: mutation adapter tests
         run: PYTHON=python tests/mutation-report.sh
       - name: context firewall tests
+        if: ${{ !cancelled() }}
         run: python -m unittest discover -s context-firewall/tests -p 'test_*.py'
       - name: ddd.ps1 from PowerShell 7 and Windows PowerShell 5.1
-        if: runner.os == 'Windows'
+        if: ${{ !cancelled() && runner.os == 'Windows' }}
         shell: pwsh
         run: |
           $env:DDD_HOME = Join-Path $env:RUNNER_TEMP 'ddd-store'
