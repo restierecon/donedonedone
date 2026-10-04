@@ -40,7 +40,12 @@ the slice branch elsewhere, since sibling worktrees share the same repo.
       can't show has a test named for it — none = REJECT
 - [ ] No copy-paste duplication from prior slices
 - [ ] No mock-theater; mocks only at system boundaries
-- [ ] Tests target behavior, not implementation details
+- [ ] Tests target behavior: each would fail if imports returned undefined; literal expected
+      values (principles/test-behavior-not-implementation)
+- [ ] Criteria proven on the real artifact (ran it, read the value), not proxies or the
+      builder's report (principles/prove-it-works)
+- [ ] Diff subtracts before it adds: no dead code, stubs or speculative guards left beside
+      new code (principles/subtract-before-you-add)
 - [ ] At least one failure-mode test per criterion that has one
 - [ ] Tests are fast: each criterion proven at the lowest layer that can, at most one
       browser-driven test, no real waiting (sleep, a TTL waited out), no per-test

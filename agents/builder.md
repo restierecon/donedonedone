@@ -58,6 +58,8 @@ with a line range, not whole.
 - Mock-theater tests (asserting only that a mock was called); mock at system
   boundaries only (network, clock, fs) — everything inside runs real
 - Tests coupled to implementation details (break on a private rename = wrong target)
+- Tests that would still pass if every imported function returned undefined — assert a
+  literal observed result (principles/test-behavior-not-implementation)
 - Happy-path-only suites — each criterion with a failure mode gets a failure test
 - Proving a criterion through a slower layer than it needs: module tests and in-process
   API/CLI calls carry the criteria and failure modes; browser-driven tests (seconds
@@ -84,7 +86,8 @@ reviewer reads the diff cold, and grading your own work is where leniency creeps
    FAIL by testing the function's untested branches or splitting it — never by
    excluding paths, lowering what `gate.crap` measures, or raising the max.
 2. Every criterion names the test that proves it. No such test = NOT MET, whatever
-   the code does.
+   the code does. Run the real path and read the actual output — "it compiles" proves
+   nothing (principles/prove-it-works).
 A failing check → fix and re-run; each re-run counts toward Termination's limit.
 
 ## Output Format (≤ 20 lines, never raw tool output)

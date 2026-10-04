@@ -1118,6 +1118,24 @@ else
   bad "reviewer output has BLAST RADIUS and stays <= 20 lines" "out_lines=$out_lines"
 fi
 
+echo "== principles skill — index, references, LICENSE, checklist lines =="
+PR="$ROOT/skills/principles"
+if grep -q 'Copyright (c) 2026 Lauren Tan' "$PR/LICENSE" 2>/dev/null; then ok "principles ships pstack MIT LICENSE"; else bad "principles ships pstack MIT LICENSE" "missing"; fi
+idx=$(grep -oE '\(references/[a-z-]+\.md\)' "$PR/SKILL.md" 2>/dev/null | tr -d '()')
+missing=""; for r in $idx; do [ -f "$PR/$r" ] || missing="$missing $r"; done
+if [ -n "$idx" ] && [ -z "$missing" ]; then ok "every principles index entry resolves"; else bad "every principles index entry resolves" "missing:${missing:- empty index}"; fi
+refs=$(find "$PR/references" -name '*.md' 2>/dev/null | wc -l | tr -d ' ')
+if [ "$refs" -eq "$(echo "$idx" | grep -c .)" ]; then ok "no unindexed principle references"; else bad "no unindexed principle references" "refs=$refs"; fi
+if [ "$refs" -gt 0 ] && ! grep -lE '^(name|description):' "$PR"/references/*.md >/dev/null 2>&1; then ok "principle references carry no frontmatter"; else bad "principle references carry no frontmatter" "found or none"; fi
+if grep -qE '\]\(\.\./|SKILL\.md\)' "$PR"/references/*.md 2>/dev/null; then bad "principle references have no pstack-relative links" "found"; else ok "principle references have no pstack-relative links"; fi
+for p in prove-it-works test-behavior-not-implementation; do
+  if grep -q "principles/$p" "$ROOT/agents/builder.md"; then ok "builder checklist cites $p"; else bad "builder checklist cites $p" "missing"; fi
+done
+for p in prove-it-works test-behavior-not-implementation subtract-before-you-add; do
+  if grep -q "principles/$p" "$ROOT/agents/reviewer.md"; then ok "reviewer checklist cites $p"; else bad "reviewer checklist cites $p" "missing"; fi
+done
+if grep -q 'Tests target behavior, not implementation details' "$ROOT/agents/reviewer.md"; then bad "reviewer test-behavior line replaced, not duplicated" "old line still there"; else ok "reviewer test-behavior line replaced, not duplicated"; fi
+
 echo ""
 echo "$pass passed, $fail failed"
 [ "$fail" -eq 0 ]
