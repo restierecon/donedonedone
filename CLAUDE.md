@@ -185,7 +185,8 @@ dial yourself.
 
 ## State (per project, in vault/)
 project.md (purpose, stack, gate commands, domain language, autonomy dial,
-max_parallel_slices) · task-tree.json (LIVE slices only) · stories.md (append-only,
+max_parallel_slices) · architecture.json (optional fitness rules the gate's `arch` step
+holds; read from main, changed only by a human decision in /grill) · task-tree.json (LIVE slices only) · stories.md (append-only,
 every shipped slice) · log.jsonl (append-only via log-event.sh) · standing-orders.md ·
 decisions/ (ADRs) · findings/ · flags/. Deterministic state and audit only — no memory
 files; git and task-tree.json are the resume state.

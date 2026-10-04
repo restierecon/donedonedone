@@ -7,7 +7,7 @@ if [ "${1:-}" = "--check-installed" ]; then
   drift=0
   diff -uB "$ROOT/CLAUDE.md" <(grep -v '^@' "$dest/CLAUDE.md") || drift=1
   for d in agents scripts; do
-    for f in "$ROOT/$d"/*; do diff -u "$f" "$dest/$d/$(basename "$f")" || drift=1; done
+    for f in "$ROOT/$d"/*; do diff -ru -x __pycache__ "$f" "$dest/$d/$(basename "$f")" || drift=1; done
   done
   for s in "$ROOT"/skills/*/; do diff -ru "$s" "$dest/skills/$(basename "$s")" || drift=1; done
   if [ "$drift" -eq 0 ]; then echo "installed copy matches repo"; else echo "DRIFT: repo and $dest differ (see diffs above)" >&2; fi
@@ -625,6 +625,65 @@ else
 fi
 out=$(cd "$repo" && GATE_BASE=trunk "$GATE" markers 2>&1)
 if echo "$out" | grep -q "^markers SKIP"; then ok "markers skips when the base branch is missing"; else bad "markers skips when the base branch is missing" "$out"; fi
+rm -rf "$repo"
+
+echo "== gate.sh — arch step (fitness rules from main) =="
+arch_repo() {
+  local d
+  d=$(make_gate_repo '- gate.test: true')
+  mkdir -p "$d/app/domain" "$d/app/web"
+  printf 'def total(x):\n    return x\n' > "$d/app/domain/order.py"
+  printf 'from app.domain.order import total\n' > "$d/app/web/routes.py"
+  touch "$d/app/__init__.py" "$d/app/domain/__init__.py" "$d/app/web/__init__.py"
+  echo "$d"
+}
+repo=$(arch_repo)
+git -C "$repo" add -A && git -C "$repo" commit -q -m app
+status=0; out=$(cd "$repo" && "$GATE" arch 2>&1) || status=$?
+if [ "$status" -eq 0 ] && echo "$out" | grep -q "^arch SKIP (no vault/architecture.json on main)"; then
+  ok "arch skips without a rules file on main"
+else
+  bad "arch skips without a rules file on main" "exit $status: $out"
+fi
+printf '{"forbid": [{"from": "app/domain/**", "to": "app/web/**", "why": "domain stays free of delivery"}]}\n' > "$repo/vault/architecture.json"
+git -C "$repo" add -A && git -C "$repo" commit -q -m rules
+git -C "$repo" checkout -q -b slice/S900
+printf 'from app.web import routes\n' >> "$repo/app/domain/order.py"
+git -C "$repo" commit -q -am "feat: reach into web"
+status=0; out=$(cd "$repo" && "$GATE" arch 2>&1) || status=$?
+if [ "$status" -eq 1 ] && echo "$out" | grep -q "^arch FAIL" && echo "$out" | grep -q "app/domain/order.py depends on app/web/routes.py" \
+   && echo "$out" | grep -q "new module cycle edge app/domain → app/web" && echo "$out" | grep -q "^GATE: FAIL (arch)"; then
+  ok "arch fails a forbidden import and the cycle it creates"
+else
+  bad "arch fails a forbidden import and the cycle it creates" "exit $status: $out"
+fi
+printf '{"forbid": []}\n' > "$repo/vault/architecture.json"
+git -C "$repo" commit -q -am "chore: relax rules on the branch"
+status=0; out=$(cd "$repo" && "$GATE" arch 2>&1) || status=$?
+if [ "$status" -eq 1 ] && echo "$out" | grep -q "must not depend on app/web"; then
+  ok "arch reads rules from main, so a slice can't relax them on its branch"
+else
+  bad "arch reads rules from main, so a slice can't relax them on its branch" "exit $status: $out"
+fi
+tools="$repo-tools"
+cp -R "$ROOT/scripts" "$tools"
+status=0; out=$(cd "$repo/app" && "../../$(basename "$tools")/gate.sh" arch 2>&1) || status=$?
+rm -rf "$tools"
+if [ "$status" -eq 1 ] && echo "$out" | grep -q "must not depend on app/web" && ! echo "$out" | grep -qi "can't open file"; then
+  ok "arch works when gate.sh is called by a relative path from a subdirectory"
+else
+  bad "arch works when gate.sh is called by a relative path from a subdirectory" "exit $status: $out"
+fi
+git -C "$repo" checkout -q main
+git -C "$repo" checkout -q -b slice/S901
+printf 'from app.domain.order import total as t\n' > "$repo/app/web/views.py"
+git -C "$repo" add -A && git -C "$repo" commit -q -m "feat: allowed direction"
+status=0; out=$(cd "$repo" && "$GATE" arch 2>&1) || status=$?
+if [ "$status" -eq 0 ] && echo "$out" | grep -q "^arch PASS — 1 forbid rule(s), no new cycles"; then
+  ok "arch passes imports in the allowed direction"
+else
+  bad "arch passes imports in the allowed direction" "exit $status: $out"
+fi
 rm -rf "$repo"
 
 echo "== gate.sh — crap step =="
@@ -1374,6 +1433,14 @@ if [ "$(jq -r .mine "$home/.claude/settings.json")" = "true" ] && ls "$home"/.cl
 else
   bad "install keeps an existing settings.json and drops the new one beside it" "$(ls "$home/.claude")"
 fi
+mapped=$(mktemp -d)
+git -C "$mapped" init -q -b main && printf 'echo hi\n' > "$mapped/a.sh" && git -C "$mapped" add -A && git -C "$mapped" -c user.email=t@t -c user.name=t commit -q -m i
+if (cd "$mapped" && "$home/.claude/scripts/codebase-graph.py" build >/dev/null 2>&1) && [ -f "$mapped/.gate/graph.html" ] && [ ! -d "$home/.claude/scripts/codemap/__pycache__" ]; then
+  ok "the installed codebase-graph.py runs with its codemap package and leaves no bytecode behind"
+else
+  bad "the installed codebase-graph.py runs with its codemap package and leaves no bytecode behind" "$(ls "$home/.claude/scripts")"
+fi
+rm -rf "$mapped"
 if grep -q "my own global rules" "$home"/.claude/CLAUDE.md.bak-* 2>/dev/null && cmp -s "$ROOT/CLAUDE.md" "$home/.claude/CLAUDE.md"; then
   ok "install backs up a differing CLAUDE.md before replacing it"
 else
@@ -2163,6 +2230,13 @@ if [ -f "$cg/reviewer.agent.md" ] && ! grep -q 'mcp__' "$cg/reviewer.agent.md" &
 rm -rf "$cg"
 if grep -q '/create-verification-skill' "$ROOT/skills/init-codebase/SKILL.md"; then ok "init-codebase offers /create-verification-skill"; else bad "init-codebase offers /create-verification-skill" "missing"; fi
 if grep -q '/maintain-verification-skill' "$ROOT/skills/architecture-review/SKILL.md"; then ok "architecture-review suggests /maintain-verification-skill"; else bad "architecture-review suggests /maintain-verification-skill" "missing"; fi
+
+echo "== codebase map wiring =="
+if grep -q 'codebase-graph.py impact --base main' "$ROOT/skills/blast-radius/SKILL.md"; then ok "blast-radius starts from the impact block"; else bad "blast-radius starts from the impact block" "missing"; fi
+if grep -q 'codebase-graph.py build' "$ROOT/skills/architecture-review/SKILL.md"; then ok "architecture-review builds the map first"; else bad "architecture-review builds the map first" "missing"; fi
+if grep -q '^DESIGN: complexity' "$ROOT/agents/reviewer.md"; then ok "reviewer reports a DESIGN line"; else bad "reviewer reports a DESIGN line" "missing"; fi
+if grep -q 'vault/architecture.json' "$ROOT/skills/grill/SKILL.md" && grep -q 'architecture.json' "$ROOT/CLAUDE.md"; then ok "grill and protocol name the fitness rules file"; else bad "grill and protocol name the fitness rules file" "missing"; fi
+if grep -q 'scripts/\*.html' "$INSTALL"; then ok "install.sh ships the graph viewer template"; else bad "install.sh ships the graph viewer template" "missing"; fi
 
 echo ""
 echo "$pass passed, $fail failed"

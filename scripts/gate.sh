@@ -18,7 +18,7 @@ setting() {
   printf '%s\n' "${value%\`}"
 }
 
-known="lint types test build a11y crap mutation markers comments scope"
+known="lint types test build a11y crap mutation markers comments scope arch"
 steps=() targets=() focused=0
 while [ $# -gt 0 ]; do
   if [ "$1" = "--" ]; then
@@ -219,6 +219,30 @@ for step in "${steps[@]}"; do
         echo "scope FAIL — $(echo "$result" | head -1)"
         echo "$result" | sed 1d | head -"$EXCERPT_LINES" | while IFS= read -r line; do echo "  $line"; done ;;
     esac
+    continue
+  fi
+  if [ "$step" = "arch" ]; then
+    base="${GATE_BASE:-main}"
+    if ! git -C "$top" rev-parse -q --verify "$base^{commit}" >/dev/null; then
+      echo "arch SKIP (no $base branch to diff against; set GATE_BASE)"
+      continue
+    fi
+    if ! git -C "$top" cat-file -e "$base:vault/architecture.json" 2>/dev/null; then
+      echo "arch SKIP (no vault/architecture.json on $base)"
+      continue
+    fi
+    py=python3
+    command -v "$py" >/dev/null 2>&1 && "$py" -c pass >/dev/null 2>&1 || py=python
+    git -C "$top" show "$base:vault/architecture.json" > "$logdir/architecture.json"
+    result=$("$py" "$(dirname "$0")/codebase-graph.py" check --rules "$logdir/architecture.json" --base "$base" 2>&1)
+    status=$?
+    if [ "$status" -eq 0 ]; then
+      echo "arch PASS — ${result#PASS }"
+    else
+      failed+=("arch")
+      echo "arch FAIL — $(echo "$result" | head -1 | sed 's/^FAIL //')"
+      echo "$result" | sed 1d | head -"$EXCERPT_LINES" | while IFS= read -r line; do echo "$line"; done
+    fi
     continue
   fi
   if [ "$step" = "crap" ]; then

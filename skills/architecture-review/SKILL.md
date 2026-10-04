@@ -24,7 +24,14 @@ earning its keep. "Vanishes" is your refactor candidate.
 1. Read vault/project.md (domain language) and vault/decisions/ FIRST — never
    re-suggest what an ADR has already rejected, unless friction has become severe
    enough to say so explicitly ("contradicts ADR-00n, but worth reopening because…").
-2. Spawn an explore subagent over the code added since the last review — and, in the
+2. Run `python3 ~/.claude/scripts/codebase-graph.py build` (codebase-map skill), with
+   `--rules vault/architecture.json` if that file exists and `--coverage` if the project
+   writes a report. Its flagged modules (cycles, rule violations, hubs, hotspots,
+   untested code) seed the explore subagent's list, and each `why` line is a card's
+   evidence. Signals, not verdicts: a flag becomes a card only after the deletion
+   test or a read of the code confirms the friction.
+3. Spawn an explore subagent over the code added since the last review, plus the
+   flagged modules — and, in the
    same message, the `retro` agent per the learning-loop skill (process lens; it routes
    its own proposals). Note friction:
    - Understanding one concept requires bouncing between many small modules
@@ -35,9 +42,10 @@ earning its keep. "Vanishes" is your refactor candidate.
    - Code untestable through its current interface
    - With `gate.crap` set in project.md: the repo-wide CRAP hotspots, measured and
      classified per the crap-hotspots skill (~/.claude/skills/crap-hotspots/SKILL.md)
-3. For each candidate, one card: Files · Problem (in domain language) · Proposed
-   deepening · Benefit in locality/leverage terms · Strength: Strong / Worth
-   exploring / Speculative.
+4. For each candidate, one card: Files · Problem (in domain language) · Evidence (the
+   graph's numbers or file:line) · Options considered with their trade-off (coupling,
+   cognitive load, change cost) · Proposed deepening · Benefit in locality/leverage
+   terms · Risk of the change · Strength: Strong / Worth exploring / Speculative.
 
 ## Output & routing (this skill detects, never repairs)
 - Cards → vault/flags/pending-review.md, each with the 3-line triage block
@@ -46,5 +54,9 @@ earning its keep. "Vanishes" is your refactor candidate.
   run autonomously once the grill has settled the target design
 - Human-rejected candidates with load-bearing reasons → offer an ADR so this
   review never re-suggests them
+- A boundary the human wants held (no cycles here, domain never imports infra) →
+  offer it as a rule for vault/architecture.json; the gate's `arch` step then holds it
+- Attach the map: `.gate/graph.html` (regenerated, never committed) is named in the
+  pending-review entry so the human can drill into the flagged modules
 - Reset slices_since_arch_review to 0 in task-tree.json (one counter drives both reviews)
 - Project has `.claude/skills/verify-*/` → also suggest /maintain-verification-skill (feature map drifts at the same cadence)
