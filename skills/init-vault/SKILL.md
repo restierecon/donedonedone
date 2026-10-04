@@ -33,7 +33,11 @@ Initialize this project for the autonomous workflow. Do all of the following:
    `- gate.build: <cmd>` (quiet flags preferred, e.g. `pytest -q`) ·
    `- gate.test.focus: <cmd>` with `{}` where test files or ids go (`pytest -q {}`,
    `npx vitest run {}`, `go test {}`) — builders run only their own tests mid-loop ·
-   `- gate.test.budget: <seconds>` — the gate flags a full suite slower than this; the
+   `- gate.test.budget: <seconds>` — the gate flags a full suite slower than this ·
+   `- gate.crap: <cmd>` printing `<path>:<start>-<end> <score> <name>` per function,
+   usually `~/.claude/scripts/crap-score.py <coverage report> <src dir>` reading the
+   report `gate.test` writes (README → CRAP → Per-stack setup has Python, React and Java
+   lines; gitignore the report) · `- gate.crap.max: 30`; the
    built-in `markers` and `comments` steps need no line, but add
    `- gate.comments.skip: <path prefixes>` for generated code (migrations) and
    `- gate.comments.directives: <regex>` for a tool directive the gate doesn't know ·
@@ -49,5 +53,8 @@ Initialize this project for the autonomous workflow. Do all of the following:
     It only manages its own marked block, so an existing AGENTS.md keeps its content, and
     the session-start hook keeps the block current after upgrades.
 11. Commit: `git add -A && git commit -m "chore: init autonomous workflow vault"`
-12. Confirm to me: vault ready, autonomy dial at `supervised`, and suggest running
+12. Existing codebase with `gate.crap` set: run the crap-hotspots skill
+    (~/.claude/skills/crap-hotspots/SKILL.md) once for a baseline card in
+    vault/flags/pending-review.md, then commit it.
+13. Confirm to me: vault ready, autonomy dial at `supervised`, and suggest running
     /grill on the first feature before any decomposition.

@@ -43,6 +43,9 @@ the slice branch elsewhere, since sibling worktrees share the same repo.
       rebuild of expensive setup. With gate.test.focus set, time the slice's own
       tests (`gate.sh test -- <its test files>`) and quote the seconds in any SLOP line;
       if your sandbox can't run it, judge from the code and say so
+- [ ] Risk stays low on touched code: the gate's `crap` step owns the CRITICAL. When
+      `.gate/crap.log` exists, any function the diff touches that scores over half of
+      `gate.crap.max` (default 30) is a NIT naming which branch to test or where to split
 - [ ] No scope creep — diff contains only this slice ("also improved X" = REJECT)
 - [ ] Frontend calls match backend routes; schema matches models (contract check)
 - [ ] No new dependency without justification; lockfile committed if deps changed

@@ -16,6 +16,13 @@ jobs:
         run: scripts/find-comments.sh $(git ls-files '*.sh' '*.py' '*.yml' '*.yaml' install.sh | grep -v '^tests/fixtures/')
       - name: hook script tests
         run: tests/run-tests.sh
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: CRAP scorer tests
+        run: |
+          python -m pip install -q lizard
+          PYTHON=python tests/crap-score.sh
       - name: manifest validation
         run: scripts/validate-manifests.sh
       - name: scripts are executable in the repo
@@ -24,6 +31,26 @@ jobs:
           if [ -n "$bad" ]; then echo "not executable: $bad"; exit 1; fi
       - name: settings.json is valid JSON
         run: jq empty settings.json
+
+  crap-stacks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+      - name: Python, React and Java samples through the real gate
+        run: |
+          python -m pip install -q lizard coverage pytest
+          PYTHON=python tests/crap-stacks.sh
 
   cross-platform:
     strategy:
@@ -38,6 +65,13 @@ jobs:
       - uses: actions/checkout@v5
       - name: hook script tests
         run: tests/run-tests.sh
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: CRAP scorer tests
+        run: |
+          python -m pip install -q lizard
+          PYTHON=python tests/crap-score.sh
       - name: install from Git Bash and make a demo project
         if: runner.os == 'Windows'
         run: |
@@ -47,9 +81,13 @@ jobs:
           git -C "$demo" config user.email ci@example.com
           git -C "$demo" config user.name ci
           mkdir -p "$demo/vault"
-          printf '%s\n' '# Demo' '## Gate' '- gate.test: echo ok' '- gate.test.focus: printf "<%s>" {}' > "$demo/vault/project.md"
+          printf '%s\n' '# Demo' '## Gate' '- gate.test: echo ok' '- gate.test.focus: printf "<%s>" {}' '- gate.crap: printf "demo.txt:1-1 2.5 f\r\n"' > "$demo/vault/project.md"
           git -C "$demo" add -A
           git -C "$demo" commit -q -m init
+          git -C "$demo" checkout -q -b slice/S001
+          echo touched > "$demo/demo.txt"
+          git -C "$demo" add -A
+          git -C "$demo" commit -q -m "feat: touch demo.txt"
       - name: gate.sh from PowerShell 7 through Git Bash, as AGENTS.md tells Cursor and Copilot
         if: runner.os == 'Windows'
         shell: pwsh
@@ -68,3 +106,19 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit 1 }
           $log = (Get-Content -Raw .gate/test.log).Trim()
           if ($log -ne '<one><two words>') { Write-Error "test.log was: $log"; exit 1 }
+      - name: gate.sh crap step from PowerShell 7 through Git Bash
+        if: runner.os == 'Windows'
+        shell: pwsh
+        working-directory: ${{ runner.temp }}/demo
+        run: |
+          $out = & "$env:ProgramFiles\Git\bin\bash.exe" -c '~/.claude/scripts/gate.sh crap'
+          if ($LASTEXITCODE -ne 0) { Write-Error ($out -join "`n"); exit 1 }
+          if (-not ($out -match 'crap PASS .* highest touched: f 2\.5')) { Write-Error ($out -join "`n"); exit 1 }
+      - name: gate.sh crap step from Windows PowerShell 5.1 through Git Bash
+        if: runner.os == 'Windows'
+        shell: powershell
+        working-directory: ${{ runner.temp }}/demo
+        run: |
+          $out = & "$env:ProgramFiles\Git\bin\bash.exe" -c '~/.claude/scripts/gate.sh crap'
+          if ($LASTEXITCODE -ne 0) { Write-Error ($out -join "`n"); exit 1 }
+          if (-not ($out -match 'crap PASS .* highest touched: f 2\.5')) { Write-Error ($out -join "`n"); exit 1 }

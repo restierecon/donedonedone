@@ -454,6 +454,94 @@ out=$(cd "$repo" && GATE_BASE=trunk "$GATE" markers 2>&1)
 if echo "$out" | grep -q "^markers SKIP"; then ok "markers skips when the base branch is missing"; else bad "markers skips when the base branch is missing" "$out"; fi
 rm -rf "$repo"
 
+echo "== gate.sh — crap step =="
+repo=$(make_gate_repo '')
+mkdir -p "$repo/src"
+printf 'def a():\n    return 1\n\n\ndef b():\n    return 2\n' > "$repo/app.py"
+printf 'def c():\n    return 3\n' > "$repo/lib.py"
+printf 'def m():\n    return 4\n' > "$repo/src/mod.py"
+git -C "$repo" add -A && git -C "$repo" commit -q -m "base code"
+git -C "$repo" checkout -q -b slice/S001
+printf 'def a():\n    return 10\n\n\ndef b():\n    return 2\n' > "$repo/app.py"
+printf 'def m():\n    return 40\n' > "$repo/src/mod.py"
+git -C "$repo" commit -q -am "feat: touch a and m"
+crap_gate() {
+  printf '# Project\n## Gate\n- gate.test: echo ok\n- gate.crap: cat vault/crap.txt\n%s\n' "$2" > "$repo/vault/project.md"
+  printf '%b' "$1" > "$repo/vault/crap.txt"
+  status=0
+  if [ "${3:-crap}" = all ]; then
+    out=$(cd "$repo" && "$GATE" 2>&1) || status=$?
+  else
+    out=$(cd "$repo" && "$GATE" "${3:-crap}" 2>&1) || status=$?
+  fi
+}
+crap_gate 'app.py:1-2 3.0 a\napp.py:5-6 99 b\nlib.py:1-2 50 c\n'
+if [ "$status" -eq 0 ] && echo "$out" | grep -q "^crap PASS.*highest touched: a 3.0 (max 30)"; then
+  ok "crap passes when only untouched functions score over the max"
+else
+  bad "crap passes when only untouched functions score over the max" "exit $status: $out"
+fi
+crap_gate 'app.py:1-2 30.5 a\n'
+if [ "$status" -eq 1 ] && echo "$out" | grep -q "^  app.py:1 a 30.5" && echo "$out" | grep -q "^GATE: FAIL (crap)"; then
+  ok "crap fails a touched function over the max, decimals included, and names path:start"
+else
+  bad "crap fails a touched function over the max, decimals included, and names path:start" "exit $status: $out"
+fi
+crap_gate 'app.py:1-2 30 a\n'
+if [ "$status" -eq 0 ]; then ok "crap passes a score equal to the max"; else bad "crap passes a score equal to the max" "exit $status: $out"; fi
+crap_gate 'app.py:5 99 b\nlib.py:1 99 c\n'
+if [ "$status" -eq 1 ] && echo "$out" | grep -q "^  app.py:5 b 99" && ! echo "$out" | grep -q "lib.py"; then
+  ok "crap counts a start-only function as touched when its file is in the diff"
+else
+  bad "crap counts a start-only function as touched when its file is in the diff" "exit $status: $out"
+fi
+crap_gate 'src\\mod.py:1-2 40 m\r\n'
+if [ "$status" -eq 1 ] && echo "$out" | grep -q "^  src/mod.py:1 m 40$"; then
+  ok "crap reads CRLF output with backslash paths, as Windows tools print them"
+else
+  bad "crap reads CRLF output with backslash paths, as Windows tools print them" "exit $status: $out"
+fi
+crap_gate 'app.py:1-2 40 a\n' '- gate.crap.max: 50'
+if [ "$status" -eq 0 ]; then ok "crap honors gate.crap.max"; else bad "crap honors gate.crap.max" "exit $status: $out"; fi
+rm -f "$repo/.gate/crap.log"
+crap_gate 'app.py:1-2 40 a\n' '- gate.crap.max: lots'
+if [ "$status" -eq 1 ] && echo "$out" | grep -q "gate.crap.max must be a number" && [ ! -f "$repo/.gate/crap.log" ]; then
+  ok "a non-numeric gate.crap.max fails before the command runs"
+else
+  bad "a non-numeric gate.crap.max fails before the command runs" "exit $status: $out"
+fi
+crap_gate 'all good\n'
+if [ "$status" -eq 1 ] && echo "$out" | grep -q "^crap FAIL.*printed no"; then
+  ok "crap fails output it can't parse instead of passing on nothing"
+else
+  bad "crap fails output it can't parse instead of passing on nothing" "exit $status: $out"
+fi
+printf '# Project\n## Gate\n- gate.test: echo ok\n- gate.crap: exit 3\n' > "$repo/vault/project.md"
+status=0; out=$(cd "$repo" && "$GATE" crap 2>&1) || status=$?
+if [ "$status" -eq 1 ] && echo "$out" | grep -q "^crap FAIL (exit 3"; then ok "crap fails when its command fails"; else bad "crap fails when its command fails" "exit $status: $out"; fi
+printf '# Project\n## Gate\n- gate.test: false\n- gate.crap: cat vault/crap.txt\n' > "$repo/vault/project.md"
+printf 'app.py:1-2 99 a\n' > "$repo/vault/crap.txt"
+status=0; out=$(cd "$repo" && "$GATE" test crap 2>&1) || status=$?
+if echo "$out" | grep -q "^crap SKIP (test failed" && echo "$out" | grep -q "^GATE: FAIL (test) @"; then
+  ok "crap skips after a failed test step, whose coverage is stale"
+else
+  bad "crap skips after a failed test step, whose coverage is stale" "exit $status: $out"
+fi
+printf '# Project\n## Gate\n- gate.test: echo ok\n' > "$repo/vault/project.md"
+out=$(cd "$repo" && "$GATE" crap 2>&1)
+if echo "$out" | grep -q "^crap SKIP (no gate.crap"; then ok "crap skips without a gate.crap line"; else bad "crap skips without a gate.crap line" "$out"; fi
+crap_gate 'app.py:1-2 99 a\n'
+out=$(cd "$repo" && GATE_BASE=trunk "$GATE" crap 2>&1)
+if echo "$out" | grep -q "^crap SKIP (no trunk branch"; then ok "crap skips when the base branch is missing"; else bad "crap skips when the base branch is missing" "$out"; fi
+crap_gate 'app.py:1-2 3 a\n' '' all
+if [ "$status" -eq 0 ] && echo "$out" | grep -q "^test PASS" && echo "$out" | grep -q "^crap PASS" \
+   && [ "$(echo "$out" | grep -n '^crap' | cut -d: -f1)" -gt "$(echo "$out" | grep -n '^test' | cut -d: -f1)" ]; then
+  ok "a full gate runs crap after test, so it reads fresh coverage"
+else
+  bad "a full gate runs crap after test, so it reads fresh coverage" "exit $status: $out"
+fi
+rm -rf "$repo"
+
 echo "== log-event.sh — structured, compaction-proof log =="
 repo=$(make_repo)
 : > "$repo/vault/log.jsonl"
@@ -695,6 +783,14 @@ if grep -q "gate.sh once per slice" "$gen/copilot/orchestrator.agent.md" && ! gr
 else
   bad "copilot orchestrator runs gate 2 itself, so it sees a test line over the budget" "$(grep -n 'gate' "$gen/copilot/orchestrator.agent.md")"
 fi
+skill_path=".claude/skills/crap-hotspots/SKILL.md"
+if grep -q "gate.crap.max" "$gen/cursor/builder.md" && grep -q "gate.crap.max" "$gen/copilot/builder.agent.md" \
+   && grep -q "crap.log" "$gen/cursor/reviewer.md" && grep -q "crap.log" "$gen/copilot/reviewer.agent.md" \
+   && grep -qF "$skill_path" "$gen/copilot/orchestrator.agent.md"; then
+  ok "Cursor and Copilot agents carry the CRAP rules, and the orchestrator names the skill by path"
+else
+  bad "Cursor and Copilot agents carry the CRAP rules, and the orchestrator names the skill by path" "$(grep -l crap "$gen"/cursor/* "$gen"/copilot/* | tr '\n' ' ')"
+fi
 status=0; "$GENERATE" bogus >/dev/null 2>&1 || status=$?
 if [ "$status" -eq 1 ]; then ok "unknown target exits 1"; else bad "unknown target exits 1" "exit $status"; fi
 proj="$gen/proj"; mkdir -p "$proj"
@@ -710,6 +806,11 @@ if grep -qF '& "$env:ProgramFiles\Git\bin\bash.exe" -c' "$proj/AGENTS.md"; then
   ok "AGENTS.md tells Cursor and Copilot how to reach the bash scripts from PowerShell"
 else
   bad "AGENTS.md tells Cursor and Copilot how to reach the bash scripts from PowerShell" "$(sed -n '2,6p' "$proj/AGENTS.md")"
+fi
+if grep -q "A \`crap\` FAIL goes back to the builder" "$proj/AGENTS.md" && grep -qF "$skill_path" "$proj/AGENTS.md"; then
+  ok "AGENTS.md gives Cursor and Copilot the CRAP gate rule and the skill's path"
+else
+  bad "AGENTS.md gives Cursor and Copilot the CRAP gate rule and the skill's path" "$(grep -n crap "$proj/AGENTS.md")"
 fi
 printf '# Mine above\n<!-- skeletoncrew:protocol:begin x -->\nstale\n<!-- skeletoncrew:protocol:end -->\n# Mine below\n' > "$proj/AGENTS.md"
 AGENTS_MD_SRC="$ROOT/CLAUDE.md" "$AGENTS_MD" "$proj" >/dev/null

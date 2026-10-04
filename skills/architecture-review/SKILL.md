@@ -33,6 +33,8 @@ earning its keep. "Vanishes" is your refactor candidate.
    - Same validation/query/transform logic re-implemented across slices (rule of
      three reached → extraction candidate)
    - Code untestable through its current interface
+   - With `gate.crap` set in project.md: the repo-wide CRAP hotspots, measured and
+     classified per the crap-hotspots skill (~/.claude/skills/crap-hotspots/SKILL.md)
 3. For each candidate, one card: Files · Problem (in domain language) · Proposed
    deepening · Benefit in locality/leverage terms · Strength: Strong / Worth
    exploring / Speculative.
