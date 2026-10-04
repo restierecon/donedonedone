@@ -19,6 +19,14 @@ Initialize this project for the autonomous workflow. Do all of the following:
    then pruned from task-tree.json.
 6. Create vault/memory/session.md with: "# Session State — fresh project, no active slice. Read vault/project.md and task-tree.json to begin."
 7. Create vault/memory/hot.md and vault/handoffs/current.md with headers only.
+   Create vault/standing-orders.md: header "# Standing Orders", the line "Numbered;
+   pasted verbatim into every builder/reviewer/auditor brief (STANDING). Append, never
+   renumber.", then these starting orders:
+   1. Work only inside the assigned branch or worktree; never touch main directly.
+   2. Never edit vault/task-tree.json or vault/log.jsonl; return verdicts as text.
+   3. Run checks only through ~/.claude/scripts/gate.sh and report the SHA it ran on.
+   4. No new dependency without a one-line justification in the report.
+   5. Nearby improvements go in the report as flag candidates, never in the diff.
 8. Create vault/project.md by asking me (one round of questions max) for:
    - Project name and one-line purpose
    - Stack (suggest from what you see in the repo if it's not empty)

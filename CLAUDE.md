@@ -32,6 +32,9 @@ with ≤ 4 criteria, no auditor trigger and no one-way door; everything else —
 any retry after a REJECTED — inherits the session model. Reviewer is sonnet,
 scribe is haiku (fixed in their manifests); planner, auditor and retro inherit.
 
+Builder, reviewer and auditor briefs follow the brief-contract skill (GOAL · SCOPE ·
+ACCEPTANCE · VERIFY · FORBIDDEN · REPORT · STANDING); guard.sh refuses a spawn missing any.
+
 ## Decomposition — Grill Always, Every Slice Autonomous
 No slice exists without a grill. Every feature, bugfix and refactor — however small —
 goes through /grill first (you run it; it's a conversation with the human). The grill

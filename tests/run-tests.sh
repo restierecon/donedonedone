@@ -46,6 +46,11 @@ guard_file() {
     '{tool_name: $tool, tool_input: {file_path: $fp}} + $x' | "$GUARD" 2>/dev/null
 }
 
+guard_agent() {
+  jq -n --arg tool "$1" --arg t "$2" --arg p "$3" \
+    '{tool_name: $tool, tool_input: {subagent_type: $t, prompt: $p}}' | "$GUARD" 2>/dev/null
+}
+
 expect_allow() {
   local desc="$1"; shift
   if "$@"; then ok "$desc"; else bad "$desc" "blocked, expected allow"; fi
@@ -133,6 +138,23 @@ expect_block "subagent cannot redirect into task-tree"   guard_bash 'echo "{}" >
 expect_block "subagent cannot tee into session.md"       guard_bash 'cat notes | tee vault/memory/session.md' builder
 expect_allow "subagent may read task-tree.json"          guard_bash 'cat vault/task-tree.json' builder
 expect_allow "Director may redirect into task-tree"      guard_bash 'echo "{}" > vault/task-tree.json'
+
+echo "== guard.sh — brief contract (builder/reviewer/auditor spawns) =="
+FULL_BRIEF=$'GOAL: x\nSCOPE: x\nACCEPTANCE: x\nVERIFY: x\nFORBIDDEN: x\nREPORT: x\nSTANDING: none'
+expect_allow "full brief spawns builder"            guard_agent Agent builder "$FULL_BRIEF"
+expect_allow "full brief spawns auditor via Task"   guard_agent Task auditor "$FULL_BRIEF"
+expect_block "brief missing VERIFY blocks reviewer" guard_agent Agent reviewer "${FULL_BRIEF/VERIFY: x/}"
+expect_block "lowercase header does not count"      guard_agent Agent builder "${FULL_BRIEF/GOAL:/goal:}"
+expect_block "header mid-line does not count"       guard_agent Agent builder "${FULL_BRIEF/GOAL:/see GOAL:}"
+expect_block "empty brief blocks builder"           guard_agent Agent builder ''
+expect_allow "non-gated agent type unaffected"      guard_agent Agent scribe 'just checkpoint'
+msg=$(jq -n --arg p $'GOAL: x\nACCEPTANCE: x\nVERIFY: x\nFORBIDDEN: x\nREPORT: x' \
+  '{tool_name: "Agent", tool_input: {subagent_type: "builder", prompt: $p}}' | "$GUARD" 2>&1 >/dev/null)
+if echo "$msg" | grep -q 'SCOPE' && echo "$msg" | grep -q 'STANDING' && ! echo "$msg" | grep -q 'GOAL'; then
+  ok "block message names exactly the missing headers"
+else
+  bad "block message names exactly the missing headers" "got: $msg"
+fi
 expect_block "subagent cannot Write log.jsonl"           guard_file Write 'vault/log.jsonl' reviewer
 expect_block "subagent cannot append to log.jsonl"       guard_bash 'echo "{}" >> vault/log.jsonl' builder
 expect_block "subagent cannot run log-event.sh"          guard_bash "$HOME/.claude/scripts/log-event.sh S001 reviewer APPROVED" reviewer

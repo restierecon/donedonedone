@@ -1,6 +1,6 @@
 # Autonomous Engineering Setup for Claude Code
 
-A lean, hardened multi-agent setup: 6 agents, 27 skills, mechanical guardrails,
+A lean, hardened multi-agent setup: 6 agents, 28 skills, mechanical guardrails,
 session-surviving memory, a learning loop that turns repeated failures into fixes, and an autonomy dial you turn up only as trust is earned.
 Built for Claude Code; also works with GitHub Copilot in VS Code and with Cursor (see below).
 
@@ -41,7 +41,7 @@ builds. Nothing after the grill should need you unless a slice escalates.
 |---|---|
 | CLAUDE.md | Global protocol — the main session IS the Director |
 | agents/ | planner · builder · reviewer · auditor · scribe · retro (least-privilege tools, model-per-agent) |
-| skills/ | protocol-native: grill · slice-planning · parallel-dispatch · compaction · architecture-review · learning-loop · test-speed · crap-hotspots · blast-radius · `/init-vault` · `/harvest` — plus a general engineering-practice library, a principles index (19 pstack principles, read on demand) and pstack's prose skills: unslop · technical-writing (docs/README/ADR work) (see Credits) |
+| skills/ | protocol-native: grill · slice-planning · parallel-dispatch · compaction · architecture-review · learning-loop · test-speed · crap-hotspots · blast-radius · brief-contract · `/init-vault` · `/harvest` — plus a general engineering-practice library, a principles index (19 pstack principles, read on demand) and pstack's prose skills: unslop · technical-writing (docs/README/ADR work) (see Credits) |
 | settings.json | Permission deny/ask lists + hooks on 6 events + env that keeps Claude Code on Windows in Git Bash |
 | scripts/ | guard.sh (PreToolUse) · vault-guard.sh (Pre/PostToolUse, SubagentStop — restores Director-only files) · lint.sh (PostToolUse) · checkpoint.sh (Stop) · session-start.sh (SessionStart) · crap-score.py (lizard + coverage report → CRAP lines for `gate.crap`) · gate.sh (quiet lint/types/test/build runner + diff-scoped CRAP, TODO/FIXME and no-comments checks) · find-comments.sh (the comment detector behind that check) · log-event.sh (the Director's structured log.jsonl writer) · check-plan.sh (the Director's lint for a planner draft: fields, "Actor can" titles, resolvable acyclic `depends_on`, gates as a verdict or `skip: <reason>`) · generate-agents.sh (Copilot/Cursor agents, install-time) · agents-md.sh (protocol block in a project's AGENTS.md, for Cursor/Copilot) |
 | tests/ | Test harness for the hook scripts — run after any script edit; CI runs it too |
@@ -277,6 +277,9 @@ jq is missing, the payload isn't JSON, or a field has the wrong type).
   case-insensitive, for macOS and Windows. A subagent shell command that mentions vault/
   at all must be plainly read-only (`cat`, `grep`, `jq`, `git diff/log/show`… with no
   redirect, substitution or `--output`), and log-event.sh is off limits.
+- A builder, reviewer or auditor spawn (Agent or Task tool) whose prompt lacks any of
+  the brief-contract headers (GOAL, SCOPE, ACCEPTANCE, VERIFY, FORBIDDEN, REPORT,
+  STANDING, each at the start of a line) is refused, naming the missing ones.
 
 **2. vault-guard.sh — undoes what got through, by content, not by syntax.** It snapshots
 the main checkout's task-tree.json, log.jsonl and memory/session.md (in `.git/`, at

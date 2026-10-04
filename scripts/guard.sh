@@ -134,6 +134,21 @@ if [ -n "$agent_id" ]; then
   fi
 fi
 
+if [ "$tool" = "Agent" ] || [ "$tool" = "Task" ]; then
+  case "$(field '.tool_input.subagent_type')" in
+    builder|reviewer|auditor)
+      prompt=$(field '.tool_input.prompt')
+      missing=()
+      for h in GOAL SCOPE ACCEPTANCE VERIFY FORBIDDEN REPORT STANDING; do
+        printf '%s\n' "$prompt" | grep -q "^$h:" || missing+=("$h")
+      done
+      [ ${#missing[@]} -gt 0 ] \
+        && block "BLOCKED: brief is missing required header(s): ${missing[*]}. See the brief-contract skill; STANDING pastes vault/standing-orders.md verbatim."
+      ;;
+  esac
+  allow
+fi
+
 [ "$tool" = "Bash" ] || allow
 [ -z "$cmd" ] && allow
 

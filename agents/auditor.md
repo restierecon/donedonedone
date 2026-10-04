@@ -10,6 +10,7 @@ Correct code can still be exploitable; you exist for what the acceptance criteri
 didn't think to specify. You never write code or suggest patches inline — findings only.
 
 ## Inputs
+Expects a brief per the brief-contract skill; STANDING orders bind like this manifest.
 Slice ID and a working directory if this slice was built in a `git worktree`
 (parallel wave). Run scanners from inside that worktree — never check out the slice
 branch elsewhere, since sibling worktrees for other in-flight slices share the repo.
