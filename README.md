@@ -41,9 +41,9 @@ builds. Nothing after the grill should need you unless a slice escalates.
 |---|---|
 | CLAUDE.md | Global protocol — the main session IS the Director |
 | agents/ | planner · builder · reviewer · auditor · scribe · retro (least-privilege tools, model-per-agent) |
-| skills/ | protocol-native: grill · slice-planning · parallel-dispatch · compaction · architecture-review · learning-loop · test-speed · `/init-vault` · `/harvest` — plus a general engineering-practice library (see Credits) |
+| skills/ | protocol-native: grill · slice-planning · parallel-dispatch · compaction · architecture-review · learning-loop · test-speed · crap-hotspots · `/init-vault` · `/harvest` — plus a general engineering-practice library (see Credits) |
 | settings.json | Permission deny/ask lists + hooks on 6 events + env that keeps Claude Code on Windows in Git Bash |
-| scripts/ | guard.sh (PreToolUse) · vault-guard.sh (Pre/PostToolUse, SubagentStop — restores Director-only files) · lint.sh (PostToolUse) · checkpoint.sh (Stop) · session-start.sh (SessionStart) · gate.sh (quiet lint/types/test/build runner + built-in TODO/FIXME and no-comments checks) · find-comments.sh (the comment detector behind that check) · log-event.sh (the Director's structured log.jsonl writer) · generate-agents.sh (Copilot/Cursor agents, install-time) · agents-md.sh (protocol block in a project's AGENTS.md, for Cursor/Copilot) |
+| scripts/ | guard.sh (PreToolUse) · vault-guard.sh (Pre/PostToolUse, SubagentStop — restores Director-only files) · lint.sh (PostToolUse) · checkpoint.sh (Stop) · session-start.sh (SessionStart) · gate.sh (quiet lint/types/test/build runner + diff-scoped CRAP, TODO/FIXME and no-comments checks) · find-comments.sh (the comment detector behind that check) · log-event.sh (the Director's structured log.jsonl writer) · generate-agents.sh (Copilot/Cursor agents, install-time) · agents-md.sh (protocol block in a project's AGENTS.md, for Cursor/Copilot) |
 | tests/ | Test harness for the hook scripts — run after any script edit; CI runs it too |
 | evals/ | 10-task benchmark + scorecard — run before trusting, re-run after any manifest edit |
 
@@ -99,7 +99,7 @@ override) adds, outside `vault/`:
 - `markers` fails on an added TODO, FIXME or XXX.
 - `comments` fails on an added comment (see No comments below).
 
-Run `gate.sh test` for one step, no arguments for all six; a misspelled step name is an
+Run `gate.sh test` for one step, no arguments for all seven (the six above plus `crap`, see CRAP); a misspelled step name is an
 error, not a SKIP. Full logs land in `.gate/` (gitignored). The gate refuses to run on
 uncommitted changes outside `vault/` so `GATE: PASS @ <sha>` always describes that SHA;
 `GATE_ALLOW_DIRTY=1` overrides it for a local look.
@@ -129,6 +129,42 @@ The builder's rules keep new tests fast: each criterion is proven at the lowest 
 that can prove it, with at most one browser-driven test per slice; tests never wait on
 a real clock; expensive setup is built once per run and reset per test. The reviewer
 checks all three and, when `gate.test.focus` is set, times the slice's own tests.
+
+## CRAP
+CRAP (Change Risk Anti-Patterns) scores each function by complexity and missing
+coverage: `comp² × (1 − cov)³ + comp`, where `comp` is cyclomatic complexity and `cov`
+the covered fraction. A fully covered function scores its complexity; an untested one
+roughly its complexity squared. The metric and the threshold of 30 come from crap4j
+(Alberto Savoia and Bob Evans). Two optional lines turn it on; the scorer is yours
+(see the starting points below):
+
+```markdown
+- gate.crap: python scripts/crap.py coverage.json
+- gate.crap.max: 30
+```
+
+- **`gate.crap`** is any command that prints one line per function:
+  `<path>:<start>-<end> <score> <name>`, path relative to the repo root. Other lines
+  are ignored; output with no such line at all fails the step, so a broken command
+  can't pass on nothing. A line with only `<start>` counts as touched whenever its file
+  is in the diff. CRLF output and backslash paths are accepted.
+- The step fails only for functions the diff against `main` touches (an added line
+  inside `<start>-<end>`) that score over **`gate.crap.max`** (default 30, decimals
+  allowed). Existing hotspots don't block unrelated slices; the `crap-hotspots` skill
+  plans them as their own slices from the architecture review or `/init-vault`.
+- It runs right after `test`, so the command can read the coverage file the test
+  command just wrote; after a failed `test` it reports SKIP, since that coverage is
+  stale. The full output stays in `.gate/crap.log` for the reviewer, which NITs touched
+  functions over half the max.
+- The setup ships no scorer: each stack has its own complexity and coverage sources.
+  Starting points, none of them tested here: PHPUnit's Clover report carries a `crap`
+  attribute per method; JaCoCo's XML has per-method complexity and line counters;
+  [lizard](https://github.com/terryyin/lizard) gives per-function complexity and
+  ranges for ~30 languages, to join with coverage.py JSON, Istanbul JSON or LCOV;
+  Go has gocyclo plus `go test -coverprofile`.
+
+The step is plain gate.sh, so it behaves the same under Claude Code, Cursor and
+Copilot, including from PowerShell through Git Bash on Windows.
 
 ## No comments
 No codebase built with this setup carries comments: no line comments, block comments,
@@ -256,7 +292,9 @@ In each existing project:
 7. Add `gate.test.focus` and `gate.test.budget` (see Test speed). Without `focus`,
    builders rerun the whole suite on every red-green loop. If the suite is already
    over budget, run the `test-speed` skill to plan the fix.
-8. On Windows, install from a fresh clone and merge settings.json's new `env` block,
+8. Optionally add `gate.crap` (see CRAP), then run the `crap-hotspots` skill once for
+   a baseline of the hotspots already there.
+9. On Windows, install from a fresh clone and merge settings.json's new `env` block,
    which keeps Claude Code in Git Bash (see Windows).
 
 ## Verify on first install
@@ -363,6 +401,10 @@ which writes the protocol into AGENTS.md between
 Anything else in the file is yours and is never touched. The session-start hook rewrites
 the block whenever `~/.claude/CLAUDE.md` changes, so upgrades propagate — commit the diff.
 
+Every CRAP rule sits where all three tools read it: gate.sh, the generated agents,
+and the protocol block; the skill is named by its path so a tool without a skill
+loader can open it.
+
 This also reaches Copilot surfaces that never see `~/.claude/`: the cloud coding agent
 and the CLI get the protocol text, but not gate.sh, the hooks, or the agents, so there it
 is guidance only.
@@ -378,7 +420,7 @@ Installed to `~/.claude/scripts/`. Each one's behavior is pinned by a named test
 
 | Script | Usage | What it does |
 |---|---|---|
-| gate.sh | `gate.sh [lint\|types\|test\|build\|markers\|comments ...]` or `gate.sh test -- <targets>` | Refuses a dirty tree (`GATE_ALLOW_DIRTY=1` overrides), an unknown step, or a missing `gate.test`. With `-- <targets>`, runs only those tests through `gate.test.focus` and ends `FOCUSED:`, never `GATE:`. Flags a passing test step slower than `gate.test.budget`. Runs the gate one line per step, a ≤ 30-line failure excerpt (`GATE_EXCERPT_LINES`), full log in `.gate/<step>.log`. Exit 0 all pass, 1 otherwise. From a worktree that predates project.md, it reads the main checkout's. |
+| gate.sh | `gate.sh [lint\|types\|test\|build\|crap\|markers\|comments ...]` or `gate.sh test -- <targets>` | Refuses a dirty tree (`GATE_ALLOW_DIRTY=1` overrides), an unknown step, or a missing `gate.test`. With `-- <targets>`, runs only those tests through `gate.test.focus` and ends `FOCUSED:`, never `GATE:`. Flags a passing test step slower than `gate.test.budget`. Fails a function the diff touches whose `gate.crap` score is over `gate.crap.max`. Runs the gate one line per step, a ≤ 30-line failure excerpt (`GATE_EXCERPT_LINES`), full log in `.gate/<step>.log`. Exit 0 all pass, 1 otherwise. From a worktree that predates project.md, it reads the main checkout's. |
 | find-comments.sh | `find-comments.sh --base <ref>` or `find-comments.sh <file>...` | Prints `path:line: text` for every comment added since `<ref>`, or in the given files. Exit 1 when it finds one, 2 on bad usage. |
 | log-event.sh | `log-event.sh <ID\|-> <event> <verdict> [--sha S] [--attempt N] [--category C]... [--signal TEXT]...` | Appends one JSON line to the main checkout's `vault/log.jsonl`. Up to 5 signals of 200 chars. Unknown events or categories exit 1 and list the valid ones. Prints `RETRO DUE` when a category recurs across slices. |
 | guard.sh | PreToolUse hook (every tool) | Exit 2 blocks the call and feeds the reason back. Fails closed without jq or on a malformed payload. Understands Claude Code, VS Code Copilot (its own tool names; an unknown tool carrying a command is treated as a shell call) and Cursor (`beforeShellExecution` and `beforeReadFile`, answered with allow/deny JSON). See Safety model. |

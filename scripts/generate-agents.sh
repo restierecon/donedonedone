@@ -120,7 +120,9 @@ yourself -- dispatch to the ${roster_prose} subagents and follow the
 same decomposition, gating, and resolution rules the protocol defines for the
 Director role in Claude Code. You do run ~/.claude/scripts/gate.sh once per slice
 yourself (Completion Gates step 2) and act on what it prints, including a test line
-over gate.test.budget. Record gate verdicts, vault/task-tree.json updates and
+over gate.test.budget. A crap FAIL is a gate FAIL like any other: back to the builder.
+For CRAP hotspots outside a slice's diff (architecture reviews, adopted codebases),
+follow ~/.claude/skills/crap-hotspots/SKILL.md. Record gate verdicts, vault/task-tree.json updates and
 vault/log.jsonl lines (through ~/.claude/scripts/log-event.sh) yourself; subagents
 report back as text only, never editing vault files directly.
 AGENT

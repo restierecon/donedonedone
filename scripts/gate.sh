@@ -18,7 +18,7 @@ setting() {
   printf '%s\n' "${value%\`}"
 }
 
-known="lint types test build markers comments"
+known="lint types test build crap markers comments"
 steps=() targets=() focused=0
 while [ $# -gt 0 ]; do
   if [ "$1" = "--" ]; then
@@ -45,6 +45,15 @@ if [ "$focused" -eq 0 ]; then
   budget=$(setting 'test\.budget')
   case "$budget" in
     *[!0-9]*) echo "gate.sh: gate.test.budget must be whole seconds, not '$budget'" >&2; exit 1 ;;
+  esac
+fi
+
+crap_max=30
+if [ "$focused" -eq 0 ]; then
+  crap_max=$(setting 'crap\.max')
+  [ -z "$crap_max" ] && crap_max=30
+  case "$crap_max" in
+    *[!0-9.]*|*.*.*|.*|*.) echo "gate.sh: gate.crap.max must be a number, not '$crap_max'" >&2; exit 1 ;;
   esac
 fi
 
@@ -78,6 +87,48 @@ added_markers() {
     /^\+/        { t = substr($0, 2)
                    if (t ~ /(^|[^A-Za-z0-9_])(TODO|FIXME|XXX)([^A-Za-z0-9_]|$)/) print f ":" n ": " t
                    n++ }'
+}
+
+added_lines() {
+  git -C "$top" diff -U0 "$1...HEAD" -- . ':(exclude)vault' | awk '
+    /^\+\+\+ / { f = substr($0, 7); next }
+    /^@@/       { match($0, /\+[0-9]+/); n = substr($0, RSTART + 1, RLENGTH - 1); next }
+    /^\+/       { print f ":" n; n++ }'
+}
+
+crap_touched() {
+  awk -v max="$1" '
+    FILENAME == ARGV[1] { touched[$0] = 1; files[substr($0, 1, index($0, ":") - 1)] = 1; next }
+    {
+      sub(/\r$/, "")
+      if (NF < 3 || $2 !~ /^[0-9]+(\.[0-9]+)?$/) next
+      loc = $1
+      gsub(/\\/, "/", loc)
+      sub(/^\.\//, "", loc)
+      if (!match(loc, /:[0-9]+(-[0-9]+)?$/)) next
+      path = substr(loc, 1, RSTART - 1)
+      range = substr(loc, RSTART + 1)
+      parsed++
+      name = $3
+      for (k = 4; k <= NF; k++) name = name " " $k
+      dash = index(range, "-")
+      hit = 0
+      if (dash) {
+        start = substr(range, 1, dash - 1) + 0
+        stop = substr(range, dash + 1) + 0
+        for (l = start; l <= stop && !hit; l++) if ((path ":" l) in touched) hit = 1
+      } else {
+        start = range + 0
+        if (path in files) hit = 1
+      }
+      if (!hit) next
+      if (!seen || $2 + 0 > best + 0) { best = $2; best_name = name; seen = 1 }
+      if ($2 + 0 > max + 0) print "OVER " path ":" start " " name " " $2
+    }
+    END {
+      print "PARSED " parsed + 0
+      if (seen) print "TOP " best_name " " best
+    }' "$2" "$3"
 }
 
 with_targets() {
@@ -120,6 +171,57 @@ for step in "${steps[@]}"; do
       failed+=("comments")
       echo "comments FAIL — the diff against $base adds comments (a why the code can't say goes in a test named for it, an ADR, or the commit message):"
       echo "$found" | head -"$EXCERPT_LINES" | while IFS= read -r line; do echo "  $line"; done
+    fi
+    continue
+  fi
+  if [ "$step" = "crap" ]; then
+    cmd=$(setting crap)
+    if [ -z "$cmd" ]; then
+      echo "crap SKIP (no gate.crap in vault/project.md)"
+      continue
+    fi
+    if [ "$cmd" = "none" ]; then
+      echo "crap SKIP (gate.crap: none)"
+      continue
+    fi
+    base="${GATE_BASE:-main}"
+    if ! git -C "$top" rev-parse -q --verify "$base^{commit}" >/dev/null; then
+      echo "crap SKIP (no $base branch to diff against; set GATE_BASE)"
+      continue
+    fi
+    case " ${failed[*]} " in
+      *" test "*) echo "crap SKIP (test failed — coverage is stale)"; continue ;;
+    esac
+    log="$logdir/crap.log"
+    start=$(date +%s)
+    (cd "$top" && bash -c "$cmd") >"$log" 2>&1
+    status=$?
+    secs=$(( $(date +%s) - start ))
+    if [ "$status" -ne 0 ]; then
+      failed+=("crap")
+      echo "crap FAIL (exit $status, ${secs}s) — full log: .gate/crap.log"
+      tail -"$EXCERPT_LINES" "$log" | while IFS= read -r line; do echo "  $line"; done
+      continue
+    fi
+    added_lines "$base" > "$logdir/crap.touched"
+    result=$(crap_touched "$crap_max" "$logdir/crap.touched" "$log")
+    if [ "$(echo "$result" | sed -n 's/^PARSED //p')" = "0" ]; then
+      failed+=("crap")
+      echo "crap FAIL (${secs}s) — gate.crap printed no '<path>:<start>-<end> <score> <name>' lines; full log: .gate/crap.log"
+      continue
+    fi
+    over=$(echo "$result" | sed -n 's/^OVER //p')
+    if [ -n "$over" ]; then
+      failed+=("crap")
+      echo "crap FAIL (${secs}s) — functions the diff touches score over gate.crap.max ($crap_max); split them or test their untested branches:"
+      echo "$over" | head -"$EXCERPT_LINES" | while IFS= read -r line; do echo "  $line"; done
+      continue
+    fi
+    top_line=$(echo "$result" | sed -n 's/^TOP //p')
+    if [ -n "$top_line" ]; then
+      echo "crap PASS (${secs}s) — highest touched: $top_line (max $crap_max)"
+    else
+      echo "crap PASS (${secs}s) — the diff touches no scored function"
     fi
     continue
   fi
