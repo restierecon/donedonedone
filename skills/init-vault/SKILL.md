@@ -35,8 +35,9 @@ Initialize this project for the autonomous workflow. Do all of the following:
    `npx vitest run {}`, `go test {}`) — builders run only their own tests mid-loop ·
    `- gate.test.budget: <seconds>` — the gate flags a full suite slower than this ·
    `- gate.crap: <cmd>` printing `<path>:<start>-<end> <score> <name>` per function,
-   usually from the coverage file `gate.test` writes (README → CRAP has per-stack
-   pointers; skip it if the stack has no per-function coverage) · `- gate.crap.max: 30`; the
+   usually `~/.claude/scripts/crap-score.py <coverage report> <src dir>` reading the
+   report `gate.test` writes (README → CRAP → Per-stack setup has Python, React and Java
+   lines; gitignore the report) · `- gate.crap.max: 30`; the
    built-in `markers` and `comments` steps need no line, but add
    `- gate.comments.skip: <path prefixes>` for generated code (migrations) and
    `- gate.comments.directives: <regex>` for a tool directive the gate doesn't know ·

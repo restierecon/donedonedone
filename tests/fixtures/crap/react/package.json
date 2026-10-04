@@ -1,0 +1,14 @@
+{
+  "name": "crap-react-sample",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@vitest/coverage-v8": "3.2.4",
+    "react": "19.1.1",
+    "react-dom": "19.1.1",
+    "vitest": "3.2.4"
+  }
+}
