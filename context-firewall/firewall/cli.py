@@ -26,6 +26,12 @@ def _out(text: str) -> None:
     sys.stdout.flush()
 
 
+def _raw(stream, text: str) -> None:
+    stream.flush()
+    stream.buffer.write(text.encode("utf-8", "surrogateescape"))
+    stream.buffer.flush()
+
+
 def _err(text: str) -> None:
     sys.stderr.write(printable(text) + ("\n" if not text.endswith("\n") else ""))
 
@@ -42,14 +48,13 @@ def _emit(result: CommandResult, args: argparse.Namespace) -> int:
     store = _store(args)
     settings = config.load(store.root, getattr(args, "mode", None))
     if not settings.enabled:
-        sys.stdout.write(printable(result.stdout))
-        sys.stderr.write(printable(result.stderr))
+        _raw(sys.stdout, result.stdout)
+        _raw(sys.stderr, result.stderr)
         return result.exit_code if result.exit_code is not None else 0
     outcome = pipeline.process(result, settings, store, session=_session(args), origin=getattr(args, "origin", "cli"))
     if outcome.passthrough:
-        sys.stdout.write(printable(result.stdout))
-        sys.stdout.flush()
-        sys.stderr.write(printable(result.stderr))
+        _raw(sys.stdout, result.stdout)
+        _raw(sys.stderr, result.stderr)
         if result.timed_out:
             _err(f"[ddd] timed out after {args.timeout}s; partial output above" + (f"; stored as {outcome.artifact.id}" if outcome.artifact else ""))
     else:
@@ -136,8 +141,8 @@ def cmd_ingest(args: argparse.Namespace) -> int:
     if outcome.passthrough:
         if args.quiet_passthrough:
             return 3
-        sys.stdout.write(printable(result.stdout))
-        sys.stderr.write(printable(result.stderr))
+        _raw(sys.stdout, result.stdout)
+        _raw(sys.stderr, result.stderr)
         return 0
     body = outcome.text or ""
     if args.body_only:
@@ -191,7 +196,7 @@ def cmd_artifact(args: argparse.Namespace) -> int:
         return 0
     if args.raw or args.stream:
         artifact, text = retrieval.raw(store, aid, args.stream or "combined")
-        sys.stdout.write(printable(text))
+        _raw(sys.stdout, text)
         return 0
     if args.sent:
         _out(retrieval.raw(store, aid, "sent")[1])

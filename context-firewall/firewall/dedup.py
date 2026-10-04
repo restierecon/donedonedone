@@ -71,10 +71,24 @@ def touch_file(state: Dict[str, Any], path: str, now: Optional[float] = None) ->
     state["active_files"][path] = now or time.time()
 
 
+def _resolved(path: str) -> str:
+    try:
+        return str(Path(path).resolve()).replace("\\", "/")
+    except (OSError, ValueError):
+        return path.replace("\\", "/")
+
+
 def active_files(state: Dict[str, Any], cwd: str) -> list:
     out = []
-    prefix = cwd.replace("\\", "/").rstrip("/") + "/"
+    prefixes = {p.rstrip("/") + "/" for p in (cwd.replace("\\", "/"), _resolved(cwd))}
     for path in sorted(state["active_files"], key=lambda p: -state["active_files"][p]):
-        norm = path.replace("\\", "/")
-        out.append(norm[len(prefix):] if norm.startswith(prefix) else norm)
+        rel = None
+        for candidate in (path.replace("\\", "/"), _resolved(path)):
+            for prefix in prefixes:
+                if candidate.startswith(prefix):
+                    rel = candidate[len(prefix):]
+                    break
+            if rel is not None:
+                break
+        out.append(rel if rel is not None else path.replace("\\", "/"))
     return out
