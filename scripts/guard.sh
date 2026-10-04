@@ -149,6 +149,23 @@ if [ "$tool" = "Agent" ] || [ "$tool" = "Task" ]; then
   allow
 fi
 
+if [ "$tool" = "mcp__claude-in-chrome__navigate" ] || [ "$tool" = "mcp__claude-in-chrome__tabs_create_mcp" ]; then
+  raw_url=$(field '.tool_input.url')
+  if [ -z "$raw_url" ]; then
+    [ "$tool" = "mcp__claude-in-chrome__tabs_create_mcp" ] && allow
+    block "BLOCKED: navigate without a url."
+  fi
+  case "$raw_url" in *[[:space:][:cntrl:]]*)
+    block "BLOCKED: url contains whitespace or control characters." ;;
+  esac
+  url=$(printf '%s' "$raw_url" | lower)
+  case "$url" in back|forward) allow ;; esac
+  authority=$(printf '%s\n' "$url" | sed -nE 's#^https?://([^/?#]*).*#\1#p')
+  printf '%s\n' "$authority" | LC_ALL=C grep -qE '^(localhost|127\.0\.0\.1|\[::1\]|([a-z0-9-]+\.)+(local|localhost|test))(:[0-9]+)?$' \
+    || block "BLOCKED: browser navigation is limited to http(s) on localhost, 127.0.0.1, [::1], *.local, *.localhost, *.test (got: $raw_url)."
+  allow
+fi
+
 [ "$tool" = "Bash" ] || allow
 [ -z "$cmd" ] && allow
 

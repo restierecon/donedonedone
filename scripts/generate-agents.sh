@@ -21,6 +21,7 @@ map_tools() {
       Write|Edit|MultiEdit) v="edit" ;;
       Grep|Glob) v="search" ;;
       Bash) v="runCommands" ;;
+      mcp__*) continue ;;
       *) v="$t" ;;
     esac
     if [[ " ${out[*]} " != *" $v "* ]]; then

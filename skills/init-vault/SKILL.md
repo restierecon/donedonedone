@@ -64,5 +64,8 @@ Initialize this project for the autonomous workflow. Do all of the following:
 12. Existing codebase with `gate.crap` set: run the crap-hotspots skill
     (~/.claude/skills/crap-hotspots/SKILL.md) once for a baseline card in
     vault/flags/pending-review.md, then commit it.
-13. Confirm to me: vault ready, autonomy dial at `supervised`, and suggest running
+13. Optional, offer once: "Run /create-verification-skill to generate
+    .claude/skills/verify-<project>/ so the reviewer can drive the real app?" Run it only
+    on a yes (needs a runnable app — skip for an empty repo); never re-ask in later sessions.
+14. Confirm to me: vault ready, autonomy dial at `supervised`, and suggest running
     /grill on the first feature before any decomposition.

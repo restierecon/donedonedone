@@ -47,3 +47,4 @@ earning its keep. "Vanishes" is your refactor candidate.
 - Human-rejected candidates with load-bearing reasons → offer an ADR so this
   review never re-suggests them
 - Reset slices_since_arch_review to 0 in task-tree.json (one counter drives both reviews)
+- Project has `.claude/skills/verify-*/` → also suggest /maintain-verification-skill (feature map drifts at the same cadence)
