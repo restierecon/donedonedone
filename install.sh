@@ -42,7 +42,7 @@ for old in \
     echo "  retired ${old%%:*} (vault memory layer dropped) → ${old#*:}.bak-$TS"
   fi
 done
-cp "$SRC"/scripts/*.sh "$SRC"/scripts/*.py "$DEST/scripts/"
+cp "$SRC"/scripts/*.sh "$SRC"/scripts/*.py "$SRC"/scripts/*.html "$DEST/scripts/"
 chmod +x "$DEST"/scripts/*.sh "$DEST"/scripts/*.py
 cp -R "$SRC"/skills/* "$DEST/skills/"
 

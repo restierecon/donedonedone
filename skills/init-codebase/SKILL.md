@@ -70,7 +70,11 @@ only what is missing, and always run step 6.
     It only manages its own marked block, so an existing AGENTS.md keeps its content, and
     the session-start hook keeps the block current after upgrades.
 11. Commit: `git add -A && git commit -m "chore: init autonomous workflow vault"`
-12. Existing codebase with `gate.crap` set: run the crap-hotspots skill
+12. Existing codebase: run `python3 ~/.claude/scripts/codebase-graph.py build` (codebase-map
+    skill) and show me its summary and `.gate/graph.html`, so the first grill starts from
+    the real module map. Offer once to record any boundary I name as a rule in
+    vault/architecture.json (the gate's `arch` step skips until that file exists on main).
+    With `gate.crap` set: run the crap-hotspots skill
     (~/.claude/skills/crap-hotspots/SKILL.md) once for a baseline card in
     vault/flags/pending-review.md, then commit it. Same with `gate.mutation` set: the
     mutation-survivors skill (~/.claude/skills/mutation-survivors/SKILL.md).

@@ -1,0 +1,310 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Codebase Map</title>
+<style>
+:root {
+  --bg: #fbfaf8; --panel: #ffffff; --ink: #1d1c1a; --muted: #6b6862; --line: #d9d5ce;
+  --edge: #a9a49b; --accent: #2f5fd0; --high: #c4372b; --medium: #b7791f; --low: #3b7a57;
+  --high-bg: #fbe9e7; --medium-bg: #fdf3e1; --low-bg: #e8f3ec; --chip: #f1eee9;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #161514; --panel: #1f1e1c; --ink: #ece9e4; --muted: #a29e96; --line: #3a3835;
+    --edge: #6d6962; --accent: #7aa2ff; --high: #ff7b6e; --medium: #f0b45a; --low: #6cc596;
+    --high-bg: #3a1f1c; --medium-bg: #36291a; --low-bg: #1c3127; --chip: #2a2826;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #161514; --panel: #1f1e1c; --ink: #ece9e4; --muted: #a29e96; --line: #3a3835;
+  --edge: #6d6962; --accent: #7aa2ff; --high: #ff7b6e; --medium: #f0b45a; --low: #6cc596;
+  --high-bg: #3a1f1c; --medium-bg: #36291a; --low-bg: #1c3127; --chip: #2a2826;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+header { padding: 14px 16px; border-bottom: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: baseline; }
+h1 { font-size: 17px; margin: 0; }
+.stats { color: var(--muted); }
+.controls { margin-left: auto; display: flex; gap: 12px; color: var(--muted); }
+main { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, 420px); min-height: calc(100vh - 54px); }
+#canvas { overflow: auto; border-right: 1px solid var(--line); }
+#panel { background: var(--panel); padding: 14px 16px; overflow: auto; max-height: calc(100vh - 54px); }
+@media (max-width: 800px) {
+  main { grid-template-columns: 1fr; }
+  #canvas { border-right: 0; border-bottom: 1px solid var(--line); max-height: 60vh; }
+  #panel { max-height: none; }
+}
+svg text { font: 12px system-ui, sans-serif; fill: var(--ink); pointer-events: none; }
+.node rect { stroke: var(--line); stroke-width: 1.2; cursor: pointer; }
+.node.high rect { fill: var(--high-bg); stroke: var(--high); }
+.node.medium rect { fill: var(--medium-bg); stroke: var(--medium); }
+.node.low rect { fill: var(--low-bg); stroke: var(--low); }
+.node.selected rect { stroke: var(--accent); stroke-width: 3; }
+.node.dim { opacity: .3; }
+.edge { fill: none; stroke: var(--edge); stroke-width: 1.2; }
+.edge.cycle { stroke: var(--high); stroke-dasharray: 5 3; stroke-width: 1.6; }
+.edge.out { stroke: var(--accent); stroke-width: 2.2; }
+.edge.in { stroke: var(--medium); stroke-width: 2.2; }
+.edge.dim { opacity: .15; }
+.crumbs { color: var(--muted); margin-bottom: 8px; }
+.crumbs a, .link { color: var(--accent); cursor: pointer; text-decoration: none; }
+.crumbs a:hover, .link:hover { text-decoration: underline; }
+h2 { font-size: 16px; margin: 4px 0 8px; overflow-wrap: anywhere; }
+h3 { font-size: 13px; margin: 16px 0 6px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.badge { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 12px; font-weight: 600; }
+.badge.high { background: var(--high-bg); color: var(--high); }
+.badge.medium { background: var(--medium-bg); color: var(--medium); }
+.badge.low { background: var(--low-bg); color: var(--low); }
+.metrics { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 6px; }
+.metric { background: var(--chip); border-radius: 6px; padding: 6px 8px; }
+.metric b { display: block; font-size: 16px; }
+.metric span { color: var(--muted); font-size: 12px; }
+ul { margin: 0; padding-left: 18px; }
+li { margin: 2px 0; overflow-wrap: anywhere; }
+.why li { margin: 4px 0; }
+.kind { font-weight: 600; text-transform: uppercase; font-size: 11px; letter-spacing: .04em; margin-right: 4px; }
+.kind.violation, .kind.cycle { color: var(--high); }
+.kind.hotspot, .kind.hub, .kind.complex, .kind.untested { color: var(--medium); }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--line); }
+th { color: var(--muted); font-weight: 500; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.note { color: var(--muted); font-size: 12px; }
+.empty { color: var(--muted); font-style: italic; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Codebase Map</h1>
+  <span class="stats" id="stats"></span>
+  <span class="controls">
+    <label><input type="checkbox" id="onlyFlagged"> flagged only</label>
+    <label><input type="checkbox" id="showTests"> test modules</label>
+  </span>
+</header>
+<main>
+  <div id="canvas"><svg id="svg" role="img" aria-label="Module dependency graph"></svg></div>
+  <aside id="panel"></aside>
+</main>
+<script>
+const G = __GRAPH_JSON__;
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const pct = v => v === null || v === undefined ? "—" : Math.round(v * 100) + "%";
+const KIND_HELP = {
+  violation: "breaks an architecture rule from vault/architecture.json",
+  cycle: "part of a dependency cycle",
+  hub: "many modules depend on it",
+  hotspot: "complex and frequently changed",
+  complex: "a function with many paths",
+  untested: "little or no test reach"
+};
+let state = { view: "overview", module: null, file: null, fn: null };
+
+function visibleModules() {
+  return Object.values(G.modules).filter(m =>
+    ($("showTests").checked || !m.test_only) && (!$("onlyFlagged").checked || m.risk !== "low"));
+}
+
+function layout(mods) {
+  const names = new Set(mods.map(m => m.name));
+  const deps = n => G.modules[n].depends_on.filter(d => names.has(d));
+  const cyc = new Set(G.module_cycles.flat());
+  const level = {};
+  const visiting = new Set();
+  const lv = n => {
+    if (level[n] !== undefined) return level[n];
+    if (visiting.has(n)) return 0;
+    visiting.add(n);
+    let best = 0;
+    for (const d of deps(n)) best = Math.max(best, lv(d) + 1);
+    visiting.delete(n);
+    return (level[n] = best);
+  };
+  mods.forEach(m => lv(m.name));
+  const rows = [];
+  mods.forEach(m => (rows[level[m.name]] = rows[level[m.name]] || []).push(m.name));
+  const pos = {};
+  const W = n => Math.min(240, 24 + 7 * label(n).length + (G.modules[n].flag_kinds.length ? 14 : 0));
+  const rowGap = 90, colGap = 22, pad = 24;
+  let width = 0;
+  for (let r = 0; r < rows.length; r++) {
+    const row = rows[r] || [];
+    row.sort((a, b) => {
+      const bary = n => { const ds = deps(n).filter(d => pos[d]); return ds.length ? ds.reduce((s, d) => s + pos[d].x, 0) / ds.length : 1e9; };
+      return bary(a) - bary(b) || a.localeCompare(b);
+    });
+    let x = pad;
+    row.forEach(n => { pos[n] = { x, w: W(n) }; x += W(n) + colGap; });
+    width = Math.max(width, x);
+  }
+  const top = rows.length - 1;
+  Object.keys(pos).forEach(n => { pos[n].y = pad + (top - level[n]) * rowGap; pos[n].h = 34; });
+  return { pos, width: Math.max(width + 60, 300), height: pad * 2 + Math.max(rows.length, 1) * rowGap - (rowGap - 34), deps, cyc };
+}
+
+function label(n) {
+  const parts = n.split("/");
+  return parts.length > 2 ? "…/" + parts.slice(-2).join("/") : n;
+}
+
+function draw() {
+  const mods = visibleModules();
+  const svg = $("svg");
+  if (!mods.length) { svg.setAttribute("width", 300); svg.setAttribute("height", 60); svg.innerHTML = '<text x="20" y="34">No modules match the filters.</text>'; return; }
+  const L = layout(mods);
+  svg.setAttribute("width", L.width);
+  svg.setAttribute("height", L.height);
+  svg.setAttribute("viewBox", `0 0 ${L.width} ${L.height}`);
+  const sel = state.module;
+  const selected = sel && G.modules[sel];
+  let html = '<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--edge)"/></marker></defs>';
+  const cycleEdge = (a, b) => G.module_cycles.some(c => c.indexOf(a) >= 0 && c.indexOf(b) >= 0);
+  for (const m of mods) {
+    for (const d of L.deps(m.name)) {
+      const a = L.pos[m.name], b = L.pos[d];
+      const x1 = a.x + a.w / 2, y1 = a.y + a.h, x2 = b.x + b.w / 2, y2 = b.y;
+      let cls = "edge";
+      if (cycleEdge(m.name, d)) cls += " cycle";
+      if (sel) cls += m.name === sel ? " out" : d === sel ? " in" : " dim";
+      const path = y2 > y1
+        ? `M${x1},${y1} C${x1},${(y1 + y2) / 2} ${x2},${(y1 + y2) / 2} ${x2},${y2}`
+        : `M${a.x + a.w},${a.y + a.h / 2} C${a.x + a.w + 50},${a.y + a.h / 2} ${b.x + b.w + 50},${b.y + b.h / 2} ${b.x + b.w},${b.y + b.h / 2}`;
+      html += `<path class="${cls}" d="${path}" marker-end="url(#arrow)"><title>${esc(m.name)} → ${esc(d)}</title></path>`;
+    }
+  }
+  for (const m of mods) {
+    const p = L.pos[m.name];
+    let cls = "node " + m.risk;
+    if (m.name === sel) cls += " selected";
+    else if (selected && selected.depends_on.indexOf(m.name) < 0 && selected.used_by.indexOf(m.name) < 0) cls += " dim";
+    const flags = m.flag_kinds.length ? " · " + m.flag_kinds.join(", ") : "";
+    html += `<g class="${cls}" data-module="${esc(m.name)}" tabindex="0"><title>${esc(m.name)} — ${m.risk} risk${esc(flags)}</title>` +
+      `<rect x="${p.x}" y="${p.y}" width="${p.w}" height="${p.h}" rx="6"/>` +
+      `<text x="${p.x + 10}" y="${p.y + 21}">${esc(label(m.name))}${m.flag_kinds.length ? " ●" : ""}</text></g>`;
+  }
+  svg.innerHTML = html;
+  svg.querySelectorAll(".node").forEach(n => {
+    const go = () => openModule(n.dataset.module);
+    n.addEventListener("click", go);
+    n.addEventListener("keydown", e => { if (e.key === "Enter") go(); });
+  });
+}
+
+function crumbs() {
+  const parts = ['<a data-go="overview">Repository</a>'];
+  if (state.module) parts.push(`<a data-go="module">${esc(label(state.module))}</a>`);
+  if (state.file) parts.push(`<a data-go="file">${esc(state.file.split("/").pop())}</a>`);
+  if (state.fn) parts.push(esc(state.fn));
+  return `<div class="crumbs">${parts.join(" › ")}</div>`;
+}
+
+function whyList(flags) {
+  if (!flags.length) return '<p class="empty">Nothing highlighted.</p>';
+  return '<ul class="why">' + flags.map(f => `<li><span class="kind ${f.kind}" title="${esc(KIND_HELP[f.kind] || "")}">${f.kind}</span>${esc(f.why)}</li>`).join("") + "</ul>";
+}
+
+function moduleLinks(list) {
+  return list.length ? "<ul>" + list.map(n => `<li><a class="link" data-module="${esc(n)}">${esc(n)}</a> <span class="badge ${G.modules[n].risk}">${G.modules[n].risk}</span></li>`).join("") + "</ul>" : '<p class="empty">None.</p>';
+}
+
+function fileLinks(list) {
+  return list.length ? "<ul>" + list.map(p => `<li><a class="link" data-file="${esc(p)}">${esc(p)}</a></li>`).join("") + "</ul>" : '<p class="empty">None.</p>';
+}
+
+function metric(value, name) { return `<div class="metric"><b>${value}</b><span>${name}</span></div>`; }
+
+function renderOverview() {
+  const mods = Object.values(G.modules);
+  const order = { high: 0, medium: 1, low: 2 };
+  const flagged = mods.filter(m => m.risk !== "low").sort((a, b) => order[a.risk] - order[b.risk] || b.fan_in - a.fan_in);
+  let h = crumbs() + `<h2>Repository @ ${esc(G.rev)}</h2><div class="metrics">` +
+    metric(mods.length, "modules") + metric(Object.keys(G.files).length, "files") +
+    metric(G.module_cycles.length, "module cycles") + metric(flagged.length, "flagged modules") + "</div>";
+  h += '<p class="note">Arrows point from a module to what it imports. Rows run from dependents (top) down to the modules they depend on (bottom). Red dashed arrows are cycles. Click a module to drill in; its dependencies turn blue and its dependents amber.</p>';
+  if (!G.complexity_measured) h += '<p class="note">Complexity wasn\'t measured (lizard isn\'t installed), so hotspot and complexity flags are missing.</p>';
+  if (!G.coverage_given) h += '<p class="note">No coverage report given: "untested" means no test file reaches it through imports.</p>';
+  h += "<h3>Why modules are highlighted</h3>";
+  h += flagged.length ? "<table><tr><th>Module</th><th>Risk</th><th>Signals</th></tr>" + flagged.map(m =>
+    `<tr><td><a class="link" data-module="${esc(m.name)}">${esc(m.name)}</a></td><td><span class="badge ${m.risk}">${m.risk}</span></td><td>${m.flag_kinds.join(", ")}</td></tr>`).join("") + "</table>"
+    : '<p class="empty">Nothing flagged.</p>';
+  if (G.module_cycles.length) h += "<h3>Module cycles</h3><ul>" + G.module_cycles.map(c => `<li>${c.map(esc).join(" → ")}</li>`).join("") + "</ul>";
+  const rules = (G.rules && G.rules.forbid) || [];
+  if (rules.length) h += "<h3>Architecture rules</h3><ul>" + rules.map(r => `<li>${esc(r.from)} ↛ ${esc(r.to)}${r.why ? " — " + esc(r.why) : ""}</li>`).join("") + "</ul>";
+  h += '<p class="note">Signals are prompts to look, not verdicts. A long function that reads well can be fine, and a tiny one that only forwards calls can still be a problem.</p>';
+  return h;
+}
+
+function renderModule() {
+  const m = G.modules[state.module];
+  const files = m.files.map(p => G.files[p]);
+  let h = crumbs() + `<h2>${esc(m.name)} <span class="badge ${m.risk}">${m.risk} risk</span></h2><div class="metrics">` +
+    metric(m.files.length, "files") + metric(m.loc, "lines") + metric(m.fan_in, "used by (fan-in)") + metric(m.fan_out, "depends on (fan-out)") +
+    metric(m.instability === null ? "—" : m.instability, "instability") + metric(m.max_ccn, "max complexity") + metric(m.churn, `changes / ${G.churn_days}d`) + "</div>";
+  h += '<p class="note">Instability is fan-out ÷ (fan-in + fan-out). Near 0, many modules lean on this one, so it should be stable. Near 1, it leans on others and is cheap to change.</p>';
+  h += "<h3>Why it's highlighted</h3>" + whyList(m.flags.concat(...files.map(f => f.flags.map(x => ({ kind: x.kind, why: f.path.split("/").pop() + ": " + x.why })))));
+  h += "<h3>Files</h3><table><tr><th>File</th><th class=\"num\">Lines</th><th class=\"num\">Max cx</th><th class=\"num\">Churn</th><th class=\"num\">Cov</th></tr>" + files.map(f =>
+    `<tr><td><a class="link" data-file="${esc(f.path)}">${esc(f.path.split("/").pop())}</a>${f.flags.length ? " ●" : ""}${f.test ? ' <span class="note">test</span>' : ""}</td><td class="num">${f.loc}</td><td class="num">${f.functions.length ? f.functions[0].ccn : "—"}</td><td class="num">${f.churn}</td><td class="num">${pct(f.coverage)}</td></tr>`).join("") + "</table>";
+  h += "<h3>Used from outside this module</h3>" + fileLinks(m.used_from_outside);
+  h += "<h3>Depends on</h3>" + moduleLinks(m.depends_on);
+  h += "<h3>Used by</h3>" + moduleLinks(m.used_by);
+  if (m.externals.length) h += "<h3>External / unresolved imports</h3><p>" + m.externals.slice(0, 40).map(esc).join(", ") + (m.externals.length > 40 ? " …" : "") + "</p>";
+  return h;
+}
+
+function renderFile() {
+  const f = G.files[state.file];
+  let h = crumbs() + `<h2>${esc(f.path)}</h2><div class="metrics">` + metric(f.loc, "lines") + metric(f.functions.length, "functions") +
+    metric(f.imported_by.length, "imported by") + metric(f.imports.length, "imports") + metric(f.churn, `changes / ${G.churn_days}d`) + metric(pct(f.coverage), "coverage") + "</div>";
+  h += "<h3>Why it's highlighted</h3>" + whyList(f.flags);
+  h += "<h3>Functions (most complex first)</h3>";
+  h += f.functions.length ? "<table><tr><th>Function</th><th class=\"num\">Cx</th><th class=\"num\">Lines</th><th class=\"num\">Cov</th></tr>" + f.functions.map(fn =>
+    `<tr><td><a class="link" data-fn="${esc(fn.name)}">${esc(fn.name)}</a></td><td class="num">${fn.ccn}</td><td class="num">${fn.start}-${fn.end}</td><td class="num">${pct(fn.coverage)}</td></tr>`).join("") + "</table>"
+    : '<p class="empty">No functions measured.</p>';
+  h += "<h3>Imported by (callers)</h3>" + fileLinks(f.imported_by);
+  h += "<h3>Imports</h3>" + fileLinks(f.imports);
+  h += "<h3>Tested by</h3>" + fileLinks(f.tested_by);
+  if (f.externals.length) h += "<h3>External / unresolved imports</h3><p>" + f.externals.map(esc).join(", ") + "</p>";
+  return h;
+}
+
+function renderFunction() {
+  const f = G.files[state.file];
+  const fn = f.functions.find(x => x.name === state.fn);
+  let h = crumbs() + `<h2>${esc(fn.name)}()</h2><div class="metrics">` + metric(fn.ccn, "complexity") + metric(fn.nloc, "code lines") +
+    metric(`${fn.start}-${fn.end}`, "lines") + metric(pct(fn.coverage), "coverage") + "</div>";
+  const mine = f.flags.filter(x => x.why.indexOf(fn.name + "()") === 0);
+  h += "<h3>Why it's highlighted</h3>" + whyList(mine);
+  h += "<h3>Files that import its file</h3>" + fileLinks(f.imported_by);
+  h += '<p class="note">Callers are tracked per file, from imports. Calls within a file, dynamic dispatch and lookups by string name aren\'t visible here, so grep for the name before trusting this list.</p>';
+  return h;
+}
+
+function render() {
+  const views = { overview: renderOverview, module: renderModule, file: renderFile, fn: renderFunction };
+  $("panel").innerHTML = views[state.view]();
+  $("panel").querySelectorAll("[data-module]").forEach(a => a.addEventListener("click", () => openModule(a.dataset.module)));
+  $("panel").querySelectorAll("[data-file]").forEach(a => a.addEventListener("click", () => openFile(a.dataset.file)));
+  $("panel").querySelectorAll("[data-fn]").forEach(a => a.addEventListener("click", () => { state.fn = a.dataset.fn; state.view = "fn"; render(); }));
+  $("panel").querySelectorAll("[data-go]").forEach(a => a.addEventListener("click", () => {
+    const go = a.dataset.go;
+    if (go === "overview") state = { view: "overview", module: null, file: null, fn: null };
+    if (go === "module") state = { view: "module", module: state.module, file: null, fn: null };
+    if (go === "file") state = { view: "file", module: state.module, file: state.file, fn: null };
+    draw(); render();
+  }));
+}
+
+function openModule(name) { state = { view: "module", module: name, file: null, fn: null }; draw(); render(); }
+function openFile(path) { state = { view: "file", module: G.files[path].module, file: path, fn: null }; draw(); render(); }
+
+$("stats").textContent = `${Object.keys(G.modules).length} modules · ${Object.keys(G.files).length} files · @ ${G.rev}`;
+$("onlyFlagged").addEventListener("change", draw);
+$("showTests").addEventListener("change", draw);
+draw();
+render();
+</script>
+</body>
+</html>

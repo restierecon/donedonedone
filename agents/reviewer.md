@@ -44,7 +44,9 @@ the slice branch elsewhere, since sibling worktrees share the same repo.
 
 ## Slop Checklist (each item yes/no)
 - [ ] No speculative abstraction (apply the deletion test to every new module:
-      delete it mentally — if complexity just vanishes, it was a pass-through → REJECT)
+      delete it mentally — if complexity just vanishes, it was a pass-through → REJECT).
+      Metrics are signals, not rules: never NIT a cohesive function for length alone;
+      do NIT a split that only adds indirection
 - [ ] No utils/helpers dumping ground additions
 - [ ] No silent error swallowing (bare except/empty catch = automatic REJECT)
 - [ ] No comments, docstrings or doc comments (gate's `comments` step catches most; you
@@ -71,6 +73,9 @@ the slice branch elsewhere, since sibling worktrees share the same repo.
       survivor it lists on a line that implements an acceptance criterion is CRITICAL
       unless a test named for why shows it is equivalent; other survivors are NITs
       naming the assertion that would kill them
+- [ ] No new dependency cycle or rule break: the gate's `arch` step owns the CRITICAL
+      when vault/architecture.json exists; without it, a new import cycle the impact
+      block shows is a NIT naming the import to invert
 - [ ] No scope creep — diff contains only this slice ("also improved X" = REJECT); every
       changed file is inside the slice's `risk.scope.files` (gate's `scope` step owns the
       CRITICAL; a file it missed is CRITICAL too)
@@ -105,5 +110,6 @@ SHA: [short sha reviewed] · EVIDENCE: [rung from step 6]
 GATE: [Director's result @ sha, trusted | re-run: result line]
 CRITERIA: [each — MET / NOT MET, with the test that proves it]
 BLAST RADIUS: [≤5 lines — consumers checked outside diff; each breakage file:line + proving command, or FYI unproven]
+DESIGN: complexity ↑/=/↓ · coupling ↑/=/↓ · cohesion ↑/=/↓ · duplication ↑/=/↓ — for each ↑, file:line and whether the criteria justify it (an unjustified ↑ is a NIT with its remedy)
 SLOP: [violated items only, file:line, [CRITICAL/NIT] — named remedy]
 CRITIQUE (if REJECTED): [file:line — [CRITICAL/NIT] — what must change and how — most important first]
