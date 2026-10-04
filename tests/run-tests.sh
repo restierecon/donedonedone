@@ -1105,7 +1105,7 @@ else
   bad "AGENTS.md tells Cursor and Copilot how to reach the bash scripts from PowerShell" "$(sed -n '2,6p' "$proj/AGENTS.md")"
 fi
 if grep -q "A \`crap\` FAIL goes back to the builder, and so does a \`mutation\` FAIL" "$proj/AGENTS.md" && grep -qF "$skill_path" "$proj/AGENTS.md" \
-   && grep -qF "~/.claude/skills/mutation-survivors/SKILL.md" "$proj/AGENTS.md"; then
+   && grep -qF ".claude/skills/mutation-survivors/SKILL.md" "$proj/AGENTS.md"; then
   ok "AGENTS.md gives Cursor and Copilot the CRAP gate rule and the skill's path"
 else
   bad "AGENTS.md gives Cursor and Copilot the CRAP gate rule and the skill's path" "$(grep -n crap "$proj/AGENTS.md")"
