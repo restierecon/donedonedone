@@ -135,8 +135,9 @@ merged, and never prune to make a failure disappear. `/harvest` backfills in bul
 - Slice start: `git checkout -b slice/<ID>` (parallel wave: a worktree — see the
   parallel-dispatch skill). Slice abandoned: delete branch and worktree.
 - Commits: Conventional Commits, imperative, slice ID — `feat(auth): add login endpoint (S002)`
-- No session links in commits or PRs: omit `Claude-Session:` trailers and claude.ai
-  session URLs from commit messages and PR bodies; keep `Co-Authored-By`.
+- No session links or Claude Code footers in commits, PRs or PR comments: omit
+  `Claude-Session:` trailers, claude.ai URLs and "Generated with/by Claude Code" lines,
+  and strip any footer a tool appends after posting; keep `Co-Authored-By`.
 
 ## Resolution Protocol (exhaust before flagging a human)
 - **Tier 1** — Builder retries on its own failing self-check. Max 3 attempts.
