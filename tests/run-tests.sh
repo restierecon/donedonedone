@@ -1227,6 +1227,12 @@ else
   bad "reviewer output has BLAST RADIUS, keeps SHA/EVIDENCE, <= 20 lines" "out_lines=$out_lines"
 fi
 
+echo "== wave checkpoint + retro wiring (protocol prose) =="
+if sed -n '1,/git worktree add/p' "$ROOT/skills/parallel-dispatch/SKILL.md" | grep -qi 'throughput checkpoint'; then ok "parallel-dispatch opens with throughput checkpoint"; else bad "parallel-dispatch opens with throughput checkpoint" "missing before first step"; fi
+if grep -q '^tools: Read, Grep, Glob$' "$ROOT/agents/retro.md" && grep -q 'never general-purpose' "$ROOT/skills/learning-loop/SKILL.md"; then ok "retro is spawned read-only by its tools"; else bad "retro is spawned read-only by its tools" "tools or spawn note changed"; fi
+if grep -q 'lesson seen twice' "$ROOT/agents/retro.md"; then ok "retro turns a repeated lesson into a mechanism"; else bad "retro turns a repeated lesson into a mechanism" "missing"; fi
+if grep -qF '.claude/projects/<slug>/' "$ROOT/agents/retro.md"; then ok "retro knows where Claude Code transcripts live"; else bad "retro knows where Claude Code transcripts live" "missing"; fi
+
 echo "== principles skill — index, references, LICENSE, checklist lines =="
 PR="$ROOT/skills/principles"
 if grep -q 'Copyright (c) 2026 Lauren Tan' "$PR/LICENSE" 2>/dev/null; then ok "principles ships pstack MIT LICENSE"; else bad "principles ships pstack MIT LICENSE" "missing"; fi

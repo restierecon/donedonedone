@@ -20,7 +20,8 @@ changes to the setup.
 
 ## Steps
 1. Dispatch the `retro` agent with the trigger and the vault paths. Hand it paths, not
-   log contents.
+   log contents. Always the `retro` type, never general-purpose: its Read, Grep, Glob
+   tools make it read-only by harness, not by prose.
 2. For each PROPOSAL, append an entry to vault/flags/pending-review.md with the usual
    3-line summary first (what / what it affects / cost to reverse), then the evidence
    log lines and the proposed change. Tag it `[retro]`.

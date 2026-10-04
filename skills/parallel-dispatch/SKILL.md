@@ -5,6 +5,18 @@ description: Use when the Director is about to build two or more independent sli
 
 # Parallel Slice Dispatch (git worktrees)
 
+**Throughput checkpoint — required before any wave.** Answer these four, each or
+`n/a: <reason>`, as the body of the wave-start bookkeeping commit on main
+(`chore(vault): start wave <IDs>`) before creating a worktree — log-event.sh has no
+wave event, so the commit message is the record:
+1. Blocking first steps — what must land before anything parallel can start (shared
+   schema, a dependency bump)? Ship that alone first.
+2. Independent slices — which ready slices share no `depends_on` edge and no files?
+3. Shared mutable files — which files would two slices both edit? Split the file's
+   ownership (or the slice) before falling back to serializing those slices.
+4. Smallest safe wave — the fewest slices that clear the most downstream work, not
+   simply `max_parallel_slices`.
+
 Gather all slices whose `depends_on` are satisfied (done, or absent from
 task-tree.json = shipped). They are independent and safe to run concurrently. Dispatch
 up to `max_parallel_slices` (vault/project.md, default 3) at once:
