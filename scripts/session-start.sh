@@ -1,6 +1,7 @@
 #!/bin/bash
 
 [ -t 0 ] || input=$(cat)
+here="$(cd "$(dirname "$0")" && pwd)"
 event=$(echo "${input:-}" | jq -r '.hook_event_name // empty' 2>/dev/null)
 root=$(echo "${input:-}" | jq -r '.cwd // .workspace_roots[0]? // empty' 2>/dev/null)
 if [ -n "$root" ] && [ -d "$root" ]; then cd "$root" || exit 0; fi
@@ -22,6 +23,11 @@ context() {
     echo "--- live slices (id · status · depends_on · title) ---"
     jq -r '.slices[]? | "\(.id) · \(.status) · [\((.depends_on // []) | join(","))] · \(.title)"' \
       vault/task-tree.json 2>/dev/null | head -40
+    held=$("$here/risk-gate.sh" pending 2>&1)
+    if [ -n "$held" ]; then
+      echo "--- risk gate (slices that can't start yet) ---"
+      echo "$held"
+    fi
   fi
 
   echo "--- git reality check ---"

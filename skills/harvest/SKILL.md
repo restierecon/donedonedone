@@ -25,7 +25,7 @@ slice, or as /harvest to backfill many.
    ## S002 — Developer can log in with email and password
    As a developer, I want to log in with my email and password so that my work stays
    tied to my own account.
-   Shipped 2026-08-19 · reviewer rejections: 0 · tag S002-done
+   Shipped 2026-08-19 · reviewer rejections: 0 · risk: high 64 · tag S002-done
    - Valid credentials set a session cookie; logout clears it
    - Wrong credentials return 401 without revealing which field was wrong
    - Six failures from one IP in a minute lock the account for 15 minutes
@@ -43,7 +43,8 @@ slice, or as /harvest to backfill many.
    - Meta line: shipped date (`git log -1 --format=%ad --date=short <ID>-done`, else
      the merge commit's date, else today) · reviewer rejections
      (count lines in vault/log.jsonl with that `slice` and `"verdict":"REJECTED"`; fall back to
-     `retry_count`) · the tag name.
+     `retry_count`) · risk class and score (the last `risk` line for the slice in
+     log.jsonl; `risk: unassessed` for a slice that predates the risk gate) · the tag name.
    - Bullets: one per acceptance criterion, rewritten as behavior a user can observe.
      Drop implementation detail; keep numbers, limits, and error behavior exact.
 6. Delete the harvested slices from task-tree.json. Leave `depends_on` entries that

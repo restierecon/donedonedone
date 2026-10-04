@@ -76,7 +76,15 @@ vault/task-tree.json. Slice shape:
 { "id": "S00n", "title": "Actor can ...", "so_that": "...",
   "status": "todo", "depends_on": [], "auditor_triggers": [], "acceptance_criteria": ["..."],
   "verify": "the command or demo that proves the criteria", "retry_count": 0,
-  "gates": {"self_review": null, "automated": null, "reviewer": null, "auditor": null} }
+  "risk": {"dimensions": {"blast_radius": 1, "reversibility": 1, "security": 0, "complexity": 1, "uncertainty": 1},
+           "rationale": "...", "hazards": [], "ruled_out": {},
+           "scope": {"change": "...", "files": ["src/x/*", "tests/x/*"], "unchanged": ["..."], "regressions": []},
+           "rollback": "...", "safeguards": []},
+  "gates": {"self_review": null, "automated": null, "reviewer": null, "auditor": null, "risk": null} }
+`risk` is the slice's risk assessment (risk-gate skill has the rubric): it decides the
+controls and autonomy the slice gets, and `scope` is the minimum necessary change the
+builder must stay inside. A slice whose honest rating comes out critical is worth a
+second look: splitting off the destructive part often leaves most of the work low.
 `auditor_triggers` lists every trust boundary the slice's behavior crosses, from: auth,
 sessions, data-access, user-input, file-uploads, secrets, dependencies, external-calls,
 llm-tools — `[]` when it crosses none. It decides two things: the auditor gate runs, and
@@ -85,7 +93,9 @@ otherwise). When unsure whether a boundary is crossed, list it.
 A gate value is null (not yet run), a verdict, or "skip: <reason>" (e.g. auditor on a
 slice with no trigger) — never omitted, never a bare "skip".
 `~/.claude/scripts/check-plan.sh` validates this shape mechanically (fields, title form, auditor_triggers vocabulary,
-every `depends_on` resolving to the draft, task-tree.json or stories.md, no cycles);
+every `depends_on` resolving to the draft, task-tree.json or stories.md, no cycles, a
+valid `risk` with every hazard its wording suggests declared or ruled out) and prints
+each slice's risk class and controls;
 the Director runs it before copying a draft.
 A `depends_on` ID that names a slice absent from task-tree.json is satisfied — merged
 slices are harvested into vault/stories.md and pruned. Check stories.md before assuming

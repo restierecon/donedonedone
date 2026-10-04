@@ -20,6 +20,10 @@ busy="$state/director-busy"
 mkdir -p "$state" || exit 0
 
 protected=(vault/task-tree.json vault/log.jsonl)
+human=(vault/risk-policy.json)
+case "$common" in
+  "$main_root"/*) human+=("${common#"$main_root"/}/donedonedone/approvals.jsonl") ;;
+esac
 
 key() { printf '%s' "$1" | tr '/' '_'; }
 
@@ -67,6 +71,24 @@ restore() {
   fi
 }
 
+snapshot_human() {
+  local f
+  for f in "${human[@]}"; do snapshot "$f"; done
+}
+
+restore_human() {
+  local f restored=()
+  for f in "${human[@]}"; do
+    if ! has_snapshot "$f"; then snapshot "$f"; continue; fi
+    changed "$f" || continue
+    restore "$f"
+    restored+=("$f")
+  done
+  [ ${#restored[@]} -eq 0 ] && return 0
+  echo "RESTORED: ${restored[*]} — human-only files changed during a tool call. Approvals come from approve-risk.sh run by a human in their own terminal; the risk policy is edited by a human between tool calls." >&2
+  return 1
+}
+
 director_may_touch_vault() {
   case "$tool" in
     Bash|runTerminalCommand|run_in_terminal)
@@ -82,20 +104,28 @@ busy_fresh() {
 
 if [ "$mode" = "--snapshot" ]; then
   snapshot_all
+  snapshot_human
   rm -f "$busy"
+  exit 0
+fi
+if [ "$mode" = "--human-snapshot" ]; then
+  snapshot_human
   exit 0
 fi
 
 if [ -z "$agent_id" ]; then
   case "$event" in
     PreToolUse)
+      snapshot_human
       director_may_touch_vault && touch "$busy"
       exit 0 ;;
     PostToolUse|PostToolUseFailure)
+      human_status=0
+      restore_human || human_status=2
       if [ -e "$busy" ]; then
         snapshot_all
         rm -f "$busy"
-        exit 0
+        exit "$human_status"
       fi
       drifted=()
       for f in "${protected[@]}"; do
@@ -106,7 +136,7 @@ if [ -z "$agent_id" ]; then
         echo "VAULT CHANGED during a call that shouldn't touch it: ${drifted[*]}. If you didn't do this, a subagent did — check 'git diff -- ${drifted[*]}' before trusting it." >&2
         exit 2
       fi
-      exit 0 ;;
+      exit "$human_status" ;;
   esac
   exit 0
 fi
@@ -116,7 +146,10 @@ case "$event" in
   *) exit 0 ;;
 esac
 
-busy_fresh && exit 0
+human_status=0
+restore_human || human_status=2
+
+busy_fresh && exit "$human_status"
 
 restored=()
 for f in "${protected[@]}"; do
@@ -130,4 +163,4 @@ if [ ${#restored[@]} -gt 0 ]; then
   echo "RESTORED: ${restored[*]} — changed by subagent '${agent_type:-unknown}'. These files are the Director's; your change was undone. Return your verdict as text." >&2
   exit 2
 fi
-exit 0
+exit "$human_status"

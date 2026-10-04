@@ -77,5 +77,7 @@ only what is missing, and always run step 6.
 13. Optional, offer once: "Run /create-verification-skill to generate
     .claude/skills/verify-<project>/ so the reviewer can drive the real app?" Run it only
     on a yes (needs a runnable app — skip for an empty repo); never re-ask in later sessions.
-14. Confirm to me: vault ready, autonomy dial at `supervised`, and suggest running
+14. Confirm to me: vault ready, autonomy dial at `supervised`, risk gate on with the
+    default thresholds (to change them, I create vault/risk-policy.json myself — the
+    risk-gate skill shows the shape; agents can't write it), and suggest running
     /grill on the first feature before any decomposition.

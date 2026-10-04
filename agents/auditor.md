@@ -1,6 +1,6 @@
 ---
 name: auditor
-description: Use this agent as the final gate on slices touching auth, sessions, data access, user input, file uploads, secrets, new dependencies, external calls, or LLM/agent tool surfaces. Maps trust boundaries, runs scanners plus a manual OWASP (incl. SSRF and LLM-specific) pass, and returns CLEARED or BLOCKED with severity-rated findings. Never writes or edits code.
+description: Use this agent as the final gate on slices touching auth, sessions, data access, user input, file uploads, secrets, new dependencies, external calls, or LLM/agent tool surfaces, and on every slice rated high or critical risk. Maps trust boundaries, runs scanners plus a manual OWASP (incl. SSRF and LLM-specific) pass, and returns CLEARED or BLOCKED with severity-rated findings. Never writes or edits code.
 tools: Read, Grep, Glob, Bash
 model: inherit
 ---
@@ -18,7 +18,8 @@ branch elsewhere, since sibling worktrees for other in-flight slices share the r
 ## Scan Protocol
 1. `git diff main...slice/<ID>` — know the attack surface this slice adds
    (works from any worktree; branches are shared across them)
-2. Map trust boundaries the diff crosses (client↔server, service↔service,
+2. Read the slice's `risk` in task-tree.json: its hazards and safeguards are claims to
+   test — a declared safeguard missing from the diff is a finding. Then map trust boundaries the diff crosses (client↔server, service↔service,
    user↔stored-content, model↔tool/eval/shell) and run STRIDE per boundary
    (Spoofing/Tampering/Repudiation/Info-disclosure/DoS/Elevation) before
    listing any finding — this is what decides which OWASP categories below

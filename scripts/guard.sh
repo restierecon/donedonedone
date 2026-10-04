@@ -6,6 +6,7 @@ if ! command -v jq >/dev/null 2>&1; then
 fi
 
 input=$(cat)
+here="$(cd "$(dirname "$0")" && pwd)"
 if ! echo "$input" | jq -e 'type == "object"' >/dev/null 2>&1; then
   echo "BLOCKED: guard.sh could not parse the hook payload. Failing closed." >&2
   exit 2
@@ -62,15 +63,15 @@ segments() { printf '%s\n' "$1" | tr ';&|()`' '\n'; }
 
 read_only_shell() {
   case "$1" in *\>*|*\$\(*|*\`*|*\<\(*|*--output*|*--pre*) return 1 ;; esac
-  local seg words
+  local seg words git_ok=" log show diff status blame grep ${2:-} "
   while IFS= read -r seg; do
     read -ra words <<< "$seg"
     [ ${#words[@]} -eq 0 ] && continue
     case "${words[0]}" in
       cat|head|tail|less|grep|egrep|rg|jq|wc|ls|stat|file|diff|test|'[') ;;
       git)
-        case "${words[1]:-}" in
-          log|show|diff|status|blame|grep) ;;
+        case "$git_ok" in
+          *" ${words[1]:-} "*) ;;
           *) return 1 ;;
         esac ;;
       *) return 1 ;;
@@ -105,8 +106,26 @@ protected_name() {
   echo "$1" | lower | grep -qE "$2"
 }
 
+vault_project() {
+  local dir common
+  dir=$(field '.cwd')
+  [ -n "$dir" ] && [ -d "$dir" ] || dir=.
+  common=$(git -C "$dir" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || return 1
+  [ -d "$(dirname "$common")/vault" ]
+}
+
+HUMAN_ONLY_MSG="BLOCKED: approvals and the risk policy are human-only. A human runs ~/.claude/scripts/approve-risk.sh in their own terminal, never through an agent, and edits vault/risk-policy.json themselves. Tell the human what needs their decision and continue with other work."
+
+human_only_path() {
+  echo "$1" | lower | grep -qE '(^|/)vault/risk-policy\.json$|(^|/)\.git/donedonedone(/|$)'
+}
+
 if [ -n "$file_path" ] && secret_path "$file_path"; then
   block "BLOCKED: $file_path looks like a secret (.env, key, secrets/). Ask the human for the value you need instead."
+fi
+
+if [ -n "$file_path" ] && [ "$tool" != "Read" ] && human_only_path "$file_path"; then
+  block "$HUMAN_ONLY_MSG"
 fi
 
 if [ -n "$agent_id" ]; then
@@ -120,6 +139,8 @@ if [ -n "$agent_id" ]; then
     plain=$(normalize "$cmd")
     protected_name "$plain" 'log-event' \
       && block "BLOCKED: vault/log.jsonl is written by the Director only (log-event.sh). Return your verdict as text."
+    protected_name "$plain" 'risk-gate' && ! read_only_shell "$plain" && vault_project \
+      && block "BLOCKED: risk-gate.sh is the Director's: it records risk assessments and judges merges. If your work needs files outside the approved scope, stop and report SCOPE-EXPANSION."
     if protected_name "$plain" 'vault|task-tree|log\.jsonl' && ! read_only_shell "$plain"; then
       protected_name "$plain" 'task-tree' \
         && block "BLOCKED: task-tree.json is written by the Director only. Return your verdict as text."
@@ -160,6 +181,29 @@ require_hardening() {
     || block "BLOCKED: slice $slice crosses trust boundaries ($triggers), so the builder brief's STANDING must name the harden-diff skill (brief-contract skill)."
 }
 
+require_risk() {
+  local tree slice dir out status class brief_class model
+  tree=$(task_tree) || return 0
+  slice=$(printf '%s\n' "$1" | sed -n 's/^SLICE:[[:space:]]*\([^[:space:]]*\).*/\1/p' | head -1)
+  dir=$(field '.cwd')
+  [ -n "$dir" ] && [ -d "$dir" ] || dir=.
+  status=0
+  out=$(cd "$dir" && "$here/risk-gate.sh" check "$slice" build 2>&1) || status=$?
+  [ "$status" -eq 0 ] \
+    || block "BLOCKED: the risk gate refuses to start $slice (risk-gate skill):
+$(printf '%s\n' "$out" | tail -16)"
+  class=$(printf '%s\n' "$out" | sed -n 's/^RISK: PASS build [^ ]* class=\([a-z]*\).*/\1/p' | tail -1)
+  [ -n "$class" ] || block "BLOCKED: the risk gate gave no class for $slice. Failing closed."
+  brief_class=$(printf '%s\n' "$1" | sed -n 's/^RISK:[[:space:]]*\([A-Za-z]*\).*/\1/p' | head -1 | lower)
+  [ "$brief_class" = "$class" ] \
+    || block "BLOCKED: slice $slice is $class risk, so the builder brief needs a line 'RISK: $class — <scope, unchanged behavior, rollback>' (brief-contract skill; got '${brief_class:-none}')."
+  model=$(field '.tool_input.model' | lower)
+  case "$class:$model" in
+    elevated:*sonnet*|elevated:*haiku*|high:*sonnet*|high:*haiku*|critical:*sonnet*|critical:*haiku*)
+      block "BLOCKED: slice $slice is $class risk; its builder inherits the session model (drop model: $model)." ;;
+  esac
+}
+
 if [ "$tool" = "Agent" ] || [ "$tool" = "Task" ]; then
   case "$(field '.tool_input.subagent_type')" in
     builder|reviewer|auditor)
@@ -170,7 +214,10 @@ if [ "$tool" = "Agent" ] || [ "$tool" = "Task" ]; then
       done
       [ ${#missing[@]} -gt 0 ] \
         && block "BLOCKED: brief is missing required header(s): ${missing[*]}. See the brief-contract skill; STANDING pastes vault/standing-orders.md verbatim."
-      [ "$(field '.tool_input.subagent_type')" = "builder" ] && require_hardening "$prompt"
+      if [ "$(field '.tool_input.subagent_type')" = "builder" ]; then
+        require_hardening "$prompt"
+        require_risk "$prompt"
+      fi
       ;;
   esac
   allow
@@ -200,6 +247,11 @@ plain=$(normalize "$cmd")
 
 if secret_in_shell "$plain"; then
   block "BLOCKED: this command touches a secret (.env, key, secrets/). Ask the human for the value you need instead."
+fi
+
+if protected_name "$plain" 'approvals\.jsonl|risk-policy|approve-risk|vault-guard[^[:space:]]*[[:space:]]+--|\.git/donedonedone' \
+   && ! read_only_shell "$plain" "add commit" && vault_project; then
+  block "$HUMAN_ONLY_MSG"
 fi
 
 dangerous_target() {
@@ -295,5 +347,64 @@ while IFS= read -r seg; do
     block "BLOCKED by guardrail: a destructive git command with a \$variable — the guard can't see what it expands to. Spell the arguments out."
   fi
 done < <(segments "$cmd")
+
+rebase_lands() {
+  local words=() w i=0 skip="" first=""
+  read -ra words <<< "$1"
+  while [ "$i" -lt ${#words[@]} ] && [ "${words[$i]}" != rebase ]; do i=$((i + 1)); done
+  for w in "${words[@]:$((i + 1))}"; do
+    if [ -n "$skip" ]; then
+      [ "$skip" = onto ] && case "$w" in slice/*) printf '%s\n' "$w" ;; esac
+      skip=""
+      continue
+    fi
+    case "$w" in
+      --onto) skip=onto ;;
+      --onto=slice/*) printf '%s\n' "${w#--onto=}" ;;
+      -s|-x|--strategy|--exec|--strategy-option) skip=value ;;
+      -*) ;;
+      *) [ -z "$first" ] && first="$w" ;;
+    esac
+  done
+  case "$first" in slice/*) printf '%s\n' "$first" ;; esac
+}
+
+landing_slices() {
+  local seg plain_seg sub refs
+  while IFS= read -r seg; do
+    plain_seg=$(normalize "$seg")
+    sub=$(printf '%s\n' "$plain_seg" | sed -nE 's/^(.*[^[:alnum:]_-])?git[[:space:]]+([a-z-]+).*/\2/p' | head -1)
+    refs=""
+    case "$sub" in
+      merge|cherry-pick|pull|reset|update-ref)
+        refs=$(printf '%s\n' "$plain_seg" | grep -oE 'slice/[a-z0-9._-]+') ;;
+      rebase)
+        refs=$(rebase_lands "$plain_seg") ;;
+      branch|checkout|switch)
+        printf '%s\n' "$plain_seg" | grep -qE '[[:space:]](-f|--force|-b|-c)[[:space:]]+(main|master)([[:space:]]|$)' \
+          && refs=$(printf '%s\n' "$plain_seg" | grep -oE 'slice/[a-z0-9._-]+') ;;
+      push)
+        refs=$(printf '%s\n' "$plain_seg" | grep -oE 'slice/[a-z0-9._-]+:(refs/heads/)?(main|master)([[:space:]]|$)' | cut -d: -f1) ;;
+    esac
+    [ -n "$refs" ] || continue
+    printf '%s\n' "$refs" | while IFS= read -r ref; do
+      printf '%s\n' "$seg" | grep -oiE "slice/[A-Za-z0-9._-]+" | while IFS= read -r raw; do
+        [ "$(printf '%s' "$raw" | lower)" = "$ref" ] && printf '%s\n' "${raw#slice/}"
+      done | head -1
+    done
+  done < <(segments "$cmd") | awk '!seen[$0]++'
+}
+
+if task_tree >/dev/null; then
+  dir=$(field '.cwd')
+  [ -n "$dir" ] && [ -d "$dir" ] || dir=.
+  while IFS= read -r slice_id; do
+    [ -n "$slice_id" ] || continue
+    status=0
+    out=$(cd "$dir" && "$here/risk-gate.sh" check "$slice_id" merge 2>&1) || status=$?
+    [ "$status" -eq 0 ] || block "BLOCKED: slice/$slice_id can't land on main until the risk gate passes (risk-gate skill):
+$(printf '%s\n' "$out" | tail -16)"
+  done < <(landing_slices)
+fi
 
 allow

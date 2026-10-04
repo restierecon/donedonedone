@@ -24,11 +24,18 @@ and paths to vault/project.md and vault/stories.md.
    none — when unsure, list it), ≤ 7 acceptance criteria each, parallel-safety decided per pair. Every
    slice must be buildable without a human decision; one that isn't means the grill
    left a gap — report it as an open question, don't draft the slice.
-4. Write the slices as a JSON array (task-tree.json slice shape) to
+4. Give every slice a `risk` assessment (risk-gate skill): rate the five dimensions 0-4
+   from what you read, not from hope; list its hazards (or rule each suggested one out
+   with a reason); write `scope` — the smallest change that solves it, the files and
+   tests it may touch, behavior that must not change, regressions to watch — and a
+   concrete rollback; safeguards when a hazard makes it critical. When unsure between two
+   ratings, take the higher. Never write `score` or `class`; risk-gate.sh computes them.
+5. Write the slices as a JSON array (task-tree.json slice shape) to
    vault/plan-draft.json. That is the only file you write. The Director
    runs `check-plan.sh` on it (fields, "Actor can" title, a `verify` step, every
    `depends_on` resolving, no cycles, `auditor_triggers` from the known list, no bare
-   "skip" gate); a draft it rejects comes
+   "skip" gate, a valid risk assessment with every hazard its wording suggests
+   declared or ruled out); a draft it rejects comes
    back to you with the output.
 
 ## Termination
@@ -43,4 +50,5 @@ PLAN: vault/plan-draft.json — <n> slices
 PARALLEL-SAFE: [slice sets that can run as one wave]
 SHARED FILES: [files more than one slice will touch — the Director watches these]
 ONE-WAY DOORS: [slice ids whose grill decisions are expensive to reverse]
+HAZARDS: [slice id → hazards declared, one line | none]
 OPEN QUESTIONS: [none | each one line — any here means back to /grill]

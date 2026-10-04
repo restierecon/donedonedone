@@ -18,7 +18,7 @@ setting() {
   printf '%s\n' "${value%\`}"
 }
 
-known="lint types test build crap mutation markers comments"
+known="lint types test build crap mutation markers comments scope"
 steps=() targets=() focused=0
 while [ $# -gt 0 ]; do
   if [ "$1" = "--" ]; then
@@ -78,9 +78,9 @@ fi
 common_root=$(dirname "$(git -C "$top" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)")
 base="${GATE_BASE:-main}"
 if [ "$focused" -eq 0 ] && [ "$common_root" != "$top" ] && git -C "$top" rev-parse -q --verify "$base^{commit}" >/dev/null; then
-  touched=$(git -C "$top" diff --name-only "$base...HEAD" -- vault/task-tree.json vault/log.jsonl)
+  touched=$(git -C "$top" diff --name-only "$base...HEAD" -- vault/task-tree.json vault/log.jsonl vault/risk-policy.json)
   if [ -n "$touched" ]; then
-    echo "GATE: FAIL (this worktree's branch changes Director-only files, which a squash-merge would carry into main):" >&2
+    echo "GATE: FAIL (this worktree's branch changes Director-only files or the human-only risk policy, which a squash-merge would carry into main):" >&2
     echo "$touched" | while IFS= read -r line; do echo "  $line" >&2; done
     exit 1
   fi
@@ -206,6 +206,19 @@ for step in "${steps[@]}"; do
       echo "comments FAIL — the diff against $base adds comments (a why the code can't say goes in a test named for it, an ADR, or the commit message):"
       echo "$found" | head -"$EXCERPT_LINES" | while IFS= read -r line; do echo "  $line"; done
     fi
+    continue
+  fi
+  if [ "$step" = "scope" ]; then
+    result=$("$(dirname "$0")/risk-gate.sh" scope 2>&1)
+    status=$?
+    case "$status" in
+      0) echo "scope PASS — $result" ;;
+      3) echo "scope SKIP ($result)" ;;
+      *)
+        failed+=("scope")
+        echo "scope FAIL — $(echo "$result" | head -1)"
+        echo "$result" | sed 1d | head -"$EXCERPT_LINES" | while IFS= read -r line; do echo "  $line"; done ;;
+    esac
     continue
   fi
   if [ "$step" = "crap" ]; then

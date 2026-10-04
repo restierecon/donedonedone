@@ -57,8 +57,13 @@ errors=$(jq -r --argjson external "$external" '
        | from_entries | stuck | select(length > 0) | "plan: depends_on cycle among: \(join(", "))")
   end' "$plan" 2>&1) || { echo "check-plan: FAIL — $plan could not be checked: $errors" | head -3 >&2; exit 1; }
 
+risk_gate="$(dirname "$0")/risk-gate.sh"
+risk_errors=$("$risk_gate" lint "$plan" 2>&1) || { echo "check-plan: FAIL — risk assessment could not be checked: $risk_errors" | head -3 >&2; exit 1; }
+errors=$(printf '%s\n%s\n' "$errors" "$risk_errors" | sed '/^$/d')
+
 if [ -z "$errors" ]; then
-  echo "check-plan: OK — $plan ($(jq length "$plan") slices)"
+  echo "check-plan: OK — $plan ($(jq length "$plan") slices) · risk:"
+  "$risk_gate" table "$plan" | head -18
   exit 0
 fi
 n=$(wc -l <<<"$errors" | tr -d ' ')

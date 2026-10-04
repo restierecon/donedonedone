@@ -19,7 +19,8 @@ changes to the setup.
 - On request.
 
 ## Steps
-1. Dispatch the `retro` agent with the trigger and the vault paths. Hand it paths, not
+1. Run `~/.claude/scripts/risk-gate.sh calibrate` (≤ 20 lines, read-only) and paste
+   its output into the brief. Dispatch the `retro` agent with the trigger and the vault paths. Hand it paths, not
    log contents. Always the `retro` type, never general-purpose: its Read, Grep, Glob
    tools make it read-only by harness, not by prose.
 2. For each PROPOSAL, append an entry to vault/flags/pending-review.md with the usual

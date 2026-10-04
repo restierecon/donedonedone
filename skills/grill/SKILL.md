@@ -22,6 +22,10 @@ this order, skipping what's already answered:
    match? (Check before asking — then confirm.)
 6. **Reversal cost** — which decisions here are one-way doors? Decide each one now,
    with the human, and record it as an ADR — no slice may carry an open human decision.
+   Ask the risk questions too: what could this delete or overwrite, what can't be
+   rolled back, which secrets, money or personal data does it touch, how many users does
+   a mistake reach? The answers become each slice's hazards, rollback and safeguards
+   (risk-gate skill), and a critical one needs the human's authorization before it builds.
 7. **Human-judgment sweep** — before stopping, check for anything a builder would have
    to ask about: UX wording/layout calls, money, deleting user data, schema choices.
    Every slice this spec produces runs autonomously, so the answer has to be here.

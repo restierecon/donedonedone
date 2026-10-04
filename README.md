@@ -1,7 +1,7 @@
 # Autonomous Engineering Setup for Claude Code
 
-A lean, hardened multi-agent setup: 5 agents, 32 skills, mechanical guardrails,
-git-backed resume (no memory files), a learning loop that turns repeated failures into fixes, and an autonomy dial you turn up only as trust is earned.
+A lean, hardened multi-agent setup: 5 agents, 33 skills, mechanical guardrails,
+git-backed resume (no memory files), a learning loop that turns repeated failures into fixes, a risk gate that scales controls to each change's risk, and an autonomy dial you turn up only as trust is earned.
 Built for Claude Code; also works with GitHub Copilot in VS Code and with Cursor (see below).
 
 Built on: vertical slices (tracer bullets) · red-green-refactor TDD · the test pyramid ·
@@ -41,17 +41,19 @@ builds. Nothing after the grill should need you unless a slice escalates.
 |---|---|
 | CLAUDE.md | Global protocol — the main session IS the Director |
 | agents/ | planner · builder · reviewer · auditor · retro (least-privilege tools, model-per-agent) |
-| skills/ | protocol-native: grill · slice-planning · parallel-dispatch · architecture-review · learning-loop · test-speed · crap-hotspots · mutation-survivors · clean-diff · harden-diff · blast-radius · brief-contract · `/init-codebase` · `/harvest` · `/create-verification-skill` · `/maintain-verification-skill` (opt-in, `/`-only: a project-local `verify-*` skill that lets the reviewer reach live-verified evidence) — plus a general engineering-practice library, a principles index (19 pstack principles, read on demand) and pstack's prose skills: unslop · technical-writing (docs/README/ADR work) (see Credits) |
+| skills/ | protocol-native: grill · slice-planning · risk-gate · parallel-dispatch · architecture-review · learning-loop · test-speed · crap-hotspots · mutation-survivors · clean-diff · harden-diff · blast-radius · brief-contract · `/init-codebase` · `/harvest` · `/create-verification-skill` · `/maintain-verification-skill` (opt-in, `/`-only: a project-local `verify-*` skill that lets the reviewer reach live-verified evidence) — plus a general engineering-practice library, a principles index (19 pstack principles, read on demand) and pstack's prose skills: unslop · technical-writing (docs/README/ADR work) (see Credits) |
 | settings.json | Permission deny/ask lists + hooks on 6 events + env that keeps Claude Code on Windows in Git Bash |
-| scripts/ | guard.sh (PreToolUse) · vault-guard.sh (Pre/PostToolUse, SubagentStop — restores Director-only files) · lint.sh (PostToolUse) · checkpoint.sh (Stop) · session-start.sh (SessionStart) · crap-score.py (lizard + coverage report → CRAP lines for `gate.crap`) · mutation-report.py (mutation tool report → mutant lines for `gate.mutation`) · gate.sh (quiet lint/types/test/build runner + diff-scoped CRAP, mutation, TODO/FIXME and no-comments checks) · find-comments.sh (the comment detector behind that check) · log-event.sh (the Director's structured log.jsonl writer) · check-plan.sh (the Director's lint for a planner draft: fields, "Actor can" titles, resolvable acyclic `depends_on`, `auditor_triggers` from a fixed list, gates as a verdict or `skip: <reason>`) · generate-agents.sh (Copilot/Cursor agents, install-time) · agents-md.sh (protocol block in a project's AGENTS.md, for Cursor/Copilot) |
+| scripts/ | guard.sh (PreToolUse) · vault-guard.sh (Pre/PostToolUse, SubagentStop — restores Director-only files) · lint.sh (PostToolUse) · checkpoint.sh (Stop) · session-start.sh (SessionStart) · crap-score.py (lizard + coverage report → CRAP lines for `gate.crap`) · mutation-report.py (mutation tool report → mutant lines for `gate.mutation`) · gate.sh (quiet lint/types/test/build runner + diff-scoped CRAP, mutation, TODO/FIXME and no-comments checks) · find-comments.sh (the comment detector behind that check) · log-event.sh (the Director's structured log.jsonl writer) · risk-gate.sh (scores each slice's risk, judges builder spawns and merges) · approve-risk.sh (the human's approval command — refuses inside an agent) · check-plan.sh (the Director's lint for a planner draft: fields, "Actor can" titles, resolvable acyclic `depends_on`, `auditor_triggers` from a fixed list, gates as a verdict or `skip: <reason>`) · generate-agents.sh (Copilot/Cursor agents, install-time) · agents-md.sh (protocol block in a project's AGENTS.md, for Cursor/Copilot) |
 | tests/ | Test harness for the hook scripts — run after any script edit; CI runs it too |
-| evals/ | 15-task benchmark + scorecard — run before trusting, re-run after any manifest edit |
+| evals/ | 16-task benchmark + scorecard — run before trusting, re-run after any manifest edit |
 
 ## The loop
 grill (mandatory; settles every human decision) → planner (vertical slices, all
-autonomous) → per slice on its own branch:
-builder (test-first) → gate.sh once → reviewer (cold eyes + slop checklist) →
-auditor (security surfaces only) → merge + tag → Director harvests the story.
+autonomous, each with a risk assessment) → risk gate (score, class, controls; critical
+stops for a human) → per slice on its own branch:
+builder (minimum necessary change, test-first) → gate.sh once (incl. `scope`) → reviewer
+(cold eyes + slop checklist) → auditor (security surfaces, and every high/critical slice) →
+risk check (+ human approval for high/critical) → merge + tag → Director harvests the story.
 Failures resolve through 3 self-healing tiers. A slice that exhausts them, hits the
 budget ceiling (10 builder/reviewer/auditor calls), or fails a merge twice **escalates**:
 it halts, lands in `vault/flags/pending-review.md`, and goes back through the grill —
@@ -72,10 +74,66 @@ this repo; re-run `./install.sh` and the eval the proposal names. If the same ca
 fails in two slices before the counter comes round, `log-event.sh` prints `RETRO DUE`
 and the retro runs before the next builder. Run it by hand with `/learning-loop`.
 
+## Risk gate
+Risk decides autonomy. The planner rates every slice on five dimensions (blast radius,
+reversibility, security, complexity, uncertainty; 0-4 each) and names its hazards, its
+minimum necessary change (`scope`: the change, the files, behavior that must not change,
+regressions to watch) and its rollback. `risk-gate.sh` turns that into a 0-100 score
+deterministically: round((25·blast + 25·reversibility + 25·security + 10·complexity +
+15·uncertainty) / 4).
+
+| Score | Class | Required controls (cumulative) |
+|---|---|---|
+| 0-20 | low | gate PASS + reviewer APPROVED (autonomous) |
+| 21-40 | moderate | + reviewer evidence unit-test-verified or live-verified |
+| 41-60 | elevated | + deep tests (`gate.mutation` or live-verified, else a human merge approval); builder on the session model |
+| 61-80 | high | + auditor CLEARED + a human approval of the merge, bound to its patch-id |
+| 81-100 | critical | + a human authorization before any build, bound to the assessment and its safeguards |
+
+A low score can't hide a serious hazard: data-loss and destructive operations are always
+critical; auth, secrets, sensitive data, money, irreversible changes and security or
+reversibility rated 4 are at least high; migrations, external side effects and new
+dependencies are at least elevated. Auditor triggers raise the security rating (an auth
+slice is at least high). Words in a slice's criteria that suggest a hazard (delete,
+password, payment…) must be declared or ruled out with a reason, or check-plan.sh fails.
+Thresholds and weights can be changed in `vault/risk-policy.json`. Only a human edits it;
+agents are blocked from it, and a malformed policy fails closed. The floors can't be
+configured away. See `skills/risk-gate/SKILL.md` for the rubric.
+
+Enforcement is mechanical, not prose:
+- **Before building** — guard.sh runs `risk-gate.sh check <ID> build` on every builder
+  spawn: no recorded assessment, an assessment changed since it was recorded, a
+  critical slice without a human authorization, a brief whose `RISK:` line names another
+  class, or a sonnet builder on an elevated+ slice → the spawn is refused.
+- **While building** — gate.sh's `scope` step fails any changed file outside
+  `risk.scope.files`. The builder stops with SCOPE-EXPANSION; the Director logs it,
+  re-rates the slice and records it again (`assess`). A higher class brings its controls
+  (and invalidates approvals, which are tied to the assessment hash). A lower one needs a human
+  `downgrade` approval, so reassessing can't be used to shed controls.
+- **Before merging** — guard.sh runs `risk-gate.sh check <ID> merge` on any git command
+  that would land `slice/<ID>` on main (merge, cherry-pick, rebase, pull, reset,
+  update-ref, `branch -f`/`checkout -B` main, `push . x:main`). It reads the verdicts
+  logged at the slice's current patch-id and the human approvals. Any gap blocks the merge.
+- **Human approvals** — only `~/.claude/scripts/approve-risk.sh <authorize|merge|downgrade> <ID>`,
+  run by you in your own terminal. It refuses without a TTY or inside an agent's shell
+  (CLAUDECODE set), shows you what you're approving, and appends your decision (git
+  email, assessment hash, patch-id) to `.git/donedonedone/approvals.jsonl`. guard.sh blocks
+  every agent, the Director included, from writing that ledger or running the command;
+  vault-guard.sh restores the ledger and the policy if any tool call changes them.
+- **Audit** — every assessment, reassessment, scope expansion, rollback and verdict is a
+  log.jsonl line (`risk`, `scope`, `rollback` events carry score and hash); the check
+  refuses a log.jsonl that no longer starts with its committed content.
+  `risk-gate.sh audit <ID>` prints one slice's trail. `risk-gate.sh calibrate` lists
+  slices whose class was likely too low, for the retro. It never changes thresholds.
+
+The dial below adds oversight on top; it never removes a control the risk class requires.
+
 ## Autonomy dial (`vault/project.md`)
 - **supervised** (default) — every slice pauses for your approval after its gates
 - **semi** — green slices merge; an escalation or an auditor finding pauses the queue
 - **full** — everything green merges, flags reviewed async; sandbox/devcontainer only
+
+At every setting, a high or critical slice still waits for your `approve-risk.sh`.
 
 Promotion past supervised needs a 10-slice clean streak *and* a dated passing
 scorecard in `evals/` — see the promotion rule in `evals/README.md`.
@@ -99,7 +157,11 @@ override) adds, outside `vault/`:
 - `markers` fails on an added TODO, FIXME or XXX.
 - `comments` fails on an added comment (see No comments below).
 
-Run `gate.sh test` for one step, no arguments for all eight (the six above plus `crap` and `mutation`, see CRAP and Mutation); a misspelled step name is an
+A third built-in, `scope`, fails a slice branch whose diff leaves the slice's approved
+`risk.scope.files` (see Risk gate); it reports SKIP off a `slice/<ID>` branch or
+without a task tree.
+
+Run `gate.sh test` for one step, no arguments for all nine (the six above plus `crap`, `mutation` and `scope`); a misspelled step name is an
 error, not a SKIP. Full logs land in `.gate/` (gitignored). The gate refuses to run on
 uncommitted changes outside `vault/` so `GATE: PASS @ sha=<sha> patch_id=<id>` always
 describes that SHA. The patch-id hashes the diff against the base outside `vault/`
@@ -348,12 +410,19 @@ jq is missing, the payload isn't JSON, or a field has the wrong type).
 - In a project with vault/task-tree.json, a builder spawn needs a `SLICE: <ID>` line
   naming a slice there. When that slice's `auditor_triggers` is non-empty, the brief's
   STANDING must name the harden-diff skill; a slice without the field fails closed.
+- The risk gate (see Risk gate): builder spawns and every git route that lands a
+  `slice/<ID>` on main run `risk-gate.sh check`. No agent may write
+  `.git/donedonedone/approvals.jsonl` or `vault/risk-policy.json`, or run
+  `approve-risk.sh` or `vault-guard.sh`. Subagents may not run `risk-gate.sh`.
 - The reviewer's Chrome tools (claude-in-chrome navigate and tabs_create) may only open
   http(s) on localhost, 127.0.0.1, [::1], *.local, *.localhost or *.test; userinfo,
   numeric-IP spellings, non-ASCII hosts and whitespace or control characters are refused.
   Run claude-in-chrome in a dedicated, signed-out Chrome profile all the same.
 
-**2. vault-guard.sh — undoes what got through, by content, not by syntax.** It snapshots
+**2. vault-guard.sh — undoes what got through, by content, not by syntax.** Human-only
+files (the approvals ledger and `vault/risk-policy.json`) are restored after any tool
+call that changed them, the Director's included. A human's edits between calls are
+kept, and approve-risk.sh re-snapshots the ledger after it writes. It also snapshots
 the main checkout's task-tree.json and log.jsonl (in `.git/`, at
 session start and after each Director call that may touch them). After every subagent
 tool call, and when a subagent stops, any change to those files is restored from the
@@ -363,8 +432,12 @@ the Director and then accepted as theirs. gate.sh adds the worktree case: a slic
 that changes those files fails the gate before a squash-merge carries it into main.
 
 What this still doesn't stop: code the agent writes to a file and then runs (a script or
-a test can do anything the user can), and the narrow window where a subagent's write
-lands while a Director call that touches vault/ is in flight. Commands still run as
+a test can do anything the user can — including allocating a pseudo-terminal, unsetting
+CLAUDECODE and driving approve-risk.sh), and the narrow window where a subagent's write
+lands while a Director call that touches vault/ is in flight. A human approval is
+therefore as strong as the sandbox it runs in. Every approval in the ledger names the
+approver's git email, so read the ledger (`risk-gate.sh audit <ID>`) before trusting a
+merge you didn't watch. Commands still run as
 you, so run `autonomy: full` only in a sandbox.
 
 Also:
@@ -412,6 +485,11 @@ In each existing project:
    and the `mutation-survivors` skill.
 9. On Windows, install from a fresh clone and merge settings.json's new `env` block,
    which keeps Claude Code in Git Bash (see Windows).
+10. Risk gate: every live slice in `task-tree.json` needs a `risk` assessment before its
+    next builder spawn or merge (see Risk gate). Add one to each (the planner can draft
+    them), run `~/.claude/scripts/risk-gate.sh assess <ID>`, and check
+    `risk-gate.sh pending`. Builder briefs need a `RISK: <class>` line. Slices already
+    shipped need nothing. The risk gate stays off in projects without a vault/.
 
 ## Verify on first install
 Hook and permission syntax evolves — if a hook doesn't fire, check the current
@@ -543,12 +621,14 @@ end to end).
 | mutation-report.py | `mutation-report.py <report \| ->` | Prints `<path>:<line> <killed\|survived\|timeout\|no-coverage> <description>` per mutant for `gate.mutation`, or `no-mutants`: reads mutation-testing-report-schema JSON, PIT XML, cargo-mutants outcomes.json, Gremlins JSON, or mutmut 3 results (`-` for stdin). Unknown format exits non-zero. |
 | gate.sh | `gate.sh [lint\|types\|test\|build\|crap\|mutation\|markers\|comments ...]` or `gate.sh test -- <targets>` | Refuses a dirty tree (`GATE_ALLOW_DIRTY=1` overrides), an unknown step, or a missing `gate.test`. With `-- <targets>`, runs only those tests through `gate.test.focus` and ends `FOCUSED:`, never `GATE:`. Flags a passing test step slower than `gate.test.budget`. Fails a function the diff touches whose `gate.crap` score is over `gate.crap.max`, and a diff whose added lines' mutants score under `gate.mutation.min`. Runs the gate one line per step, a ≤ 30-line failure excerpt (`GATE_EXCERPT_LINES`), full log in `.gate/<step>.log`. Exit 0 all pass, 1 otherwise. From a worktree that predates project.md, it reads the main checkout's. |
 | find-comments.sh | `find-comments.sh --base <ref>` or `find-comments.sh <file>...` | Prints `path:line: text` for every comment added since `<ref>`, or in the given files. Exit 1 when it finds one, 2 on bad usage. |
-| log-event.sh | `log-event.sh <ID\|-> <event> <verdict> [--sha S] [--patch-id P] [--evidence E] [--attempt N] [--category C]... [--signal TEXT]...` | Appends one JSON line to the main checkout's `vault/log.jsonl`. Up to 5 signals of 200 chars. Unknown events, categories or evidence rungs exit 1 and list the valid ones. Prints `RETRO DUE` when a category recurs across slices. |
+| log-event.sh | `log-event.sh <ID\|-> <event> <verdict> [--sha S] [--patch-id P] [--evidence E] [--attempt N] [--score 0-100] [--hash H] [--category C]... [--signal TEXT]...` | Appends one JSON line to the main checkout's `vault/log.jsonl`. Events include `risk`, `scope` and `rollback`. Up to 5 signals of 200 chars. Unknown events, categories or evidence rungs, or a score outside 0-100, exit 1 and list the valid ones. Prints `RETRO DUE` when a category recurs across slices. |
+| risk-gate.sh | `risk-gate.sh lint\|table <plan>` · `score [file\|-]` · `show\|assess\|audit <ID>` · `check <ID> build\|merge` · `scope [ID]` · `pending` · `calibrate` | Scores a slice's `risk` (0-100, class, floors, controls) the same way every time. `assess` records it in log.jsonl; `check` exits 1 listing every missing control and ends `RISK: PASS\|FAIL`; `scope` backs gate.sh's step; `pending` feeds the SessionStart hook. Exit 2 (fail closed) without jq or on a malformed `vault/risk-policy.json`. |
+| approve-risk.sh | `approve-risk.sh <authorize\|merge\|downgrade> <ID>` | The human's approval. Refuses without a TTY or with CLAUDECODE set; shows the assessment (merge: diffstat and controls); records the typed decision in `.git/donedonedone/approvals.jsonl`. Typing anything other than the prompt records a denial; an empty line cancels. |
 | guard.sh | PreToolUse hook (every tool) | Exit 2 blocks the call and feeds the reason back. Fails closed without jq or on a malformed payload. Understands Claude Code, VS Code Copilot (its own tool names; an unknown tool carrying a command is treated as a shell call) and Cursor (`beforeShellExecution` and `beforeReadFile`, answered with allow/deny JSON). See Safety model. |
 | vault-guard.sh | PreToolUse, PostToolUse, PostToolUseFailure, SubagentStop hook; `vault-guard.sh --snapshot` | Restores task-tree.json and log.jsonl in the main checkout when a subagent changes them (exit 2 tells it why); warns the Director about unexplained changes. Snapshots live in `.git/skeletoncrew-vault-guard/`. Claude Code only — other tools' payloads don't name the subagent. |
 | lint.sh | PostToolUse hook | Formats the edited file, exit 2 with lint errors. Reads Claude Code's `file_path`, Copilot's `filePath` and Cursor's top-level `file_path`; Cursor ignores the exit code, so there errors surface at the gate. |
 | checkpoint.sh | Stop hook | Commits progress on `slice/*` branches only (never main, a feature branch or a detached HEAD), inside worktrees too. Scans with `gitleaks git --staged` (v8.19+) or `gitleaks protect --staged` (older) and aborts on a finding. |
-| session-start.sh | SessionStart hook | Injects live slices, git status and leftover worktrees (plus a one-line migration hint while vault/memory or vault/handoffs exists; deletes nothing); plain text, or `{"additional_context": ...}` for Cursor. Refreshes the AGENTS.md protocol block. |
+| session-start.sh | SessionStart hook | Injects live slices, slices the risk gate is holding, git status and leftover worktrees (plus a one-line migration hint while vault/memory or vault/handoffs exists; deletes nothing); plain text, or `{"additional_context": ...}` for Cursor. Refreshes the AGENTS.md protocol block. |
 | agents-md.sh | `agents-md.sh [project-dir]` | Writes the protocol into the project's AGENTS.md between its markers; leaves everything else in the file alone. |
 | generate-agents.sh | `generate-agents.sh <copilot\|cursor> [dest]` | Emits derived agents (always overwritten, never hand-edit). Copilot gets an `orchestrator` whose roster is every agent in `agents/`; it isn't called "director" because that name means the main Claude Code session. |
 | validate-manifests.sh | `validate-manifests.sh` | Checks agent and skill frontmatter, and that CLAUDE.md's Agents table matches `agents/`. |
