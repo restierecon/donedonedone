@@ -63,6 +63,15 @@ def module_of(path):
     return posixpath.dirname(path) or "."
 
 
+def shared_dirs(a, b):
+    count = 0
+    for x, y in zip(a.split("/")[:-1], b.split("/")[:-1]):
+        if x != y:
+            break
+        count += 1
+    return count
+
+
 def is_test(path):
     return bool(TEST_FILE.search(path))
 
@@ -79,9 +88,9 @@ class Resolver:
                 self.by_suffix.setdefault("/".join(parts[cut:]), []).append(path)
         self.go_module = ""
 
-    def suffix(self, *rels, root_ok=lambda prefix: True):
-        hits = [(len(p) - len(rel), p) for rel in rels for p in self.by_suffix.get(rel, ()) if root_ok(p[:len(p) - len(rel)])]
-        return min(hits)[1] if hits else None
+    def suffix(self, *rels, near="", root_ok=lambda prefix: True):
+        hits = [(-shared_dirs(near, p), len(p) - len(rel), p) for rel in rels for p in self.by_suffix.get(rel, ()) if root_ok(p[:len(p) - len(rel)])]
+        return min(hits)[2] if hits else None
 
     def python_root(self, prefix):
         return prefix + "__init__.py" not in self.files
@@ -101,11 +110,11 @@ class Resolver:
                 subs = [n.strip().split(" as ")[0].strip("() ") for n in names.split(",")]
                 hit = False
                 for sub in subs:
-                    target = self.py_target(base + "/" + sub, exact=bool(dots))
+                    target = self.py_target(base + "/" + sub, path, exact=bool(dots))
                     if target:
                         found.add(target)
                         hit = True
-                target = self.py_target(base, exact=bool(dots))
+                target = self.py_target(base, path, exact=bool(dots))
                 if target and not hit:
                     found.add(target)
                     hit = True
@@ -116,21 +125,21 @@ class Resolver:
             if m:
                 for part in m.group(1).split(","):
                     name = part.strip().split()[0]
-                    target = self.py_target(name.replace(".", "/"))
+                    target = self.py_target(name.replace(".", "/"), path)
                     if target:
                         found.add(target)
                     else:
                         externals.add(name.split(".")[0])
         return found, externals
 
-    def py_target(self, base, exact=False):
+    def py_target(self, base, near, exact=False):
         base = base.strip("/")
         if not base:
             return None
         rels = (base + ".py", base + "/__init__.py")
         if exact:
             return next((rel for rel in rels if rel in self.files), None)
-        return self.suffix(*rels, root_ok=self.python_root)
+        return self.suffix(*rels, near=near, root_ok=self.python_root)
 
     def js(self, path, text):
         found, externals = set(), set()
@@ -173,7 +182,7 @@ class Resolver:
                 target = None
                 for cut in range(len(parts), 1, -1):
                     rel = "/".join(parts[:cut])
-                    target = self.suffix(rel + ".java", rel + ".kt")
+                    target = self.suffix(rel + ".java", rel + ".kt", near=path)
                     if target:
                         break
                 if target:

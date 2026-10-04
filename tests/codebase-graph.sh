@@ -62,6 +62,18 @@ expect "java: a class import resolves by package path" "$(imports_of "$repo" jav
 expect "test files are marked as tests" "$(field "$repo" '[p for p, n in sorted(g["files"].items()) if n["test"]]')" "['go/internal/tax/tax_test.go', 'tests/fixtures/app/shop.py', 'tests/test_rules.py']"
 rm -rf "$repo"
 
+repo=$(new_repo)
+for proj in alpha beta-project; do
+  mkdir -p "$repo/fixtures/$proj/src/shop" "$repo/fixtures/$proj/tests"
+  printf 'def add(a, b):\n    return a + b\n' > "$repo/fixtures/$proj/src/shop/__init__.py"
+  printf 'from shop import add\n' > "$repo/fixtures/$proj/tests/test_shop.py"
+done
+commit "$repo" init
+build "$repo" >/dev/null
+expect "python: sibling projects with the same package name each resolve to their own copy" \
+  "$(imports_of "$repo" fixtures/beta-project/tests/test_shop.py)" "fixtures/beta-project/src/shop/__init__.py"
+rm -rf "$repo"
+
 echo "== codebase-graph.py — cycles, hubs and why they're flagged =="
 repo=$(new_repo)
 mkdir -p "$repo/core" "$repo/db"
