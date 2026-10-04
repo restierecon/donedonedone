@@ -1088,6 +1088,22 @@ else
 fi
 rm -rf "$repo"
 
+echo "== validate-manifests.sh — imported skills carry their LICENSE =="
+vm=$(mktemp -d)
+mkdir -p "$vm/scripts"
+cp -R "$ROOT/agents" "$ROOT/skills" "$ROOT/CLAUDE.md" "$ROOT/settings.json" "$vm/"
+cp "$ROOT/scripts/validate-manifests.sh" "$vm/scripts/"
+status=0; "$vm/scripts/validate-manifests.sh" >/dev/null 2>&1 || status=$?
+if [ "$status" -eq 0 ]; then ok "repo manifests pass"; else bad "repo manifests pass" "exit $status"; fi
+mkdir -p "$vm/skills/imported"
+printf -- '---\nname: imported\ndescription: fixture\n---\nSource: pstack (MIT)\n' > "$vm/skills/imported/SKILL.md"
+status=0; "$vm/scripts/validate-manifests.sh" >/dev/null 2>&1 || status=$?
+if [ "$status" -ne 0 ]; then ok "pstack skill without LICENSE fails"; else bad "pstack skill without LICENSE fails" "exit 0, expected nonzero"; fi
+echo "MIT" > "$vm/skills/imported/LICENSE"
+status=0; "$vm/scripts/validate-manifests.sh" >/dev/null 2>&1 || status=$?
+if [ "$status" -eq 0 ]; then ok "pstack skill with LICENSE passes"; else bad "pstack skill with LICENSE passes" "exit $status"; fi
+rm -rf "$vm"
+
 echo ""
 echo "$pass passed, $fail failed"
 [ "$fail" -eq 0 ]

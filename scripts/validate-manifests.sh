@@ -35,6 +35,9 @@ check_skill() {
   [ -n "$name" ] || err "$f: frontmatter missing 'name'"
   [ "$name" = "$dir" ] || err "$f: name '$name' does not match directory '$dir'"
   [ -n "$(field "$fm" "description")" ] || err "$f: frontmatter missing 'description'"
+  if grep -qi pstack "$f" && [ ! -f "$(dirname "$f")/LICENSE" ]; then
+    err "$f: mentions pstack but $(dirname "$f")/LICENSE is missing"
+  fi
 }
 
 for f in "$ROOT"/agents/*.md; do check_agent "$f"; done
