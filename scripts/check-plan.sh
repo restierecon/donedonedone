@@ -65,11 +65,7 @@ errors=$(jq -r --argjson external "$external" '
 ui_errors=""
 while IFS=$'\t' read -r sid contract; do
   [ -n "$contract" ] || continue
-  if [ ! -f "$contract" ]; then
-    ui_errors+="$sid: ui_contract $contract does not exist — run the ui-prototype skill in /grill"$'\n'
-  elif ! head -1 "$contract" | grep -q '^status: approved '; then
-    ui_errors+="$sid: ui_contract $contract is not approved (first line must read 'status: approved <date> — \"<the human's words>\"')"$'\n'
-  fi
+  verdict=$("$(dirname "$0")/ui-approval.sh" check "$contract" 2>&1) || ui_errors+="$sid: ${verdict#UI: }"$'\n'
 done < <(jq -r '.[]? | select(type == "object" and (.ui_contract | type) == "string"
                                 and (.ui_contract | test("^vault/ui/[^/]+/contract\\.md$")))
                  | [(.id // "?"), .ui_contract] | @tsv' "$plan" 2>/dev/null)

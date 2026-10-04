@@ -22,10 +22,9 @@ Ask once, record the answer in the grilled spec as `UI: none | minor | major`:
 Unsure between two classes → take the higher one.
 
 ## 2. Write the contract
-`vault/ui/<feature-slug>/contract.md`, ≤ 60 lines, first line `status: draft`:
+`vault/ui/<feature-slug>/contract.md`, ≤ 60 lines:
 
 ```markdown
-status: draft
 # <Screen name>
 Purpose: <the job this screen does for the actor, one sentence>
 Precedent: <existing screen/component it matches, or "new">
@@ -73,26 +72,37 @@ Before showing it, check it against the frontend-ui-engineering skill's AI-defau
 table and screenshot it at 375, 768 and 1280px (`vault/ui/<feature-slug>/<state>-<width>.png`
 — the reviewer compares against these later). Fix any AI default you find first.
 
-## 4. Get approval
-Give the human the prototype path (and a hosted link when the host can publish a
-private page), the contract, and the screenshots, with a review list: hierarchy
-(is the primary action obvious?), every state, copy, responsive behavior, anything
-deliberately left out. Then wait.
-- Changes requested → revise contract and prototype, re-screenshot, ask again.
-- Approved → set the first line to `status: approved <YYYY-MM-DD> — "<the human's
-  words>"`, only after an explicit approval in this conversation. Silence, "looks
-  fine so far" or approval of a different revision is not approval.
-- Commit the folder: `docs(ui): approve <feature-slug> contract`.
+## 4. Get the human's approval
+Approval is human-only, exactly like a risk approval: you can't give it, and nothing
+you write counts as it. The human runs, in their own terminal:
+
+    ~/.claude/scripts/approve-ui.sh vault/ui/<feature-slug>/contract.md
+
+It refuses inside an agent's shell or without a TTY, shows the contract and every file
+in the folder, and records the typed decision in `.git/donedonedone/approvals.jsonl`,
+bound to a hash of the whole folder (contract, prototype, screenshots). guard.sh blocks
+any agent from running it or writing that ledger.
+- Before asking: everything is final, screenshots included. Any later change to any
+  file in the folder voids the approval.
+- Ask with the prototype path (and a hosted link when the host can publish a private
+  page), the screenshots, a review list — hierarchy (is the primary action obvious?),
+  every state, copy, responsive behavior, what's deliberately left out — and the exact
+  command. Put the same in vault/flags/pending-review.md.
+- Changes requested (in chat, or a denial recorded) → revise, re-screenshot, ask again.
+- Confirm with `~/.claude/scripts/ui-approval.sh check <contract path>`: it prints
+  `UI: APPROVED … by <email>` or why not. Only then is the grill done.
+- Commit the folder: `docs(ui): add <feature-slug> contract`.
 
 ## 5. Hand off to planning
 The grilled spec carries `UI: <class> — vault/ui/<feature-slug>/contract.md
 (approved)`. Every slice that renders part of it gets `"ui_contract"` set to that
 path, and acceptance criteria that name the contract states the slice delivers
 ("empty state shows the contract's empty copy and its primary action"). check-plan.sh
-refuses a slice whose contract is missing or not approved.
+and guard.sh run `ui-approval.sh check` and refuse a slice whose contract is missing,
+unapproved, or changed since approval.
 
 ## After approval
 The approved contract is the spec. A builder that finds it can't be built as written
 stops with STATUS: SCOPE-EXPANSION naming the conflict; the Director takes it back
-to this skill — a new revision, a new approval — never a builder's improvisation. Any
+to this skill — a new revision, a new `approve-ui.sh` — never a builder's improvisation. Any
 later UI requirement change does the same.

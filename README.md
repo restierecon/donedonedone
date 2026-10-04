@@ -115,8 +115,8 @@ Enforcement is mechanical, not prose:
   that would land `slice/<ID>` on main (merge, cherry-pick, rebase, pull, reset,
   update-ref, `branch -f`/`checkout -B` main, `push . x:main`). It reads the verdicts
   logged at the slice's current patch-id and the human approvals. Any gap blocks the merge.
-- **Human approvals** — only `~/.claude/scripts/approve-risk.sh <authorize|merge|downgrade> <ID>`,
-  run by you in your own terminal. It refuses without a TTY or inside an agent's shell
+- **Human approvals** — only `~/.claude/scripts/approve-risk.sh <authorize|merge|downgrade> <ID>`
+  and `~/.claude/scripts/approve-ui.sh <contract>`, run by you in your own terminal. It refuses without a TTY or inside an agent's shell
   (CLAUDECODE set), shows you what you're approving, and appends your decision (git
   email, assessment hash, patch-id) to `.git/donedonedone/approvals.jsonl`. guard.sh blocks
   every agent, the Director included, from writing that ledger or running the command;
@@ -141,12 +141,15 @@ by the human, before planning (`ui-prototype` skill):
    responsive rules, tokens and components, accessibility. Major work also gets
    `prototype.html`, one clickable file that uses the project's tokens and real copy
    and has a switcher for every state, plus screenshots at 375, 768 and 1280px.
-3. The human approves it explicitly, and the contract's first line becomes
-   `status: approved <date> — "<their words>"`.
+3. You approve it yourself: `~/.claude/scripts/approve-ui.sh vault/ui/<feature>/contract.md`
+   in your own terminal. Like `approve-risk.sh`, it refuses inside an agent's shell or
+   without a TTY. It shows the contract and the files, then records your typed decision
+   in `.git/donedonedone/approvals.jsonl`, bound to a hash of the whole folder, so
+   any later edit to the contract, prototype or screenshots voids the approval.
 4. Every slice that renders it carries `"ui_contract": "<path>"` (others `null`).
-   `check-plan.sh` refuses a slice whose contract is missing or not approved;
-   `guard.sh` refuses its builder unless STANDING names `frontend-ui-engineering` and
-   the contract path.
+   `check-plan.sh` and `guard.sh` run `ui-approval.sh check` and refuse a slice whose
+   contract is missing, unapproved or changed since approval; `guard.sh` also refuses
+   its builder unless STANDING names `frontend-ui-engineering` and the contract path.
 5. The builder builds the states with the project's real components. The reviewer
    compares each state with the approved screenshots on structure (regions, order,
    primary action, copy), not pixels: production code never matches a prototype pixel
@@ -155,9 +158,7 @@ by the human, before planning (`ui-prototype` skill):
 6. `gate.a11y` (optional, see Gate commands) runs an accessibility checker on every slice.
 
 A contract that turns out to be unbuildable goes back to the grill as a new
-revision. The builder never redesigns it. The approval is recorded by the Director
-from your words in the conversation, not by `approve-risk.sh`. Hold the Director to it
-the way you'd hold it to an ADR.
+revision and a new approval. The builder never redesigns it.
 
 ## Autonomy dial (`vault/project.md`)
 - **supervised** (default) — every slice pauses for your approval after its gates
@@ -455,7 +456,7 @@ jq is missing, the payload isn't JSON, or a field has the wrong type).
 - The risk gate (see Risk gate): builder spawns and every git route that lands a
   `slice/<ID>` on main run `risk-gate.sh check`. No agent may write
   `.git/donedonedone/approvals.jsonl` or `vault/risk-policy.json`, or run
-  `approve-risk.sh` or `vault-guard.sh`. Subagents may not run `risk-gate.sh`.
+  `approve-risk.sh`, `approve-ui.sh` or `vault-guard.sh`. Subagents may not run `risk-gate.sh`.
 - The reviewer's Chrome tools (claude-in-chrome navigate and tabs_create) may only open
   http(s) on localhost, 127.0.0.1, [::1], *.local, *.localhost or *.test; userinfo,
   numeric-IP spellings, non-ASCII hosts and whitespace or control characters are refused.
@@ -464,7 +465,7 @@ jq is missing, the payload isn't JSON, or a field has the wrong type).
 **2. vault-guard.sh — undoes what got through, by content, not by syntax.** Human-only
 files (the approvals ledger and `vault/risk-policy.json`) are restored after any tool
 call that changed them, the Director's included. A human's edits between calls are
-kept, and approve-risk.sh re-snapshots the ledger after it writes. It also snapshots
+kept, and approve-risk.sh and approve-ui.sh re-snapshot the ledger after they write. It also snapshots
 the main checkout's task-tree.json and log.jsonl (in `.git/`, at
 session start and after each Director call that may touch them). After every subagent
 tool call, and when a subagent stops, any change to those files is restored from the
@@ -661,11 +662,13 @@ end to end).
 |---|---|---|
 | crap-score.py | `crap-score.py <coverage file> [-x <glob>]... [paths]` | Prints `<path>:<start>-<end> <score> <name>` per function for `gate.crap`: lizard complexity joined with LCOV, Cobertura, JaCoCo or coverage.py JSON line coverage. Unknown report format or missing lizard exits non-zero. |
 | mutation-report.py | `mutation-report.py <report \| ->` | Prints `<path>:<line> <killed\|survived\|timeout\|no-coverage> <description>` per mutant for `gate.mutation`, or `no-mutants`: reads mutation-testing-report-schema JSON, PIT XML, cargo-mutants outcomes.json, Gremlins JSON, or mutmut 3 results (`-` for stdin). Unknown format exits non-zero. |
-| gate.sh | `gate.sh [lint\|types\|test\|build\|crap\|mutation\|markers\|comments ...]` or `gate.sh test -- <targets>` | Refuses a dirty tree (`GATE_ALLOW_DIRTY=1` overrides), an unknown step, or a missing `gate.test`. With `-- <targets>`, runs only those tests through `gate.test.focus` and ends `FOCUSED:`, never `GATE:`. Flags a passing test step slower than `gate.test.budget`. Fails a function the diff touches whose `gate.crap` score is over `gate.crap.max`, and a diff whose added lines' mutants score under `gate.mutation.min`. Runs the gate one line per step, a ≤ 30-line failure excerpt (`GATE_EXCERPT_LINES`), full log in `.gate/<step>.log`. Exit 0 all pass, 1 otherwise. From a worktree that predates project.md, it reads the main checkout's. |
+| gate.sh | `gate.sh [lint\|types\|test\|build\|a11y\|crap\|mutation\|markers\|comments ...]` or `gate.sh test -- <targets>` | Refuses a dirty tree (`GATE_ALLOW_DIRTY=1` overrides), an unknown step, or a missing `gate.test`. With `-- <targets>`, runs only those tests through `gate.test.focus` and ends `FOCUSED:`, never `GATE:`. Flags a passing test step slower than `gate.test.budget`. Fails a function the diff touches whose `gate.crap` score is over `gate.crap.max`, and a diff whose added lines' mutants score under `gate.mutation.min`. Runs the gate one line per step, a ≤ 30-line failure excerpt (`GATE_EXCERPT_LINES`), full log in `.gate/<step>.log`. Exit 0 all pass, 1 otherwise. From a worktree that predates project.md, it reads the main checkout's. |
 | find-comments.sh | `find-comments.sh --base <ref>` or `find-comments.sh <file>...` | Prints `path:line: text` for every comment added since `<ref>`, or in the given files. Exit 1 when it finds one, 2 on bad usage. |
 | log-event.sh | `log-event.sh <ID\|-> <event> <verdict> [--sha S] [--patch-id P] [--evidence E] [--attempt N] [--score 0-100] [--hash H] [--category C]... [--signal TEXT]...` | Appends one JSON line to the main checkout's `vault/log.jsonl`. Events include `risk`, `scope` and `rollback`. Up to 5 signals of 200 chars. Unknown events, categories or evidence rungs, or a score outside 0-100, exit 1 and list the valid ones. Prints `RETRO DUE` when a category recurs across slices. |
 | risk-gate.sh | `risk-gate.sh lint\|table <plan>` · `score [file\|-]` · `show\|assess\|audit <ID>` · `check <ID> build\|merge` · `scope [ID]` · `pending` · `calibrate` | Scores a slice's `risk` (0-100, class, floors, controls) the same way every time. `assess` records it in log.jsonl; `check` exits 1 listing every missing control and ends `RISK: PASS\|FAIL`; `scope` backs gate.sh's step; `pending` feeds the SessionStart hook. Exit 2 (fail closed) without jq or on a malformed `vault/risk-policy.json`. |
 | approve-risk.sh | `approve-risk.sh <authorize\|merge\|downgrade> <ID>` | The human's approval. Refuses without a TTY or with CLAUDECODE set; shows the assessment (merge: diffstat and controls); records the typed decision in `.git/donedonedone/approvals.jsonl`. Typing anything other than the prompt records a denial; an empty line cancels. |
+| approve-ui.sh | `approve-ui.sh vault/ui/<slug>/contract.md` | The human's UI approval. Same refusals as approve-risk.sh; shows the contract and the folder's files; records the typed decision with a hash of the whole folder. |
+| ui-approval.sh | `ui-approval.sh check\|hash <contract>` | Read-only. `check` prints `UI: APPROVED … by <email>` (exit 0) only when the latest ledger decision for that contract is an approval of the folder as it is now; otherwise `UI: NOT APPROVED` with the reason and the command to run (exit 1). Behind check-plan.sh and guard.sh. |
 | guard.sh | PreToolUse hook (every tool) | Exit 2 blocks the call and feeds the reason back. Fails closed without jq or on a malformed payload. Understands Claude Code, VS Code Copilot (its own tool names; an unknown tool carrying a command is treated as a shell call) and Cursor (`beforeShellExecution` and `beforeReadFile`, answered with allow/deny JSON). See Safety model. |
 | vault-guard.sh | PreToolUse, PostToolUse, PostToolUseFailure, SubagentStop hook; `vault-guard.sh --snapshot` | Restores task-tree.json and log.jsonl in the main checkout when a subagent changes them (exit 2 tells it why); warns the Director about unexplained changes. Snapshots live in `.git/skeletoncrew-vault-guard/`. Claude Code only — other tools' payloads don't name the subagent. |
 | lint.sh | PostToolUse hook | Formats the edited file, exit 2 with lint errors. Reads Claude Code's `file_path`, Copilot's `filePath` and Cursor's top-level `file_path`; Cursor ignores the exit code, so there errors surface at the gate. |

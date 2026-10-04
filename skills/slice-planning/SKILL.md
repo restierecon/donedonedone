@@ -46,7 +46,7 @@ A slice that renders any part of an approved UI contract (ui-prototype skill) se
 `"ui_contract": "vault/ui/<feature-slug>/contract.md"`; every other slice sets
 `"ui_contract": null`. Its acceptance criteria name the contract states it delivers
 (loading, empty, error, ...) — a state no slice claims is a gap in the plan. A UI
-slice whose contract is missing or still `status: draft` can't be drafted: return it
+slice whose contract a human hasn't approved (`ui-approval.sh check`) can't be drafted: return it
 to /grill.
 
 ## Every slice is autonomous

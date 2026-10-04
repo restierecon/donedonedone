@@ -114,7 +114,7 @@ vault_project() {
   [ -d "$(dirname "$common")/vault" ]
 }
 
-HUMAN_ONLY_MSG="BLOCKED: approvals and the risk policy are human-only. A human runs ~/.claude/scripts/approve-risk.sh in their own terminal, never through an agent, and edits vault/risk-policy.json themselves. Tell the human what needs their decision and continue with other work."
+HUMAN_ONLY_MSG="BLOCKED: approvals and the risk policy are human-only. A human runs ~/.claude/scripts/approve-risk.sh or approve-ui.sh in their own terminal, never through an agent, and edits vault/risk-policy.json themselves. Tell the human what needs their decision and continue with other work."
 
 human_only_path() {
   echo "$1" | lower | grep -qE '(^|/)vault/risk-policy\.json$|(^|/)\.git/donedonedone(/|$)'
@@ -182,15 +182,15 @@ require_hardening() {
 }
 
 require_ui_contract() {
-  local tree slice contract root standing
+  local tree slice contract root standing verdict
   tree=$(task_tree) || return 0
   slice=$(printf '%s\n' "$1" | sed -n 's/^SLICE:[[:space:]]*\([^[:space:]]*\).*/\1/p' | head -1)
   contract=$(jq -r --arg id "$slice" '[.slices[]? | select(.id == $id)][0].ui_contract // empty | strings' "$tree" 2>/dev/null) \
     || block "BLOCKED: vault/task-tree.json is not valid JSON, so the builder brief's UI contract can't be checked. Failing closed."
   [ -n "$contract" ] || return 0
   root=$(dirname "$(dirname "$tree")")
-  head -1 "$root/$contract" 2>/dev/null | grep -q '^status: approved ' \
-    || block "BLOCKED: slice $slice builds to $contract, which is missing or not approved by the human. Take it back to /grill (ui-prototype skill)."
+  verdict=$(cd "$root" && "$here/ui-approval.sh" check "$contract" 2>&1) \
+    || block "BLOCKED: slice $slice builds to a UI design no human has approved as it stands — ${verdict#UI: }. Put the command in vault/flags/pending-review.md and continue with other work."
   standing=$(printf '%s\n' "$1" | awk '/^[A-Z]+:/ { on = ($0 ~ /^STANDING:/) } on')
   if ! printf '%s\n' "$standing" | grep -q 'frontend-ui-engineering' || ! printf '%s\n' "$standing" | grep -qF "$contract"; then
     block "BLOCKED: slice $slice renders UI, so the builder brief's STANDING must name the frontend-ui-engineering skill and the approved contract $contract (brief-contract skill)."
@@ -266,7 +266,7 @@ if secret_in_shell "$plain"; then
   block "BLOCKED: this command touches a secret (.env, key, secrets/). Ask the human for the value you need instead."
 fi
 
-if protected_name "$plain" 'approvals\.jsonl|risk-policy|approve-risk|vault-guard[^[:space:]]*[[:space:]]+--|\.git/donedonedone' \
+if protected_name "$plain" 'approvals\.jsonl|risk-policy|approve-risk|approve-ui|vault-guard[^[:space:]]*[[:space:]]+--|\.git/donedonedone' \
    && ! read_only_shell "$plain" "add commit" && vault_project; then
   block "$HUMAN_ONLY_MSG"
 fi

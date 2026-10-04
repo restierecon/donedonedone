@@ -28,7 +28,7 @@ this order, skipping what's already answered:
    (risk-gate skill), and a critical one needs the human's authorization before it builds.
 7. **UI impact** — does anything a user sees or clicks change? Classify it
    none / minor / major (ui-prototype skill). Anything but none: run that skill now —
-   contract, prototype, the human's explicit approval — before you stop. Layout,
+   contract, prototype, the human's `approve-ui.sh` — before you stop. Layout,
    hierarchy, states and copy are settled there, not by a builder.
 8. **Human-judgment sweep** — before stopping, check for anything a builder would have
    to ask about: UX wording/layout calls, money, deleting user data, schema choices.
