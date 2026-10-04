@@ -71,7 +71,13 @@ the slice branch elsewhere, since sibling worktrees share the same repo.
       survivor it lists on a line that implements an acceptance criterion is CRITICAL
       unless a test named for why shows it is equivalent; other survivors are NITs
       naming the assertion that would kill them
-- [ ] No scope creep — diff contains only this slice ("also improved X" = REJECT)
+- [ ] No scope creep — diff contains only this slice ("also improved X" = REJECT); every
+      changed file is inside the slice's `risk.scope.files` (gate's `scope` step owns the
+      CRITICAL; a file it missed is CRITICAL too)
+- [ ] Minimum necessary change: the builder's CHANGE PLAN is the smallest change that
+      meets the criteria — a cheaper change the diff could have been is a NIT naming it
+- [ ] Nothing in `risk.scope.unchanged` regressed: each behavior has a test in the
+      builder's PRESERVED line that exists and ran green — missing = CRITICAL
 - [ ] Frontend calls match backend routes; schema matches models (contract check)
 - [ ] No new dependency without justification; lockfile committed if deps changed
 - [ ] Builder's CLEANED line present. When the brief's STANDING names harden-diff, its

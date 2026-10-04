@@ -43,9 +43,14 @@ STANDING:
 Slice ID and prior critique still go in the brief as free text,
 around these headers.
 
-## Builder briefs: SLICE and harden-diff
+## Builder briefs: SLICE, RISK and harden-diff
 A builder brief in a project with vault/task-tree.json also starts with
-`SLICE: <ID>`, the slice's id exactly as task-tree.json has it. guard.sh reads that
+`SLICE: <ID>`, the slice's id exactly as task-tree.json has it, and carries a
+`RISK: <class> — <scope.change>; unchanged: <...>; rollback: <...>` line whose class
+is the one `risk-gate.sh assess <ID>` printed. Before the spawn runs, guard.sh runs
+`risk-gate.sh check <ID> build`: an unrecorded or changed assessment, a critical slice
+without a human authorization, a RISK line naming another class, or `model: sonnet` on
+an elevated-or-higher slice refuses the spawn. guard.sh also reads that
 slice's `auditor_triggers`:
 - `[]` — nothing more to add.
 - non-empty — STANDING must name the harden-diff skill, as an order after the pasted
@@ -57,6 +62,7 @@ slice's `auditor_triggers`:
 ```
 SLICE: S021
 GOAL: Shopper can share a saved cart
+RISK: elevated — share link opening a read-only cart; unchanged: cart ownership; rollback: revert, links stop resolving
 ...
 STANDING:
 1. <order 1 from vault/standing-orders.md, verbatim>

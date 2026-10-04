@@ -27,14 +27,16 @@ heavy reads go to agents; you consume structured verdicts (≤ 20 lines) only.
 | retro | Mines log.jsonl for failures that recur across slices; proposes the fix to the setup | With every architecture review; at once when log-event.sh prints RETRO DUE (learning-loop skill) |
 
 Model routing: builder runs on `sonnet` (pass `model` on the Agent call) for slices
-with ≤ 4 criteria, no auditor trigger and no one-way door; everything else — including
-any retry after a REJECTED — inherits the session model. Reviewer is sonnet (fixed
+with ≤ 4 criteria, no auditor trigger, no one-way door and risk class low or moderate;
+everything else — including any retry after a REJECTED — inherits the session model
+(guard.sh refuses sonnet for elevated and above). Reviewer is sonnet (fixed
 in its manifest); planner, auditor and retro inherit.
 
 Builder, reviewer and auditor briefs follow the brief-contract skill (GOAL · SCOPE ·
 ACCEPTANCE · VERIFY · FORBIDDEN · REPORT · STANDING); guard.sh refuses a spawn missing any.
-A builder brief also carries `SLICE: <ID>`; when that slice's `auditor_triggers` is
-non-empty, its STANDING names the harden-diff skill — guard.sh refuses it otherwise.
+A builder brief also carries `SLICE: <ID>` and `RISK: <class> — <scope, unchanged, rollback>`;
+when that slice's `auditor_triggers` is non-empty, its STANDING names the harden-diff
+skill — guard.sh refuses it otherwise.
 
 ## Decomposition — Grill Always, Every Slice Autonomous
 No slice exists without a grill. Every feature, bugfix and refactor — however small —
@@ -45,14 +47,35 @@ become ADRs in vault/decisions/. Then dispatch `planner` with the grilled spec; 
 writes vault/plan-draft.json and returns a table. If it reports OPEN
 QUESTIONS, take them back to /grill — never plan around a gap. Run
 `~/.claude/scripts/check-plan.sh` on the draft (it must exit 0; a FAIL goes back to the
-planner with its output), present the table, then copy the approved slices into
-task-tree.json yourself and delete the draft. A
+planner with its output), present the table with its risk column, then copy the approved
+slices into task-tree.json yourself, run `risk-gate.sh assess <ID>` for each, and delete
+the draft. A
 rejected or abandoned plan, or one sent back to /grill, gets its draft deleted too.
 Every slice is autonomous: named "Actor can [do something]", touches every layer that
 behavior needs, testable alone, never decomposed by layer, and needs no human decision
 mid-build. A slice only blocks slices naming it in `depends_on`. Independent slices may
 run concurrently: load the parallel-dispatch skill before starting a wave
 (max_parallel_slices in vault/project.md, default 3).
+
+## Risk Gate (before any builder, again before any merge)
+Every slice carries a `risk` assessment (five dimensions rated 0-4, hazards, scope,
+rollback); `~/.claude/scripts/risk-gate.sh` scores it 0-100 deterministically and the
+class sets the controls: low → gate + reviewer · moderate → + reviewer evidence
+unit-test-verified · elevated → + deep tests, session-model builder · high → + auditor
+and a human merge approval · critical → + a human authorization before building.
+Hazards (data loss, destructive ops, auth, secrets, money…) raise the class whatever the
+score. Load the risk-gate skill for the rubric, reassessment and approval steps.
+- Mechanical: guard.sh runs `risk-gate.sh check <ID> build` on every builder spawn and
+  `check <ID> merge` on any git command that lands `slice/<ID>` on main; gate.sh's
+  `scope` step fails a diff outside `risk.scope.files`. An unrecorded, changed or missing
+  assessment fails closed.
+- Human approvals come only from `approve-risk.sh`, run by a human in their own
+  terminal. You cannot approve, and never try to: no agent may write
+  `.git/donedonedone/approvals.jsonl` or `vault/risk-policy.json`. Ask once via
+  pending-review.md and continue with non-dependent slices.
+- Scope expansion (a `scope` FAIL, a builder SCOPE-EXPANSION) → log a `scope` event,
+  re-rate the slice, `risk-gate.sh assess <ID>`, then continue. Lowering a class needs a
+  human `downgrade` approval.
 
 ## Completion Gates (slice is DONE only when all pass, in order)
 1. Builder self-check — mechanical: gate green at its SHA, each criterion names its
@@ -66,7 +89,10 @@ run concurrently: load the parallel-dispatch skill before starting a wave
    survivors to mutation-survivors (~/.claude/skills/mutation-survivors/SKILL.md)
 3. Reviewer: APPROVED — hand it the SHA and the gate result line; it re-runs only if
    HEAD moved
-4. Auditor: CLEARED (only if the slice's auditor_triggers is non-empty; otherwise skip)
+4. Auditor: CLEARED (if the slice's auditor_triggers is non-empty or its risk class is
+   high or critical; otherwise skip)
+5. Risk: `risk-gate.sh check <ID> merge` PASS — every control its class requires,
+   including any human approval, at the current patch-id
 After each gate: record the verdict in task-tree.json, log it with
 `~/.claude/scripts/log-event.sh <ID> <gate> <verdict> --sha <sha> --patch-id <id> --evidence <rung>`
 (sha and patch_id from gate.sh's result line, the rung from the agent's EVIDENCE line:
@@ -92,7 +118,9 @@ those lines; removing them elsewhere is scope creep.
 Before merging, recompute the patch-id (`git diff main...slice/<ID> -- . ':(exclude)vault' |
 git patch-id --stable`): same as the approved verdicts' → they stand (a rebase alone
 changes only the sha); different → stale, re-run the gates.
-All gates pass → squash-merge to main (checkpoint noise stays on the branch), tag
+All gates pass → squash-merge to main (checkpoint noise stays on the branch; guard.sh
+re-runs the risk check on the merge command), log `merge done` with the check's
+CONTROLS line as `--signal`, tag
 `<ID>-done`, delete the branch (and worktree), then run the harvest skill yourself:
 append the slice's story to vault/stories.md, delete the slice from task-tree.json,
 and commit both files in one commit.
@@ -108,7 +136,7 @@ merged, and never prune to make a failure disappear. `/harvest` backfills in bul
 ## Resolution Protocol (exhaust before flagging a human)
 - **Tier 1** — Builder retries on its own failing self-check. Max 3 attempts.
 - **Tier 2** — Builder retries with Reviewer critique. Max 2 rounds. For a slice the
-  grill marked as a one-way door or one the Auditor flagged, the second round may route through a differently
+  grill marked as a one-way door, one rated high or critical, or one the Auditor flagged, the second round may route through a differently
   architected model (a second CLI/provider, not just a fresh context) as an
   adversarial second opinion — never silently; note it in the round's log entry.
 - **Tier 3** — Re-read criteria for ambiguity; choose the most reversible,
@@ -123,7 +151,8 @@ merged, and never prune to make a failure disappear. `/harvest` backfills in bul
 
 ## Flags (vault/flags/) — verification ergonomics required
 - pending-review.md — escalated slices, Tier 3 tiebreaks, architecture candidates,
-  retro proposals, test-budget overruns, nearby-improvement notes. Continue with
+  retro proposals, test-budget overruns, nearby-improvement notes, risk approvals a
+  human must give (`approve-risk.sh …` — the exact command and why). Continue with
   non-dependent work.
 - blocked.md — Auditor CRITICAL only. Halt that slice, continue with next
   non-dependent slice. Never ship a known-critical finding.
@@ -135,6 +164,8 @@ merged, and never prune to make a failure disappear. `/harvest` backfills in bul
 - semi — slices merge on green gates; any escalation or CLEARED-WITH-FINDINGS pauses
   the queue until a human looks
 - full — everything green merges, flags reviewed async. ONLY legal inside a sandbox/devcontainer.
+The risk class is a floor under the dial: a high or critical slice needs its human
+approvals at every setting, `full` included (risk-gate.sh doesn't read the dial).
 Suggest moving up only when the promotion rule in the setup's evals/README.md is met
 (10-slice clean streak from stories.md AND a dated passing scorecard). Never move the
 dial yourself.

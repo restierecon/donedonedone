@@ -15,6 +15,12 @@ parallel wave), run every command from inside it — never touch the main checko
 another slice's worktree. If none is given, work on branch `slice/<ID>` as usual.
 
 ## Method — test-first, red-green-refactor
+0. Minimum necessary change, before any code. From the brief's RISK line and the
+   slice's `risk.scope` in task-tree.json: name the smallest change that solves the
+   task, the files it touches, the regressions it could cause, the behavior that must
+   not change, how you'll verify it and how it rolls back. If the change needs a file
+   outside `risk.scope.files`, stop now and report STATUS: SCOPE-EXPANSION with the
+   files and why. The Director reassesses risk first; you never widen scope yourself.
 1. From the acceptance criteria, write tests FIRST. Each criterion maps to at least
    one test that fails while the criterion is unmet. Run them — confirm they fail.
 2. Implement the minimum to go green, layer by layer through the slice.
@@ -77,6 +83,9 @@ with a line range, not whole.
 ## Termination (never loop)
 Stop and report FAILED if: 3 test runs fail on the same root cause, or you have
 examined 20+ files without progress, or the criteria appear contradictory.
+Stop and report SCOPE-EXPANSION the moment gate.sh's `scope` step fails or the work
+needs a file outside the approved scope. Never revert needed work to make `scope` pass,
+and never touch vault/ to widen it.
 A clean failure report is success; thrashing is not.
 
 ## Self-Check (Tier 1 — mechanical, before every report)
@@ -84,7 +93,8 @@ Checks with a command behind them, not a second review of your own design — th
 reviewer reads the diff cold, and grading your own work is where leniency creeps in.
 1. `~/.claude/scripts/gate.sh` (all steps) passes at the SHA you report. Its `markers`
    step fails on any TODO/FIXME/XXX your diff adds, its `comments` step on any comment,
-   its `crap` step on any function you touch scoring over `gate.crap.max`, its
+   its `scope` step on any changed file outside `risk.scope.files` (→ SCOPE-EXPANSION,
+   not a fix), its `crap` step on any function you touch scoring over `gate.crap.max`, its
    `mutation` step on mutants your added lines survive under `gate.mutation.min`. Fix a
    `crap` FAIL by testing the function's untested branches or splitting it; fix a
    `mutation` FAIL by asserting what each listed survivor changes (mutation-survivors
@@ -97,10 +107,12 @@ A failing check → fix and re-run; each re-run counts toward Termination's limi
 
 ## Output Format (≤ 20 lines, never raw tool output)
 SLICE: [id] — [title]
-STATUS: COMPLETE / FAILED — [one-line reason]
+STATUS: COMPLETE / FAILED / SCOPE-EXPANSION — [one-line reason; for SCOPE-EXPANSION the files and why]
+CHANGE PLAN: [smallest change · files · rollback — step 0, one line]
 BRANCH: slice/[id]   SHA: [short sha gate.sh ran on]   FILES: [list]
 GATE: [gate.sh's final line, e.g. GATE: PASS @ sha=<sha> patch_id=<id>]
 CRITERIA: [each — MET / NOT MET — covering test name]
+PRESERVED: [each risk.scope.unchanged behavior → the test proving it still holds]
 CLEANED: [clean-diff's line]
 HARDENED: [harden-diff's line — trigger → test, every trigger; omit only when STANDING doesn't name harden-diff]
 DECISIONS: [new patterns/deps, one line each]

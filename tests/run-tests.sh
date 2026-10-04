@@ -302,17 +302,26 @@ echo "== guard.sh — builder briefs on trust-boundary slices name harden-diff =
 hrepo=$(make_repo)
 cat > "$hrepo/vault/task-tree.json" <<'JSON'
 {"slices": [
-  {"id": "S020", "title": "Shopper can sort a cart", "auditor_triggers": []},
-  {"id": "S021", "title": "Shopper can share a cart", "auditor_triggers": ["data-access", "user-input"]},
+  {"id": "S020", "title": "Shopper can sort a cart", "auditor_triggers": [],
+   "risk": {"dimensions": {"blast_radius": 1, "reversibility": 1, "security": 3, "complexity": 1, "uncertainty": 1},
+            "rationale": "reads the cart", "hazards": [],
+            "scope": {"change": "sort the cart list", "files": ["src/*"], "unchanged": [], "regressions": []},
+            "rollback": "revert the squash commit"}},
+  {"id": "S021", "title": "Shopper can share a cart", "auditor_triggers": ["data-access", "user-input"],
+   "risk": {"dimensions": {"blast_radius": 1, "reversibility": 1, "security": 1, "complexity": 1, "uncertainty": 1},
+            "rationale": "share link reads another cart", "hazards": [],
+            "scope": {"change": "add a share link", "files": ["src/*"], "unchanged": [], "regressions": []},
+            "rollback": "revert the squash commit"}},
   {"id": "S022", "title": "Shopper can print a cart"}
 ]}
 JSON
+(cd "$hrepo" && "$ROOT/scripts/risk-gate.sh" assess S020 >/dev/null && "$ROOT/scripts/risk-gate.sh" assess S021 >/dev/null)
 git -C "$hrepo" worktree add -q -b slice/S021 "$hrepo/.worktrees/S021" 2>/dev/null
 guard_builder_in() {
   jq -n --arg cwd "$1" --arg p "$2" \
     '{tool_name: "Agent", cwd: $cwd, tool_input: {subagent_type: "builder", prompt: $p}}' | "$GUARD" 2>/dev/null
 }
-HARD_BRIEF=$'SLICE: S021\nGOAL: x\nSCOPE: x\nACCEPTANCE: x\nVERIFY: x\nFORBIDDEN: x\nREPORT: x\nSTANDING:\n1. Load the harden-diff skill: this slice crosses data-access, user-input.'
+HARD_BRIEF=$'SLICE: S021\nGOAL: x\nSCOPE: x\nACCEPTANCE: x\nVERIFY: x\nFORBIDDEN: x\nREPORT: x\nRISK: moderate\nSTANDING:\n1. Load the harden-diff skill: this slice crosses data-access, user-input.'
 expect_allow "a trust-boundary slice's builder spawns when STANDING names harden-diff" guard_builder_in "$hrepo" "$HARD_BRIEF"
 expect_block "a trust-boundary slice's builder is blocked when STANDING omits harden-diff" \
   guard_builder_in "$hrepo" "${HARD_BRIEF/harden-diff/a}"
@@ -1135,10 +1144,20 @@ cat > "$PLANS/good.json" <<'JSON'
   {"id": "S010", "title": "Shopper can save a cart", "so_that": "I don't lose my picks",
    "status": "todo", "depends_on": [], "auditor_triggers": [], "acceptance_criteria": ["cart persists across reload"],
    "verify": "tests/cart_test.sh", "retry_count": 0,
+   "risk": {"dimensions": {"blast_radius": 1, "reversibility": 1, "security": 0, "complexity": 1, "uncertainty": 1},
+            "rationale": "one module, a pattern the cart already uses", "hazards": [],
+            "scope": {"change": "persist the cart to local storage", "files": ["src/cart/*", "tests/cart/*"],
+                      "unchanged": ["checkout totals"], "regressions": ["cart badge count"]},
+            "rollback": "revert the squash commit; nothing stored server-side"},
    "gates": {"self_review": null, "automated": "PASS", "reviewer": "APPROVED", "auditor": "skip: no auth, data access or external calls"}},
   {"id": "S011", "title": "Shopper can share a saved cart", "so_that": "a friend can buy for me",
    "status": "todo", "depends_on": ["S010", "S001", "S002"], "auditor_triggers": ["data-access", "user-input"], "acceptance_criteria": ["share link opens the cart"],
    "verify": "tests/share_test.sh", "retry_count": 0,
+   "risk": {"dimensions": {"blast_radius": 2, "reversibility": 1, "security": 3, "complexity": 2, "uncertainty": 1},
+            "rationale": "a link exposes one cart to another user", "hazards": [],
+            "scope": {"change": "share link that opens a read-only cart", "files": ["src/share/*", "tests/share/*"],
+                      "unchanged": ["cart ownership"], "regressions": ["cart privacy"]},
+            "rollback": "revert the squash commit; links stop resolving"},
    "gates": {"self_review": null, "automated": null, "reviewer": null, "auditor": null}}
 ]
 JSON
@@ -1164,6 +1183,9 @@ expect_plan() {
   ok "$1"
 }
 expect_plan "good plan passes (deps via draft, stories.md, task-tree)" good.json 0 "OK"
+expect_plan "a passing plan prints each slice's risk class and controls" good.json 0 "S011 · elevated"
+jq '.[0] |= del(.risk)'                 "$PLANS/good.json" > "$PLANS/no-risk.json"
+expect_plan "a slice without a risk assessment fails the plan" no-risk.json 1 "S010: no risk assessment"
 expect_plan "missing so_that fails"        missing-so-that.json 1 "S010: missing so_that"
 expect_plan "title without 'can' fails"    bad-title.json       1 "S010: title must read '<Actor> can <...>'"
 expect_plan "unresolved dependency fails"  unresolved-dep.json  1 "S011: depends_on 'S999' unresolved"
@@ -1484,6 +1506,456 @@ else
   bad "gate fails a worktree branch that changes task-tree.json, before a squash-merge carries it into main" "exit $status: $out"
 fi
 rm -rf "$repo"
+
+echo "== risk-gate.sh — deterministic scoring, class boundaries and overrides =="
+RISK_GATE="$ROOT/scripts/risk-gate.sh"
+APPROVE="$ROOT/scripts/approve-risk.sh"
+dims() { jq -cn --argjson a "$1" --argjson b "$2" --argjson c "$3" --argjson d "$4" --argjson e "$5" \
+  '{blast_radius: $a, reversibility: $b, security: $c, complexity: $d, uncertainty: $e}'; }
+risk_slice() {
+  jq -cn --arg id "$1" --argjson d "$2" --argjson t "${3:-[]}" --argjson h "${4:-[]}" '{
+    id: $id, title: "Shopper can keep a cart", so_that: "my picks survive", status: "todo", depends_on: [],
+    auditor_triggers: $t, acceptance_criteria: ["the cart survives a reload"], verify: "gate.sh", retry_count: 0,
+    risk: {dimensions: $d, rationale: "fixture ratings", hazards: $h,
+           scope: {change: "the smallest change", files: ["src/*", "tests/*"], unchanged: ["checkout totals"], regressions: []},
+           rollback: "revert the squash commit", safeguards: ["backup before deploy"]}}'
+}
+class_score() { "$RISK_GATE" score <<<"$1" 2>&1 | sed -n 's/^RISK: [^ ]* class=\([a-z]*\) score=\([0-9]*\).*/\1 \2/p'; }
+expect_class() {
+  local got
+  got=$(class_score "$2")
+  if [ "$got" = "$3" ]; then ok "$1"; else bad "$1" "got '$got', expected '$3'"; fi
+}
+for c in "0 0 0 0 0:low 0" "0 0 0 2 4:low 20" "0 0 0 4 3:moderate 21" "0 0 3 4 3:moderate 40" \
+         "0 0 3 3 4:elevated 41" "0 3 3 3 4:elevated 60" "1 3 3 1 4:high 61" "4 3 3 1 4:high 80" "3 3 3 4 4:critical 81"; do
+  read -r a b cc d e <<<"${c%%:*}"
+  expect_class "boundary: dimensions ${c%%:*} score ${c##* } → ${c#*:}" "$(risk_slice S100 "$(dims "$a" "$b" "$cc" "$d" "$e")")" "${c#*:}"
+done
+low=$(risk_slice S101 "$(dims 1 1 0 1 1)")
+first=$("$RISK_GATE" score <<<"$low"); second=$("$RISK_GATE" score <<<"$low")
+reordered=$(jq -cS '.risk.dimensions |= (to_entries | reverse | from_entries)' <<<"$low")
+third=$("$RISK_GATE" score <<<"$reordered")
+if [ -n "$first" ] && [ "$first" = "$second" ] && [ "$first" = "$third" ]; then
+  ok "scoring is deterministic: same slice, same key order or not → same score, class and hash"
+else
+  bad "scoring is deterministic: same slice, same key order or not → same score, class and hash" "$first | $third"
+fi
+expect_class "a low score with a data-loss hazard is critical" \
+  "$(risk_slice S102 "$(dims 1 1 0 1 1)" '[]' '["data-loss"]')" "critical 19"
+expect_class "a low score with a destructive-op hazard is critical" \
+  "$(risk_slice S102 "$(dims 1 1 0 1 1)" '[]' '["destructive-op"]')" "critical 19"
+expect_class "security rated 4 is at least high" "$(risk_slice S102 "$(dims 0 0 4 0 0)")" "high 25"
+expect_class "reversibility rated 4 is at least high" "$(risk_slice S102 "$(dims 0 4 0 0 0)")" "high 25"
+expect_class "an auth trigger raises security to 4, so an auth slice is at least high" \
+  "$(risk_slice S102 "$(dims 1 1 0 1 1)" '["auth"]')" "high 44"
+expect_class "a user-input trigger raises security to 2" "$(risk_slice S102 "$(dims 1 1 0 1 1)" '["user-input"]')" "moderate 31"
+deleting=$(jq -c '.acceptance_criteria = ["the shopper can delete a saved cart"]' <<<"$low")
+out=$("$RISK_GATE" score <<<"$deleting" 2>&1); status=$?
+if [ "$status" -eq 1 ] && echo "$out" | grep -q "the criteria mention data-loss"; then
+  ok "criteria that mention deleting must declare data-loss or rule it out"
+else
+  bad "criteria that mention deleting must declare data-loss or rule it out" "exit $status: $out"
+fi
+expect_class "a hazard ruled out with a reason leaves the score in charge" \
+  "$(jq -c '.risk.ruled_out = {"data-loss": "a soft delete the shopper can undo for 30 days"}' <<<"$deleting")" "low 19"
+for bad_case in '.risk.score = 5:hand-set score' '.risk.class = "low" | .risk.hazards = ["money"]:hand-set class' \
+                'del(.risk.rollback):missing rollback' '.risk.rollback = "n/a":placeholder rollback' \
+                '.risk.hazards = ["data-loss"] | del(.risk.safeguards):critical without safeguards' \
+                'del(.risk.scope.files):missing scope files' '.risk.dimensions.security = 5:dimension out of range' \
+                'del(.risk):missing assessment' '.risk.scope.files = ["*"]:a catch-all scope'; do
+  status=0; out=$(jq -c "${bad_case%%:*}" <<<"$low" | "$RISK_GATE" score 2>&1) || status=$?
+  if [ "$status" -eq 1 ] && echo "$out" | grep -q '^RISK: INVALID'; then ok "invalid: ${bad_case##*:}"; else bad "invalid: ${bad_case##*:}" "exit $status: $out"; fi
+done
+
+echo "== risk-gate.sh — thresholds come from a human-only policy file =="
+rrepo=$(make_repo)
+echo '{"thresholds": {"moderate": 20}}' > "$rrepo/vault/risk-policy.json"
+got=$(cd "$rrepo" && "$RISK_GATE" score <<<"$(risk_slice S103 "$(dims 0 0 0 2 4)")" | sed -n 's/^RISK: [^ ]* class=\([a-z]*\) score=\([0-9]*\).*/\1 \2/p')
+if [ "$got" = "moderate 20" ]; then ok "vault/risk-policy.json moves a threshold"; else bad "vault/risk-policy.json moves a threshold" "$got"; fi
+for policy in '{"thresholds": {"moderate": 50}}@@thresholds that do not rise' \
+              '{"weights": {"blast_radius": 50}}@@weights that do not add to 100' 'nope@@a policy that is not JSON'; do
+  printf '%s' "${policy%@@*}" > "$rrepo/vault/risk-policy.json"
+  status=0; (cd "$rrepo" && "$RISK_GATE" score <<<"$low" >/dev/null 2>&1) || status=$?
+  if [ "$status" -eq 2 ]; then ok "fails closed on ${policy#*@@}"; else bad "fails closed on ${policy#*@@}" "exit $status"; fi
+done
+rm -rf "$rrepo"
+
+echo "== risk-gate.sh — the gate runs before any builder, and again before any merge =="
+make_risk_repo() {
+  local d
+  d=$(make_repo)
+  mkdir -p "$d/src"
+  echo base > "$d/src/app.txt"
+  printf '# P\n## Gate\n- gate.test: true\n' > "$d/vault/project.md"
+  jq -n --argjson s "$1" '{slices: $s}' > "$d/vault/task-tree.json"
+  git -C "$d" add -A && git -C "$d" commit -q -m "plan"
+  echo "$d"
+}
+slice_change() {
+  git -C "$1" checkout -q -b "slice/$2" main 2>/dev/null || git -C "$1" checkout -q "slice/$2"
+  echo "$3" >> "$1/${4:-src/app.txt}"
+  git -C "$1" add "${4:-src/app.txt}" && git -C "$1" commit -q -m "work on $2"
+  git -C "$1" checkout -q main
+}
+pid_of() { git -C "$1" diff "main...slice/$2" -- . ':(exclude)vault' | git patch-id --stable | cut -d' ' -f1; }
+rg() { (cd "$1" && shift && "$RISK_GATE" "$@" 2>&1); }
+lg() { (cd "$1" && shift && "$LOG_EVENT" "$@" >/dev/null 2>&1); }
+hash_in() { rg "$1" show "$2" | sed -n 's/.*hash=\([0-9a-f]*\).*/\1/p'; }
+seed_approval() {
+  mkdir -p "$1/.git/donedonedone"
+  jq -cn --arg s "$2" --arg k "$3" --arg d "$4" --arg h "$5" --arg p "${6:-}" \
+    '{ts: (now | todate), slice: $s, kind: $k, decision: $d, class: "x", score: 0, hash: $h, approver: "human@test"}
+     + (if $p != "" then {patch_id: $p} else {} end)' >> "$1/.git/donedonedone/approvals.jsonl"
+}
+guard_in() {
+  jq -n --arg cwd "$1" --arg c "$2" --arg a "${3:-}" \
+    '{tool_name: "Bash", cwd: $cwd, tool_input: {command: $c}}
+     + (if $a == "" then {} else {agent_id: "agent-1", agent_type: $a} end)' | "$GUARD" 2>/dev/null
+}
+spawn_in() {
+  jq -n --arg cwd "$1" --arg p "$2" --arg m "${3:-}" \
+    '{tool_name: "Agent", cwd: $cwd, tool_input: ({subagent_type: "builder", prompt: $p} + (if $m == "" then {} else {model: $m} end))}' \
+    | "$GUARD" 2>/dev/null
+}
+brief() { printf 'SLICE: %s\nGOAL: x\nSCOPE: x\nACCEPTANCE: x\nVERIFY: x\nFORBIDDEN: x\nREPORT: x\nRISK: %s — scope src/*\nSTANDING:\n1. Load the harden-diff skill: this slice crosses auth.\n' "$1" "$2"; }
+
+LOW=$(risk_slice S001 "$(dims 1 1 0 1 1)")
+NOASSESS=$(jq -c '.id = "S004" | del(.risk)' <<<"$LOW")
+HIGH=$(risk_slice S002 "$(dims 2 1 1 2 1)" '["auth"]' '["auth"]' | jq -c '.title = "Admin can reset a password" | .acceptance_criteria = ["an admin resets a password"]')
+CRIT=$(risk_slice S003 "$(dims 1 1 0 1 1)" '[]' '["data-loss"]' | jq -c '.acceptance_criteria = ["the shopper can delete a saved cart"]')
+repo=$(make_risk_repo "[$LOW, $HIGH, $CRIT, $NOASSESS]")
+
+status=0; out=$(rg "$repo" check S001 build) || status=$?
+if [ "$status" -eq 1 ] && echo "$out" | grep -q "no recorded risk assessment"; then ok "an unrecorded assessment blocks the build"; else bad "an unrecorded assessment blocks the build" "$out"; fi
+expect_block "a builder can't spawn before its slice's risk is recorded" spawn_in "$repo" "$(brief S001 low)"
+out=$(cd "$repo" && "$SESSION_START" </dev/null 2>&1)
+if echo "$out" | grep -q "risk gate" && echo "$out" | grep -q "S004 · no valid risk assessment" && echo "$out" | grep -q "S001 · assessment not recorded"; then
+  ok "session-start lists slices the risk gate is holding"
+else
+  bad "session-start lists slices the risk gate is holding" "$out"
+fi
+rg "$repo" assess S001 >/dev/null; rg "$repo" assess S002 >/dev/null; rg "$repo" assess S003 >/dev/null
+if tail -3 "$repo/vault/log.jsonl" | jq -se 'map(.event == "risk" and (.score | type) == "number" and (.hash | length) == 12) | all' >/dev/null \
+   && tail -3 "$repo/vault/log.jsonl" | jq -se 'map(.verdict) == ["low", "high", "critical"]' >/dev/null; then
+  ok "assess records score, class and assessment hash in log.jsonl"
+else
+  bad "assess records score, class and assessment hash in log.jsonl" "$(tail -3 "$repo/vault/log.jsonl")"
+fi
+before=$(wc -l < "$repo/vault/log.jsonl")
+rg "$repo" assess S001 >/dev/null
+if [ "$(wc -l < "$repo/vault/log.jsonl")" -eq "$before" ]; then ok "re-assessing an unchanged slice records nothing new"; else bad "re-assessing an unchanged slice records nothing new" "grew"; fi
+status=0; out=$(rg "$repo" assess S004) || status=$?
+if [ "$status" -eq 1 ] && echo "$out" | grep -q "no risk assessment"; then ok "a slice without an assessment can't be recorded"; else bad "a slice without an assessment can't be recorded" "$out"; fi
+expect_block "a builder for a slice with no assessment is blocked" spawn_in "$repo" "$(brief S004 low)"
+expect_allow "a low-risk builder spawns with a matching RISK line" spawn_in "$repo" "$(brief S001 low)"
+expect_block "a builder brief whose RISK line understates the class is blocked" spawn_in "$repo" "$(brief S002 low)"
+expect_block "a builder brief with no RISK line is blocked" spawn_in "$repo" "$(brief S001 low | sed '/^RISK:/d')"
+expect_allow "a high-risk builder may start (humans approve its merge, not its start)" spawn_in "$repo" "$(brief S002 high)"
+expect_block "a high-risk builder can't drop to sonnet" spawn_in "$repo" "$(brief S002 high)" sonnet
+expect_allow "a low-risk builder may run on sonnet" spawn_in "$repo" "$(brief S001 low)" sonnet
+status=0; out=$(rg "$repo" check S003 build) || status=$?
+if [ "$status" -eq 1 ] && echo "$out" | grep -q "approve-risk.sh authorize S003"; then ok "a critical slice stops before building, naming the authorization"; else bad "a critical slice stops before building, naming the authorization" "$out"; fi
+expect_block "a critical builder can't spawn without a human authorization" spawn_in "$repo" "$(brief S003 critical)"
+seed_approval "$repo" S003 authorize deny "$(hash_in "$repo" S003)"
+status=0; out=$(rg "$repo" check S003 build) || status=$?
+if [ "$status" -eq 1 ] && echo "$out" | grep -q "denied by human@test"; then ok "a denied authorization keeps a critical slice stopped"; else bad "a denied authorization keeps a critical slice stopped" "$out"; fi
+seed_approval "$repo" S003 authorize approve "$(hash_in "$repo" S003)"
+expect_allow "a human authorization bound to the assessment lets a critical builder start" spawn_in "$repo" "$(brief S003 critical)"
+printf '# P\n## Gate\n- gate.test: true\nAutonomy: full\n' > "$repo/vault/project.md"
+git -C "$repo" commit -q -am "dial up"
+
+echo "== risk-gate.sh — merges need every control the class requires =="
+slice_change "$repo" S001 "low work"
+P1=$(pid_of "$repo" S001)
+expect_block "a low slice can't merge with no gate or reviewer verdict" guard_in "$repo" 'git merge --squash slice/S001'
+lg "$repo" S001 gate PASS --patch-id "$P1"
+lg "$repo" S001 reviewer REJECTED --patch-id "$P1" --category error-handling
+expect_block "a REJECTED reviewer blocks the merge" guard_in "$repo" 'git merge --squash slice/S001'
+lg "$repo" S001 reviewer APPROVED --patch-id "$P1" --evidence type-check-only
+expect_allow "a low slice merges on gate PASS + reviewer APPROVED, no human (autonomous)" guard_in "$repo" 'git merge --squash slice/S001'
+lg "$repo" S001 gate FAIL --patch-id "$P1"
+expect_block "a later gate FAIL blocks the merge" guard_in "$repo" 'git merge --squash slice/S001'
+lg "$repo" S001 gate PASS --patch-id "$P1"
+expect_allow "allows the merge again once the gate passes" guard_in "$repo" 'git merge --squash slice/S001'
+slice_change "$repo" S001 "more low work"
+expect_block "verdicts on an older patch_id don't carry to a changed diff" guard_in "$repo" 'git merge --squash slice/S001'
+
+slice_change "$repo" S002 "high work"
+P2=$(pid_of "$repo" S002)
+H2=$(hash_in "$repo" S002)
+lg "$repo" S002 gate PASS --patch-id "$P2"
+lg "$repo" S002 reviewer APPROVED --patch-id "$P2" --evidence type-check-only
+status=0; out=$(rg "$repo" check S002 merge) || status=$?
+if [ "$status" -eq 1 ] && echo "$out" | grep -q "verified: reviewer evidence is type-check-only" && echo "$out" | grep -q "auditor: no auditor verdict" \
+   && echo "$out" | grep -q "human-approval: a human runs approve-risk.sh merge S002" && echo "$out" | grep -q "^CONTROLS: high requires"; then
+  ok "a high slice lists every missing control: verification, auditor, human approval"
+else
+  bad "a high slice lists every missing control: verification, auditor, human approval" "$out"
+fi
+lg "$repo" S002 reviewer APPROVED --patch-id "$P2" --evidence unit-test-verified
+lg "$repo" S002 auditor BLOCKED --patch-id "$P2"
+seed_approval "$repo" S002 merge approve "$H2" "$P2"
+expect_block "an auditor BLOCKED stops a high slice even with a human approval" guard_in "$repo" 'git merge --squash slice/S002'
+lg "$repo" S002 auditor CLEARED --patch-id "$P2"
+expect_allow "a high slice merges once reviewer, auditor and a bound human approval are in (dial: full)" guard_in "$repo" 'git merge --squash slice/S002'
+seed_approval "$repo" S002 merge deny "$H2" "$P2"
+expect_block "a later human denial blocks the merge" guard_in "$repo" 'git merge --squash slice/S002'
+seed_approval "$repo" S002 merge approve "$H2" "$P2"
+slice_change "$repo" S002 "sneaky extra line"
+expect_block "a human approval is bound to the patch_id it saw" guard_in "$repo" 'git merge --squash slice/S002'
+git -C "$repo" branch -q -f slice/S002 "slice/S002~1"
+expect_allow "the approved patch_id merges again" guard_in "$repo" 'git merge --squash slice/S002'
+printf '# P\n## Gate\n- gate.test: true\n' > "$repo/vault/project.md"
+seed_approval "$repo" S002 merge deny "$H2" "$P2"
+status=0; out=$(rg "$repo" check S002 merge) || status=$?
+if [ "$status" -eq 1 ] && echo "$out" | grep -q "deep-tests: configure gate.mutation"; then ok "elevated+ needs deep tests: gate.mutation, live-verified, or a human"; else bad "elevated+ needs deep tests: gate.mutation, live-verified, or a human" "$out"; fi
+printf '# P\n## Gate\n- gate.test: true\n- gate.mutation: echo no-mutants\n' > "$repo/vault/project.md"
+out=$(rg "$repo" check S002 merge)
+if echo "$out" | grep -q "done: .*deep-tests"; then ok "gate.mutation in the full gate satisfies deep tests"; else bad "gate.mutation in the full gate satisfies deep tests" "$out"; fi
+
+echo "== risk-gate.sh — every route onto main goes through the merge check =="
+for c in 'git merge slice/S004' 'git cherry-pick slice/S004' 'git rebase slice/S004' 'git rebase --onto slice/S004 main' \
+         'git reset --soft slice/S004' 'git pull . slice/S004' 'git branch -f main slice/S004' 'git checkout -B main slice/S004' \
+         'git push . slice/S004:main' 'git -C . merge --squash "slice/S004"' 'git checkout main && git merge --squash slice/S004' \
+         'git update-ref refs/heads/main slice/S004'; do
+  msg=$(jq -n --arg cwd "$repo" --arg c "$c" '{tool_name: "Bash", cwd: $cwd, tool_input: {command: $c}}' | "$GUARD" 2>&1 >/dev/null)
+  if echo "$msg" | grep -q "slice/S004 can't land on main" && echo "$msg" | grep -q "RISK: FAIL merge S004"; then
+    ok "the merge check blocks an unassessed slice landing via: $c"
+  else
+    bad "the merge check blocks an unassessed slice landing via: $c" "$msg"
+  fi
+done
+msg=$(cd "$ROOT" && jq -n --arg cwd "$repo" '{tool_name: "Bash", cwd: $cwd, tool_input: {command: "git merge slice/S004"}}' | scripts/guard.sh 2>&1 >/dev/null)
+if echo "$msg" | grep -q "RISK: FAIL merge S004" && ! echo "$msg" | grep -q "No such file"; then
+  ok "guard.sh finds risk-gate.sh when invoked by a relative path"
+else
+  bad "guard.sh finds risk-gate.sh when invoked by a relative path" "$msg"
+fi
+expect_block "a slice that isn't in task-tree.json can't land" guard_in "$repo" 'git merge --squash slice/S999'
+for c in 'git checkout -b slice/S004' 'git checkout -b slice/S004 main' 'git rebase main' 'git rebase main slice/S004' \
+         'git merge-base main slice/S004' 'git log main..slice/S004' 'git branch -D slice/S004' 'git push -u origin slice/S004' \
+         'git worktree add .worktrees/S004 -b slice/S004 main' 'git merge main'; do
+  expect_allow "leaves alone: $c" guard_in "$repo" "$c"
+done
+nrepo=$(make_repo); rm -rf "$nrepo/vault"
+expect_allow "a project without a vault keeps merging as before" guard_in "$nrepo" 'git merge --squash slice/S001'
+rm -rf "$nrepo"
+
+echo "== risk-gate.sh — scope expansion forces reassessment =="
+git -C "$repo" checkout -q -b slice/S005 main
+jq --argjson s "$(jq -c '.id = "S005"' <<<"$LOW")" '.slices += [$s]' "$repo/vault/task-tree.json" > "$repo/t.json" && mv "$repo/t.json" "$repo/vault/task-tree.json"
+rg "$repo" assess S005 >/dev/null
+echo "in scope" >> "$repo/src/app.txt"
+git -C "$repo" add src && git -C "$repo" commit -q -m "in scope"
+out=$(cd "$repo" && "$GATE" scope 2>&1)
+if echo "$out" | grep -q "^scope PASS"; then ok "gate scope passes inside risk.scope.files"; else bad "gate scope passes inside risk.scope.files" "$out"; fi
+mkdir -p "$repo/db" && echo "alter" > "$repo/db/migrate.sql"
+git -C "$repo" add db && git -C "$repo" commit -q -m "drift"
+status=0; out=$(cd "$repo" && "$GATE" scope 2>&1) || status=$?
+if [ "$status" -eq 1 ] && echo "$out" | grep -q "^scope FAIL .*SCOPE-EXPANSION" && echo "$out" | grep -q "db/migrate.sql"; then
+  ok "gate scope fails a file outside the approved scope and names it"
+else
+  bad "gate scope fails a file outside the approved scope and names it" "exit $status: $out"
+fi
+git -C "$repo" checkout -q main
+P5=$(pid_of "$repo" S005)
+lg "$repo" S005 gate PASS --patch-id "$P5"; lg "$repo" S005 reviewer APPROVED --patch-id "$P5" --evidence unit-test-verified
+status=0; out=$(rg "$repo" check S005 merge) || status=$?
+if [ "$status" -eq 1 ] && echo "$out" | grep -q "scope expanded beyond risk.scope.files: db/migrate.sql"; then ok "an out-of-scope diff can't merge, whatever its verdicts"; else bad "an out-of-scope diff can't merge, whatever its verdicts" "$out"; fi
+jq '(.slices[] | select(.id == "S005") | .risk) |= (.scope.files += ["db/*"] | .hazards = ["schema-migration"] | .dimensions.reversibility = 3)' \
+  "$repo/vault/task-tree.json" > "$repo/t.json" && mv "$repo/t.json" "$repo/vault/task-tree.json"
+status=0; out=$(rg "$repo" check S005 build) || status=$?
+if [ "$status" -eq 1 ] && echo "$out" | grep -q "changed since it was recorded"; then ok "a widened scope blocks progress until it is reassessed"; else bad "a widened scope blocks progress until it is reassessed" "$out"; fi
+rg "$repo" assess S005 >/dev/null
+if tail -1 "$repo/vault/log.jsonl" | jq -e '.event == "risk" and .verdict == "elevated" and (.categories | index("risk-underestimate"))
+     and any(.signals[]; startswith("reassessed from low"))' >/dev/null; then
+  ok "reassessment that raises the class is logged as a risk-underestimate"
+else
+  bad "reassessment that raises the class is logged as a risk-underestimate" "$(tail -1 "$repo/vault/log.jsonl")"
+fi
+jq '(.slices[] | select(.id == "S005") | .risk) |= (.hazards = [] | .ruled_out = {"schema-migration": "fixture"} | .dimensions.reversibility = 0)' \
+  "$repo/vault/task-tree.json" > "$repo/t.json" && mv "$repo/t.json" "$repo/vault/task-tree.json"
+rg "$repo" assess S005 >/dev/null
+out=$(rg "$repo" check S005 build)
+if echo "$out" | grep -q "^RISK: PASS build S005 class=elevated" && echo "$out" | grep -q "reassessed down from elevated to low" \
+   && echo "$out" | grep -q "approve-risk.sh downgrade S005"; then
+  ok "a reassessment can't lower the controls without a human: the highest recorded class still applies"
+else
+  bad "a reassessment can't lower the controls without a human: the highest recorded class still applies" "$out"
+fi
+expect_block "a builder brief can't claim the lowered class before a human accepts it" spawn_in "$repo" "$(brief S005 low)"
+seed_approval "$repo" S005 downgrade approve "$(hash_in "$repo" S005)"
+if rg "$repo" check S005 build | grep -q "^RISK: PASS build S005 class=low"; then ok "a human downgrade approval accepts the lower class"; else bad "a human downgrade approval accepts the lower class" "$(rg "$repo" check S005 build)"; fi
+
+echo "== risk-gate.sh — the record is append-only and human approvals are human-only =="
+head -1 "$repo/vault/log.jsonl" > "$repo/l" && git -C "$repo" add -A >/dev/null && git -C "$repo" commit -q -m "log" && cp "$repo/l" "$repo/vault/log.jsonl"
+status=0; out=$(rg "$repo" check S001 build) || status=$?
+if [ "$status" -eq 1 ] && echo "$out" | grep -q "append-only"; then ok "a rewritten log.jsonl fails the risk gate"; else bad "a rewritten log.jsonl fails the risk gate" "$out"; fi
+git -C "$repo" checkout -q -- vault/log.jsonl
+expect_block "the Director can't Write the risk policy"        guard_file Write 'vault/risk-policy.json'
+expect_block "the Director can't Edit the approvals ledger"    guard_file Edit '/repo/.git/donedonedone/approvals.jsonl'
+expect_block "a subagent can't Write the approvals ledger"     guard_file Write '.git/donedonedone/approvals.jsonl' builder
+expect_allow "anyone may read the approvals ledger"            guard_file Read '.git/donedonedone/approvals.jsonl'
+expect_block "the Director can't append to the ledger in shell" guard_in "$repo" 'echo "{}" >> .git/donedonedone/approvals.jsonl'
+expect_block "the Director can't run approve-risk.sh"          guard_in "$repo" 'scripts/approve-risk.sh merge S001'
+expect_block "the Director can't fake a pty for approve-risk.sh" guard_in "$repo" 'script -qc "approve-risk.sh merge S001" /dev/null'
+expect_block "the Director can't re-snapshot human-only files" guard_in "$repo" 'scripts/vault-guard.sh --human-snapshot'
+expect_block "the Director can't overwrite the policy in shell" guard_in "$repo" 'printf x > vault/risk-policy.json'
+expect_allow "the Director may commit the policy a human edited" guard_in "$repo" 'git add vault/risk-policy.json && git commit -m "chore: risk policy"'
+expect_allow "the Director may read the ledger in shell"        guard_in "$repo" 'jq . .git/donedonedone/approvals.jsonl'
+expect_block "a subagent can't run risk-gate.sh"                guard_in "$repo" 'scripts/risk-gate.sh assess S001' builder
+expect_allow "a subagent may read risk-gate.sh"                 guard_in "$repo" 'grep -n scope scripts/risk-gate.sh' builder
+expect_allow "the Director runs risk-gate.sh"                   guard_in "$repo" 'scripts/risk-gate.sh assess S001'
+nrepo=$(make_repo); rm -rf "$nrepo/vault"
+expect_allow "outside a vault project, editing the risk-gate scripts is ordinary work" guard_in "$nrepo" 'shellcheck scripts/vault-guard.sh scripts/approve-risk.sh'
+expect_allow "outside a vault project, a subagent may run risk-gate.sh's tests" guard_in "$nrepo" 'bash -n scripts/risk-gate.sh' builder
+rm -rf "$nrepo"
+status=0; out=$(cd "$repo" && CLAUDECODE=1 "$APPROVE" merge S002 2>&1) || status=$?
+if [ "$status" -eq 1 ] && echo "$out" | grep -q "agent's shell"; then ok "approve-risk.sh refuses inside an agent's shell"; else bad "approve-risk.sh refuses inside an agent's shell" "exit $status: $out"; fi
+lines_before=$(wc -l < "$repo/.git/donedonedone/approvals.jsonl")
+status=0; out=$(cd "$repo" && echo S002 | env -u CLAUDECODE "$APPROVE" merge S002 2>&1) || status=$?
+if [ "$status" -eq 1 ] && echo "$out" | grep -q "interactive terminal" && [ "$(wc -l < "$repo/.git/donedonedone/approvals.jsonl")" -eq "$lines_before" ]; then
+  ok "approve-risk.sh refuses piped input and writes nothing"
+else
+  bad "approve-risk.sh refuses piped input and writes nothing" "exit $status: $out"
+fi
+pty_run() {
+  python3 -c '
+import os, sys, select
+answer = sys.argv[1].encode() + b"\n"
+pid, fd = os.forkpty()
+if pid == 0:
+    os.execvp(sys.argv[2], sys.argv[2:])
+out = b""
+sent = False
+while True:
+    r, _, _ = select.select([fd], [], [], 30)
+    if not r:
+        break
+    try:
+        data = os.read(fd, 4096)
+    except OSError:
+        break
+    if not data:
+        break
+    out += data
+    if not sent and b"Type \"" in out:
+        os.write(fd, answer)
+        sent = True
+_, status = os.waitpid(pid, 0)
+sys.stdout.write(out.decode(errors="replace"))
+sys.exit(os.WEXITSTATUS(status))
+' "$@"
+}
+if command -v python3 >/dev/null 2>&1 && python3 -c 'import os, pty; os.forkpty' >/dev/null 2>&1; then
+  printf '# P\n## Gate\n- gate.test: true\n- gate.mutation: echo no-mutants\n' > "$repo/vault/project.md"
+  status=0; out=$(cd "$repo" && pty_run "nope" env -u CLAUDECODE "$APPROVE" merge S002 2>&1) || status=$?
+  if [ "$status" -eq 1 ] && tail -1 "$repo/.git/donedonedone/approvals.jsonl" | jq -e '.decision == "deny" and .approver == "test@test"' >/dev/null \
+     && ! rg "$repo" check S002 merge >/dev/null; then
+    ok "a human at a real terminal who types anything else records a denial"
+  else
+    bad "a human at a real terminal who types anything else records a denial" "exit $status: $(echo "$out" | tail -3)"
+  fi
+  status=0; out=$(cd "$repo" && pty_run "S002" env -u CLAUDECODE "$APPROVE" merge S002 2>&1) || status=$?
+  if [ "$status" -eq 0 ] && tail -1 "$repo/.git/donedonedone/approvals.jsonl" | jq -e --arg p "$P2" '.decision == "approve" and .kind == "merge" and .patch_id == $p' >/dev/null \
+     && rg "$repo" check S002 merge | grep -q "^RISK: PASS merge S002"; then
+    ok "a human at a real terminal approves the merge, bound to its patch_id"
+  else
+    bad "a human at a real terminal approves the merge, bound to its patch_id" "exit $status: $(echo "$out" | tail -3)"
+  fi
+else
+  echo "  SKIP  approve-risk.sh pty tests (no python3 pty on this platform)"
+fi
+rm -rf "$repo"
+
+echo "== vault-guard.sh — human-only files survive any tool call =="
+repo=$(make_vault_repo)
+mkdir -p "$repo/.git/donedonedone"
+echo '{"slice":"S001","decision":"approve"}' > "$repo/.git/donedonedone/approvals.jsonl"
+(cd "$repo" && "$VAULT_GUARD" --snapshot </dev/null)
+vg "$repo" PreToolUse "" Bash 'python3 forge.py' >/dev/null
+echo '{"slice":"S002","decision":"approve","forged":true}' >> "$repo/.git/donedonedone/approvals.jsonl"
+status=0; out=$(vg "$repo" PostToolUse "" Bash 'python3 forge.py') || status=$?
+if [ "$status" -eq 2 ] && echo "$out" | grep -q "human-only" && ! grep -q forged "$repo/.git/donedonedone/approvals.jsonl"; then
+  ok "an approval forged during the Director's own tool call is undone"
+else
+  bad "an approval forged during the Director's own tool call is undone" "exit $status: $out"
+fi
+echo '{"thresholds":{"high":99,"critical":100}}' > "$repo/vault/risk-policy.json"
+status=0; vg "$repo" PostToolUse builder >/dev/null || status=$?
+if [ "$status" -eq 2 ] && [ ! -e "$repo/vault/risk-policy.json" ]; then ok "a risk policy a subagent writes is removed"; else bad "a risk policy a subagent writes is removed" "exit $status"; fi
+vg "$repo" PreToolUse "" Bash 'jq . vault/task-tree.json' >/dev/null
+echo '{"thresholds":{"moderate":10}}' > "$repo/vault/risk-policy.json"
+status=0; vg "$repo" PostToolUse "" Bash 'jq . vault/task-tree.json' >/dev/null || status=$?
+status2=0; vg "$repo" PreToolUse "" Bash 'ls' >/dev/null; vg "$repo" PostToolUse "" Bash 'ls' >/dev/null || status2=$?
+if [ "$status" -eq 2 ] && [ "$status2" -eq 0 ] && [ ! -e "$repo/vault/risk-policy.json" ]; then
+  ok "even with the Director mid-write to vault/, a policy change in the call is undone"
+else
+  bad "even with the Director mid-write to vault/, a policy change in the call is undone" "exit $status/$status2"
+fi
+echo '{"thresholds":{"moderate":15}}' > "$repo/vault/risk-policy.json"
+vg "$repo" PreToolUse "" Bash 'ls' >/dev/null
+status=0; vg "$repo" PostToolUse "" Bash 'ls' >/dev/null || status=$?
+if [ "$status" -eq 0 ] && grep -q '"moderate":15' "$repo/vault/risk-policy.json"; then ok "a human's edit between tool calls is kept"; else bad "a human's edit between tool calls is kept" "exit $status"; fi
+echo '{"slice":"S003","decision":"approve","human":true}' >> "$repo/.git/donedonedone/approvals.jsonl"
+(cd "$repo" && "$VAULT_GUARD" --human-snapshot </dev/null)
+status=0; vg "$repo" PostToolUse builder >/dev/null || status=$?
+if [ "$status" -eq 0 ] && grep -q '"human":true' "$repo/.git/donedonedone/approvals.jsonl"; then
+  ok "an approve-risk.sh write mid-call survives (it re-snapshots the ledger)"
+else
+  bad "an approve-risk.sh write mid-call survives (it re-snapshots the ledger)" "exit $status"
+fi
+git -C "$repo" worktree add -q "$repo/.worktrees/S009" -b slice/S009
+echo '{}' > "$repo/.worktrees/S009/vault/risk-policy.json"
+printf '# P\n## Gate\n- gate.test: none\n' > "$repo/vault/project.md"
+git -C "$repo/.worktrees/S009" add -A && git -C "$repo/.worktrees/S009" commit -q -m tamper
+status=0; out=$(cd "$repo/.worktrees/S009" && "$GATE" 2>&1) || status=$?
+if [ "$status" -eq 1 ] && echo "$out" | grep -q "vault/risk-policy.json"; then ok "gate fails a slice branch that changes the risk policy"; else bad "gate fails a slice branch that changes the risk policy" "exit $status: $out"; fi
+rm -rf "$repo"
+
+echo "== risk-gate.sh — calibration finds poor estimates, never loosens =="
+repo=$(make_repo)
+: > "$repo/vault/log.jsonl"
+lg "$repo" S010 risk low --score 15 --hash aaaaaaaaaaaa
+lg "$repo" S010 rollback REVERTED --category risk-underestimate --signal "broke checkout"
+lg "$repo" S011 risk moderate --score 30 --hash bbbbbbbbbbbb
+lg "$repo" S011 reviewer APPROVED
+lg "$repo" S012 risk low --score 10 --hash cccccccccccc
+lg "$repo" S012 scope EXPANDED --category scope-expansion
+lg "$repo" S012 risk elevated --score 45 --hash dddddddddddd --category risk-underestimate
+out=$(rg "$repo" calibrate)
+if echo "$out" | grep -q "^CALIBRATION: 3 assessed slices" && echo "$out" | grep -q "UNDERESTIMATE?: S010 assessed low" \
+   && echo "$out" | grep -q "UNDERESTIMATE?: S012 assessed low, reassessed elevated" && ! echo "$out" | grep -q "S011" \
+   && [ ! -e "$repo/vault/risk-policy.json" ]; then
+  ok "calibrate flags rollbacks and raised reassessments, and writes no policy"
+else
+  bad "calibrate flags rollbacks and raised reassessments, and writes no policy" "$out"
+fi
+status=0; (cd "$repo" && "$LOG_EVENT" S010 risk low --score 101 >/dev/null 2>&1) || status=$?
+if [ "$status" -eq 1 ]; then ok "log-event.sh rejects a score over 100"; else bad "log-event.sh rejects a score over 100" "exit $status"; fi
+rm -rf "$repo"
+
+echo "== risk gate wiring (protocol prose) =="
+if grep -q '^## Risk Gate' "$ROOT/CLAUDE.md" && grep -q 'risk-gate.sh check <ID> merge' "$ROOT/CLAUDE.md" && grep -q 'You cannot approve' "$ROOT/CLAUDE.md"; then
+  ok "CLAUDE.md has the Risk Gate: merge check, and the Director can't approve"
+else
+  bad "CLAUDE.md has the Risk Gate: merge check, and the Director can't approve" "missing"
+fi
+if grep -q '^name: risk-gate$' "$ROOT/skills/risk-gate/SKILL.md" && grep -q 'aren.t configurable' "$ROOT/skills/risk-gate/SKILL.md"; then ok "risk-gate skill exists and keeps floors out of the policy"; else bad "risk-gate skill exists and keeps floors out of the policy" "missing"; fi
+if grep -q 'SCOPE-EXPANSION' "$ROOT/agents/builder.md" && grep -q '^CHANGE PLAN:' "$ROOT/agents/builder.md" && grep -q '^PRESERVED:' "$ROOT/agents/builder.md"; then
+  ok "builder plans the minimum necessary change, stops on scope expansion, reports preserved behavior"
+else
+  bad "builder plans the minimum necessary change, stops on scope expansion, reports preserved behavior" "builder.md changed"
+fi
+if grep -q 'PRESERVED line' "$ROOT/agents/reviewer.md" && grep -q 'risk.scope.files' "$ROOT/agents/reviewer.md"; then ok "reviewer checks scope and preserved behavior"; else bad "reviewer checks scope and preserved behavior" "missing"; fi
+if grep -q 'Never propose loosening' "$ROOT/agents/retro.md" && grep -q 'risk-gate.sh calibrate' "$ROOT/skills/learning-loop/SKILL.md"; then ok "retro reads calibration and never loosens thresholds"; else bad "retro reads calibration and never loosens thresholds" "missing"; fi
+if grep -q '"risk":' "$ROOT/skills/slice-planning/SKILL.md" && grep -q '^RISK: ' "$ROOT/skills/brief-contract/SKILL.md" && grep -q 'risk' "$ROOT/agents/planner.md"; then ok "planner, slice shape and builder brief carry the risk assessment"; else bad "planner, slice shape and builder brief carry the risk assessment" "missing"; fi
+for f in "$ROOT/scripts/risk-gate.sh" "$ROOT/scripts/approve-risk.sh"; do
+  if [ -x "$f" ]; then ok "$(basename "$f") is executable"; else bad "$(basename "$f") is executable" "mode"; fi
+done
+gen=$(mktemp -d); "$GENERATE" copilot "$gen" >/dev/null
+if grep -q 'risk-gate.sh check <ID> merge' "$gen/orchestrator.agent.md" && grep -q 'never run it' "$gen/orchestrator.agent.md"; then ok "the Copilot orchestrator runs the risk gate and never approves"; else bad "the Copilot orchestrator runs the risk gate and never approves" "missing"; fi
+rm -rf "$gen"
 
 echo "== validate-manifests.sh — imported skills carry their LICENSE =="
 vm=$(mktemp -d)

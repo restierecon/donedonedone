@@ -118,7 +118,12 @@ the builder. For CRAP hotspots or mutation survivors outside a slice's diff
 (architecture reviews, adopted codebases), follow ~/.claude/skills/crap-hotspots/SKILL.md
 or ~/.claude/skills/mutation-survivors/SKILL.md. A builder brief starts with
 SLICE: <ID>; when that slice's auditor_triggers is non-empty, its STANDING orders the
-builder to follow ~/.claude/skills/harden-diff/SKILL.md (brief-contract skill). Record gate verdicts, vault/task-tree.json updates and
+builder to follow ~/.claude/skills/harden-diff/SKILL.md (brief-contract skill). Every slice
+carries a risk assessment: run ~/.claude/scripts/risk-gate.sh assess <ID> before its
+builder and risk-gate.sh check <ID> merge before merging, and follow
+~/.claude/skills/risk-gate/SKILL.md for the controls each class needs. Human approvals
+come only from approve-risk.sh run by a human in their own terminal; never run it or
+write its ledger. Record gate verdicts, vault/task-tree.json updates and
 vault/log.jsonl lines (through ~/.claude/scripts/log-event.sh) yourself; subagents
 report back as text only, never editing vault files directly.
 AGENT

@@ -18,7 +18,8 @@ wave event, so the commit message is the record:
    simply `max_parallel_slices`.
 
 Gather all slices whose `depends_on` are satisfied (done, or absent from
-task-tree.json = shipped). They are independent and safe to run concurrently. Dispatch
+task-tree.json = shipped) and whose risk gate lets them start (`risk-gate.sh pending`
+lists the ones that can't: unrecorded, or critical and waiting on a human). They are independent and safe to run concurrently. Dispatch
 up to `max_parallel_slices` (vault/project.md, default 3) at once:
 
 1. For each: `git worktree add .worktrees/<ID> -b slice/<ID>` from main, then run the
