@@ -484,7 +484,11 @@ engineering-practice skills under `skills/` (frontend-ui-engineering,
 security-and-hardening, code-review-and-quality, and others not specific to
 this protocol's own vault workflow) are sourced from
 [Addy Osmani's agent-skills](https://github.com/addyosmani/agent-skills).
-The prose skills unslop and technical-writing come from
-[Lauren Tan's pstack](https://github.com/backnotprop/pstack) under MIT; each
-folder carries pstack's LICENSE.
+Several mechanisms are learned from
+[Lauren Tan's pstack](https://github.com/backnotprop/pstack): the brief
+contract and refuse-to-spawn rule, SHA- and patch-id-keyed gate verdicts with
+an evidence ladder, plan linting, skip-with-reason, and the throughput
+checkpoint before parallel waves. Skills imported or adapted from pstack
+(blast-radius, the verification skills, principles, unslop and
+technical-writing) are used under MIT; each folder carries pstack's LICENSE.
 Thanks to all of them for making this work public.
