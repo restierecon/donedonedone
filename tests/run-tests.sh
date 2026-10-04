@@ -1,6 +1,19 @@
 #!/bin/bash
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+
+if [ "${1:-}" = "--check-installed" ]; then
+  dest="$HOME/.claude"
+  drift=0
+  diff -uB "$ROOT/CLAUDE.md" <(grep -v '^@' "$dest/CLAUDE.md") || drift=1
+  for d in agents scripts; do
+    for f in "$ROOT/$d"/*; do diff -u "$f" "$dest/$d/$(basename "$f")" || drift=1; done
+  done
+  for s in "$ROOT"/skills/*/; do diff -ru "$s" "$dest/skills/$(basename "$s")" || drift=1; done
+  if [ "$drift" -eq 0 ]; then echo "installed copy matches repo"; else echo "DRIFT: repo and $dest differ (see diffs above)" >&2; fi
+  exit "$drift"
+fi
+
 GUARD="$ROOT/scripts/guard.sh"
 LINT="$ROOT/scripts/lint.sh"
 CHECKPOINT="$ROOT/scripts/checkpoint.sh"
