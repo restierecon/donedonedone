@@ -37,7 +37,7 @@ done
 common=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) \
   || { echo "log-event.sh: not inside a git repo" >&2; exit 1; }
 log="$(dirname "$common")/vault/log.jsonl"
-[ -d "$(dirname "$log")" ] || { echo "log-event.sh: no vault/ in the main checkout — run /init-vault" >&2; exit 1; }
+[ -d "$(dirname "$log")" ] || { echo "log-event.sh: no vault/ in the main checkout — run /init-codebase" >&2; exit 1; }
 
 jq -cn \
   --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg slice "$slice" --arg event "$event" \

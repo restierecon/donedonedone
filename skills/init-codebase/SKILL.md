@@ -1,6 +1,6 @@
 ---
-name: init-vault
-description: Initialize this project for the autonomous engineering workflow (vault, project config, git discipline). Use when setting up a new project for the Autonomous Engineering Protocol, or when asked to run /init-vault.
+name: init-codebase
+description: Initialize this project for the autonomous engineering workflow (vault, project config, git discipline). Use when setting up a new project for the Autonomous Engineering Protocol, or when asked to run /init-codebase.
 ---
 
 Initialize this project for the autonomous workflow. Do all of the following:

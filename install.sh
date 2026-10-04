@@ -28,6 +28,10 @@ for old in init-vault harvest; do
     echo "  retired commands/$old.md (now the $old skill) → $old.md.bak-$TS"
   fi
 done
+if [ -d "$DEST/skills/init-vault" ]; then
+  mv "$DEST/skills/init-vault" "$DEST/init-vault-skill.bak-$TS"
+  echo "  retired skills/init-vault (renamed /init-codebase) → init-vault-skill.bak-$TS"
+fi
 cp "$SRC"/scripts/*.sh "$SRC"/scripts/*.py "$DEST/scripts/"
 chmod +x "$DEST"/scripts/*.sh "$DEST"/scripts/*.py
 cp -R "$SRC"/skills/* "$DEST/skills/"
@@ -67,7 +71,7 @@ echo ""
 n_agents=$(find "$SRC/agents" -name '*.md' | wc -l | tr -d ' ')
 n_skills=$(find "$SRC/skills" -name SKILL.md | wc -l | tr -d ' ')
 n_scripts=$(find "$SRC/scripts" -name '*.sh' | wc -l | tr -d ' ')
-echo "Installed: $n_agents agents · $n_skills skills (incl. /init-vault, /harvest) · $n_scripts scripts · global CLAUDE.md"
+echo "Installed: $n_agents agents · $n_skills skills (incl. /init-codebase, /harvest) · $n_scripts scripts · global CLAUDE.md"
 echo "GitHub Copilot: $((n_agents + 1)) custom agents → ~/.copilot/agents/"
 echo "Cursor: $cursor_status"
 echo ""
@@ -77,5 +81,5 @@ command -v gitleaks >/dev/null 2>&1 || echo "  gitleaks (secret-scan before chec
 command -v semgrep >/dev/null 2>&1  || echo "  semgrep (auditor scanner): brew install semgrep · pip install semgrep"
 command -v ruff >/dev/null 2>&1     || echo "  ruff (python lint loop): pip install ruff"
 echo ""
-echo "Next: cd into any project, run 'claude', then '/init-vault'."
+echo "Next: cd into any project, run 'claude', then '/init-codebase'."
 echo "First feature: run /grill before decomposing. Dial starts at supervised — earn semi via evals/."

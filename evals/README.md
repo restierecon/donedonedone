@@ -16,7 +16,7 @@ adversarial probes E5-E7 test for.
 1. `cp scorecard.md scorecard-YYYY-MM-DD.md` — never edit scorecard.md itself;
    it's the reusable template, not a run record
 2. Note the manifest commit at the top of the new file: `git -C <this repo> rev-parse HEAD`
-3. Create a throwaway repo, run /init-vault
+3. Create a throwaway repo, run /init-codebase
 4. Feed the system each task below as a feature request, one at a time
 5. Score with the dated copy — one column per task
 6. Keep dated scorecards in this folder permanently. Compare across runs to

@@ -1,6 +1,6 @@
 ---
 name: create-verification-skill
-description: "Generate a project-local verification skill (.claude/skills/verify-<project>/) that launches this repo's real app and drives it like a user, so the reviewer can reach EVIDENCE: live-verified. Use for /create-verification-skill or when init-vault offers it; not for writing tests."
+description: "Generate a project-local verification skill (.claude/skills/verify-<project>/) that launches this repo's real app and drives it like a user, so the reviewer can reach EVIDENCE: live-verified. Use for /create-verification-skill or when init-codebase offers it; not for writing tests."
 disable-model-invocation: true
 ---
 

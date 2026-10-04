@@ -1076,6 +1076,23 @@ else
 fi
 rm -rf "$home"
 
+home=$(mktemp -d)
+mkdir -p "$home/.claude/skills/init-vault"
+echo "old skill" > "$home/.claude/skills/init-vault/SKILL.md"
+status=0; out=$(HOME="$home" "$INSTALL" 2>&1) || status=$?
+if [ "$status" -eq 0 ] && [ ! -e "$home/.claude/skills/init-vault" ] \
+   && [ "$(cat "$home"/.claude/init-vault-skill.bak-*/SKILL.md 2>/dev/null)" = "old skill" ]; then
+  ok "install moves the renamed init-vault skill to a backup outside skills/, never deletes it"
+else
+  bad "install moves the renamed init-vault skill to a backup outside skills/, never deletes it" "exit $status: $(ls "$home/.claude" "$home/.claude/skills")"
+fi
+if [ -f "$home/.claude/skills/init-codebase/SKILL.md" ] && echo "$out" | grep -q 'init-vault.*init-codebase'; then
+  ok "install puts init-codebase in place and says where init-vault went"
+else
+  bad "install puts init-codebase in place and says where init-vault went" "$out"
+fi
+rm -rf "$home"
+
 echo "== guard.sh — bypasses that used to get through =="
 # shellcheck disable=SC2016
 {
@@ -1331,7 +1348,7 @@ cg=$(mktemp -d)
 "$GENERATE" copilot "$cg" >/dev/null 2>&1
 if [ -f "$cg/reviewer.agent.md" ] && ! grep -q 'mcp__' "$cg/reviewer.agent.md" && grep -q "^tools: \['read'" "$cg/reviewer.agent.md"; then ok "copilot generator drops mcp__ tools"; else bad "copilot generator drops mcp__ tools" "$(grep '^tools:' "$cg/reviewer.agent.md" 2>/dev/null)"; fi
 rm -rf "$cg"
-if grep -q '/create-verification-skill' "$ROOT/skills/init-vault/SKILL.md"; then ok "init-vault offers /create-verification-skill"; else bad "init-vault offers /create-verification-skill" "missing"; fi
+if grep -q '/create-verification-skill' "$ROOT/skills/init-codebase/SKILL.md"; then ok "init-codebase offers /create-verification-skill"; else bad "init-codebase offers /create-verification-skill" "missing"; fi
 if grep -q '/maintain-verification-skill' "$ROOT/skills/architecture-review/SKILL.md"; then ok "architecture-review suggests /maintain-verification-skill"; else bad "architecture-review suggests /maintain-verification-skill" "missing"; fi
 
 echo ""

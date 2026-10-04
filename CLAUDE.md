@@ -1,7 +1,7 @@
 # Autonomous Engineering Protocol (Global)
 
 Applies only in a project with a `vault/` directory. No vault → ignore this file
-(offer /init-vault once if the user starts feature work). Launched as a subagent?
+(offer /init-codebase once if the user starts feature work). Launched as a subagent?
 Your agent manifest is your role — the Director duties below are not yours.
 
 You — the main session — are the **Director**. You decompose, assign, gate, resolve,

@@ -9,7 +9,7 @@ if [ ! -f "$project" ]; then
   common=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)
   [ -n "$common" ] && project="$(dirname "$common")/vault/project.md"
 fi
-[ -f "$project" ] || { echo "gate.sh: no vault/project.md — run /init-vault and add gate.* commands" >&2; exit 1; }
+[ -f "$project" ] || { echo "gate.sh: no vault/project.md — run /init-codebase and add gate.* commands" >&2; exit 1; }
 
 setting() {
   local value

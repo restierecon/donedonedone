@@ -1,6 +1,6 @@
 ---
 name: crap-hotspots
-description: Use when CRAP scores show risky code outside a slice's diff — an architecture review with gate.crap set, /init-vault on an existing codebase, or a human asking where the untested complexity is. Ranks functions by CRAP score from .gate/crap.log, classifies each hotspot, and routes the fix through /grill as ordinary slices; builders on those slices load it too. Never buys coverage with assertion-free tests or raises gate.crap.max to pass.
+description: Use when CRAP scores show risky code outside a slice's diff — an architecture review with gate.crap set, /init-codebase on an existing codebase, or a human asking where the untested complexity is. Ranks functions by CRAP score from .gate/crap.log, classifies each hotspot, and routes the fix through /grill as ordinary slices; builders on those slices load it too. Never buys coverage with assertion-free tests or raises gate.crap.max to pass.
 ---
 
 # CRAP Hotspots

@@ -28,7 +28,7 @@ Then in any project:
 ```bash
 cd your-project
 claude
-> /init-vault          # one-time per project; asks for your lint/test/build commands
+> /init-codebase       # one-time per project; asks for your lint/test/build commands
 > /grill               # mandatory before any work — settles every human decision
 ```
 
@@ -41,7 +41,7 @@ builds. Nothing after the grill should need you unless a slice escalates.
 |---|---|
 | CLAUDE.md | Global protocol — the main session IS the Director |
 | agents/ | planner · builder · reviewer · auditor · scribe · retro (least-privilege tools, model-per-agent) |
-| skills/ | protocol-native: grill · slice-planning · parallel-dispatch · compaction · architecture-review · learning-loop · test-speed · crap-hotspots · blast-radius · brief-contract · `/init-vault` · `/harvest` · `/create-verification-skill` · `/maintain-verification-skill` (opt-in, `/`-only: a project-local `verify-*` skill that lets the reviewer reach live-verified evidence) — plus a general engineering-practice library, a principles index (19 pstack principles, read on demand) and pstack's prose skills: unslop · technical-writing (docs/README/ADR work) (see Credits) |
+| skills/ | protocol-native: grill · slice-planning · parallel-dispatch · compaction · architecture-review · learning-loop · test-speed · crap-hotspots · blast-radius · brief-contract · `/init-codebase` · `/harvest` · `/create-verification-skill` · `/maintain-verification-skill` (opt-in, `/`-only: a project-local `verify-*` skill that lets the reviewer reach live-verified evidence) — plus a general engineering-practice library, a principles index (19 pstack principles, read on demand) and pstack's prose skills: unslop · technical-writing (docs/README/ADR work) (see Credits) |
 | settings.json | Permission deny/ask lists + hooks on 6 events + env that keeps Claude Code on Windows in Git Bash |
 | scripts/ | guard.sh (PreToolUse) · vault-guard.sh (Pre/PostToolUse, SubagentStop — restores Director-only files) · lint.sh (PostToolUse) · checkpoint.sh (Stop) · session-start.sh (SessionStart) · crap-score.py (lizard + coverage report → CRAP lines for `gate.crap`) · gate.sh (quiet lint/types/test/build runner + diff-scoped CRAP, TODO/FIXME and no-comments checks) · find-comments.sh (the comment detector behind that check) · log-event.sh (the Director's structured log.jsonl writer) · check-plan.sh (the Director's lint for a planner draft: fields, "Actor can" titles, resolvable acyclic `depends_on`, gates as a verdict or `skip: <reason>`) · generate-agents.sh (Copilot/Cursor agents, install-time) · agents-md.sh (protocol block in a project's AGENTS.md, for Cursor/Copilot) |
 | tests/ | Test harness for the hook scripts — run after any script edit; CI runs it too |
@@ -81,7 +81,7 @@ Promotion past supervised needs a 10-slice clean streak *and* a dated passing
 scorecard in `evals/` — see the promotion rule in `evals/README.md`.
 
 ## Gate commands
-`gate.sh` reads one line per step from `vault/project.md` (`/init-vault` writes them):
+`gate.sh` reads one line per step from `vault/project.md` (`/init-codebase` writes them):
 
 ```markdown
 ## Gate
@@ -153,7 +153,7 @@ roughly its complexity squared. The metric and the threshold of 30 come from cra
 - The step fails only for functions the diff against `main` touches (an added line
   inside `<start>-<end>`) that score over **`gate.crap.max`** (default 30, decimals
   allowed). Existing hotspots don't block unrelated slices; the `crap-hotspots` skill
-  plans them as their own slices from the architecture review or `/init-vault`.
+  plans them as their own slices from the architecture review or `/init-codebase`.
 - It runs right after `test`, so the command can read the coverage file the test
   command just wrote; after a failed `test` it reports SKIP, since that coverage is
   stale. The full output stays in `.gate/crap.log` for the reviewer, which NITs touched
@@ -308,7 +308,10 @@ Also:
 
 ## Upgrading an existing install
 Pull, re-run `./install.sh`. It retires old `~/.claude/commands/init-vault.md` and
-`harvest.md` (now skills) to `.bak-<timestamp>` copies. If it kept your settings.json
+`harvest.md` (now skills) to `.bak-<timestamp>` copies. /init-vault is now
+/init-codebase: install.sh moves a stale `~/.claude/skills/init-vault/` to
+`~/.claude/init-vault-skill.bak-<timestamp>/`, outside skills/ so it stops loading;
+the project's `vault/` directory keeps its name. If it kept your settings.json
 and left a `settings.json.new-<timestamp>`, merge its hooks: guard.sh now runs on every
 tool (no matcher), and vault-guard.sh runs on PreToolUse, PostToolUse,
 PostToolUseFailure and SubagentStop. Without them the vault restore layer is off.
@@ -434,7 +437,7 @@ Known gaps on Windows:
 
 ## AGENTS.md (Cursor and Copilot)
 Cursor and GitHub Copilot both read a project's `AGENTS.md`; Claude Code reads the
-global `~/.claude/CLAUDE.md` instead. `/init-vault` runs `~/.claude/scripts/agents-md.sh`,
+global `~/.claude/CLAUDE.md` instead. `/init-codebase` runs `~/.claude/scripts/agents-md.sh`,
 which writes the protocol into AGENTS.md between
 `<!-- skeletoncrew:protocol:begin … -->` and `<!-- skeletoncrew:protocol:end -->`.
 Anything else in the file is yours and is never touched. The session-start hook rewrites

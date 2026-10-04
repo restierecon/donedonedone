@@ -8,7 +8,7 @@ prune it from the tree. Safe to re-run — already-harvested slices are skipped,
 slice that isn't merged is never pruned. Runs as the Director (only the Director
 writes task-tree.json).
 
-1. If vault/ does not exist, stop and offer /init-vault. If vault/stories.md is
+1. If vault/ does not exist, stop and offer /init-codebase. If vault/stories.md is
    missing, create it with the header "# Shipped Stories" and the line
    "One entry per merged slice, newest last. task-tree.json holds live work only."
 2. Read vault/task-tree.json. Candidates are slices whose every applicable gate
