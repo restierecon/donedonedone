@@ -391,6 +391,122 @@ expect "a bare repo says what it can't tell instead of guessing" \
   "$(field "$repo" '[i["fact"].split(" —")[0] for s in g["facts"] for i in s["items"] if i["level"] == "todo"]')" "['[TODO] No dependency manifest found', '[TODO] No CI configuration found', '[TODO] No README, spec or ADR']"
 rm -rf "$repo"
 
+echo "== codebase-graph.py — review regressions =="
+repo=$(new_repo)
+mkdir -p "$repo/src/app" "$repo/src/legacy" "$repo/internal/build" "$repo/dist"
+printf 'from src.legacy import old\n' > "$repo/src/app/a.py"
+printf 'from src.legacy import helper\n' > "$repo/src/legacy/old.py"
+printf 'X = 1\n' > "$repo/src/legacy/helper.py"
+printf 'package build\nfunc Run() {}\n' > "$repo/internal/build/build.go"
+printf 'var bundle = 1\n' > "$repo/dist/bundle.js"
+printf '{"forbid": [{"from": "src/**", "to": "src/legacy/**"}]}\n' > "$repo/rules.json"
+commit "$repo" init
+violations=$(cd "$repo" && PYTHONDONTWRITEBYTECODE=1 "$PY" -c '
+import sys; sys.path.insert(0, sys.argv[1])
+from codemap.graphs import forbidden_edges, load_rules
+from codemap.model import Analysis
+print(sorted((s, t) for s, t, *_ in forbidden_edges(Analysis("HEAD").edges(), load_rules("rules.json"))))' "$ROOT/scripts")
+expect "a forbid rule whose 'to' sits inside its 'from' still fires, and edges inside the target zone don't" "$violations" "[('src/app/a.py', 'src/legacy/old.py')]"
+build "$repo" >/dev/null
+expect "a source package named build/ deeper in the tree is mapped; a top-level dist/ is skipped as output" \
+  "$(field "$repo" '["file:internal/build/build.go" in E, "file:dist/bundle.js" in E]')" "[True, False]"
+mkdir -p "$repo/pkg"
+out=$(cd "$repo/pkg" && "$PY" "$GRAPH" build --out here --days 30 2>&1)
+expect "relative --out resolves from where it was run, not the repo root" "$([ -f "$repo/pkg/here/graph.html" ] && echo yes)" "yes"
+expect "the churn fact names the --days window" "$("$PY" -c 'import json,sys; g=json.load(open(sys.argv[1])); print([i["fact"].split(":")[0] for s in g["facts"] for i in s["items"] if i["fact"].startswith("Most-changed")])' "$repo/pkg/here/graph.json")" "['Most-changed files (30 days)']"
+rm -rf "$repo"
+
+repo=$(new_repo)
+printf 'X = 1\n' > "$repo/bad.py"
+printf 'from bad import X\n' > "$repo/good.py"
+printf 'run.sh\n' > "$repo/run.sh"
+printf '{"forbid": [{"from": "good.py", "to": "bad.py"}]}\n' > "$repo/rules.json"
+commit "$repo" init
+git -C "$repo" checkout -q -b slice
+printf 'Y = 2\n' > "$repo/other.py"
+commit "$repo" slice
+git -C "$repo" checkout -q main
+printf 'X = 1\n' > "$repo/good.py"
+commit "$repo" "fix on main"
+git -C "$repo" checkout -q slice
+out=$(cd "$repo" && "$PY" "$GRAPH" check --rules rules.json --base main 2>&1); status=$?
+expect "check compares against the merge-base, so a fix landing on main doesn't fail an untouched slice" "$status:$out" "0:PASS 1 forbid rule(s), no new cycles, nothing new against main"
+rm -rf "$repo"
+
+repo=$(new_repo)
+mkdir -p "$repo/src"
+printf 'def a(x):\n    return x\n' > "$repo/src/app.py"
+printf '#!/bin/bash\necho hi\n' > "$repo/deploy.sh"
+fence=$(printf '```\n'; for i in $(seq 1 40); do echo "line $i"; done; printf '```\n')
+printf '# Title\n%s\nSee src/gone.py now.\n' "$fence" > "$repo/README.md"
+printf 'SF:src/app.py\nDA:1,1\nDA:2,1\nend_of_record\n' > "$repo/cov.lcov"
+commit "$repo" init
+build "$repo" --coverage cov.lcov >/dev/null
+expect "stale-path evidence points at the real line, even after a code fence" \
+  "$(field "$repo" '[e for s in g["facts"] for i in s["items"] for e in i["evidence"] if "gone" in e]')" "['README.md:44 (src/gone.py)']"
+expect "with --coverage, a file the report never saw is unknown, not '0%'" \
+  "$(field "$repo" '[F("deploy.sh")["metrics"].get("coverage"), ["coverage report either" in f["why"] for f in F("deploy.sh")["flags"]], F("src/app.py")["metrics"]["coverage"]]')" "[None, [True], 1.0]"
+rm -rf "$repo"
+
+repo=$(setup_repo)
+mkdir -p "$repo/skills/plan"
+printf -- '---\nname: planner\ndescription: Plans.\ntools: Read\nmodel: sonnet\n---\nBody.\n' > "$repo/agents/planner.md"
+printf -- '---\nname: plan\ndescription: Plan things.\n---\nAsk the planner to draft slices.\n' > "$repo/skills/plan/SKILL.md"
+printf '{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "~/.claude/scripts/guard.sh"}]}]}}\n' > "$repo/settings.json"
+printf '{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "~/.claude/scripts/gate.sh"}]}]}}\n' > "$repo/settings.local.json"
+printf '{"stages": [{"id": "build", "uses": ["agent:builder", "skill:plan"]}], "on_demand": ["agent:reviewer", "skill:orphan"]}\n' > "$repo/workflow.json"
+commit "$repo" init
+out=$(build "$repo"); status=$?
+expect "hooks from settings.json and settings.local.json for the same event both survive" \
+  "$(field "$repo" 'sorted(E[h]["label"] for h in E["event:PreToolUse"]["children"])')" "['gate.sh', 'guard.sh']"
+if [ "$status" -eq 1 ] && echo "$out" | grep -q "ERROR agent:planner is unreachable" \
+   && [ "$(field "$repo" '[e["kind"] for e in E["skill:plan"]["out"] if e["to"] == "agent:planner"]')" = "['names']" ]; then
+  ok "an agent named only in prose ('the planner') is a 'names' link, so the workflow check still catches it as unreachable"
+else
+  bad "an agent named only in prose ('the planner') is a 'names' link, so the workflow check still catches it as unreachable" "$status: $out"
+fi
+rm -rf "$repo"
+
+echo "== codebase-graph.py — second review regressions =="
+repo=$(new_repo)
+mkdir -p "$repo/src/app" "$repo/src/legacy" "$repo/packages/ui/dist" "$repo/pkg"
+printf 'from src.app import a\nfrom src.legacy import helper\n' > "$repo/src/legacy/old.py"
+printf 'X = 1\n' > "$repo/src/legacy/helper.py"
+printf 'X = 1\n' > "$repo/src/app/a.py"
+printf '{"name": "ui"}\n' > "$repo/packages/ui/package.json"
+printf 'var bundle = 1\n' > "$repo/packages/ui/dist/index.js"
+printf 'from src.app import a\n' > "$repo/pkg/use.py"
+printf '{"forbid": [{"from": "src/legacy/**", "to": "src/**"}]}\n' > "$repo/rules.json"
+commit "$repo" init
+violations=$(cd "$repo" && PYTHONDONTWRITEBYTECODE=1 "$PY" -c '
+import sys; sys.path.insert(0, sys.argv[1])
+from codemap.graphs import forbidden_edges, load_rules
+from codemap.model import Analysis
+print(sorted((s, t) for s, t, *_ in forbidden_edges(Analysis("HEAD").edges(), load_rules("rules.json"))))' "$ROOT/scripts")
+expect "a forbid rule whose 'from' sits inside its 'to' fires too, and edges inside the zone don't" "$violations" "[('src/legacy/old.py', 'src/app/a.py')]"
+build "$repo" >/dev/null
+expect "build output beside a package manifest is skipped at any depth" "$(field "$repo" '"file:packages/ui/dist/index.js" in E')" "False"
+out=$(cd "$repo/pkg" && "$PY" "$GRAPH" impact use.py 2>&1)
+expect "impact file arguments resolve from where it was run" "$(echo "$out" | grep -c '^Files:               1 mapped')" "1"
+git -C "$repo" checkout -q --orphan unrelated
+commit "$repo" orphan
+out=$(cd "$repo" && "$PY" "$GRAPH" check --rules rules.json --base main 2>&1); status=$?
+if echo "$out" | grep -q "no merge-base for main and HEAD" && echo "$out" | grep -q "^PASS"; then
+  ok "without a merge-base (shallow clone, unrelated history) check warns and compares against the base tip"
+else
+  bad "without a merge-base (shallow clone, unrelated history) check warns and compares against the base tip" "$status: $out"
+fi
+rm -rf "$repo"
+repo=$(setup_repo)
+printf -- '---\nname: planner\ndescription: Plans.\ntools: Read\nmodel: sonnet\n---\nBody.\n' > "$repo/agents/planner.md"
+mkdir -p "$repo/skills/plan"
+printf -- '---\nname: plan\ndescription: Plan.\n---\nSee planner.md; the planner drafts slices.\n' > "$repo/skills/plan/SKILL.md"
+commit "$repo" init
+build "$repo" >/dev/null
+expect "a component linked by path gets no second 'names' link for the same target" \
+  "$(field "$repo" '[e["kind"] for e in E["skill:plan"]["out"] if e["to"] == "agent:planner"]')" "['uses']"
+rm -rf "$repo"
+
 echo "== codebase-graph.py — this repo's own workflow.json stays in sync =="
 out=$(cd "$ROOT" && "$PY" "$GRAPH" build --out "$(mktemp -d)" 2>&1); status=$?
 if [ "$status" -eq 0 ] && echo "$out" | grep -q "^SETUP repo: Autonomous engineering loop — .* · OK"; then

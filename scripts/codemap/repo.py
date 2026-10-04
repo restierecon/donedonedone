@@ -3,7 +3,8 @@ import re
 import subprocess
 import sys
 
-SKIP_DIRS = {"node_modules", "target", "build", "dist", "coverage", ".venv", "venv", ".git", ".gate", "vault", ".worktrees", "vendor", "__pycache__"}
+SKIP_DIRS = {"node_modules", ".venv", "venv", ".git", ".gate", "vault", ".worktrees", "vendor", "__pycache__"}
+OUTPUT_DIRS = {"target", "build", "dist", "coverage", "out"}
 MAX_BYTES = 1_000_000
 DOC_EXT = {".md", ".rst", ".txt", ".adoc"}
 DATA_EXT = {".json", ".yaml", ".yml", ".toml", ".ini", ".cfg", ".lock", ".csv", ".svg", ".xml", ".html", ".htm", ".css", ".env", ".gitignore", ".gitattributes", ""}
@@ -40,8 +41,18 @@ def is_data(path):
     return extension(path) in DATA_EXT
 
 
-def skipped_dir(path):
-    return any(part in SKIP_DIRS for part in path.split("/")[:-1])
+BUILD_MANIFESTS = {"package.json", "Cargo.toml", "pom.xml", "build.gradle", "build.gradle.kts", "pyproject.toml", "setup.py", "go.mod", "composer.json"}
+
+
+def package_roots(paths):
+    return {"/".join(p.split("/")[:-1]) for p in paths if p.split("/")[-1] in BUILD_MANIFESTS}
+
+
+def skipped_dir(path, roots=frozenset()):
+    parts = path.split("/")[:-1]
+    if any(part in SKIP_DIRS for part in parts):
+        return True
+    return any(part in OUTPUT_DIRS and (i == 0 or "/".join(parts[:i]) in roots) for i, part in enumerate(parts))
 
 
 def listing(rev):
@@ -58,9 +69,10 @@ def listing(rev):
 
 def read_tree(rev):
     texts, skipped = {}, {"vendored": 0, "too large": 0, "binary": 0}
-    wanted = []
-    for path, size in listing(rev):
-        if skipped_dir(path):
+    wanted, entries = [], listing(rev)
+    roots = package_roots(p for p, _ in entries)
+    for path, size in entries:
+        if skipped_dir(path, roots):
             skipped["vendored"] += 1
         elif size > MAX_BYTES:
             skipped["too large"] += 1

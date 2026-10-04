@@ -234,7 +234,7 @@ for step in "${steps[@]}"; do
     py=python3
     command -v "$py" >/dev/null 2>&1 && "$py" -c pass >/dev/null 2>&1 || py=python
     git -C "$top" show "$base:vault/architecture.json" > "$logdir/architecture.json"
-    result=$(cd "$top" && "$py" "$(dirname "$0")/codebase-graph.py" check --rules "$logdir/architecture.json" --base "$base" 2>&1)
+    result=$("$py" "$(dirname "$0")/codebase-graph.py" check --rules "$logdir/architecture.json" --base "$base" 2>&1)
     status=$?
     if [ "$status" -eq 0 ]; then
       echo "arch PASS — ${result#PASS }"

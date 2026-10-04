@@ -45,6 +45,7 @@ done
 cp "$SRC"/scripts/*.sh "$SRC"/scripts/*.py "$SRC"/scripts/*.html "$DEST/scripts/"
 rm -rf "$DEST/scripts/codemap"
 cp -R "$SRC/scripts/codemap" "$DEST/scripts/codemap"
+rm -rf "$DEST/scripts/codemap/__pycache__"
 chmod +x "$DEST"/scripts/*.sh "$DEST"/scripts/*.py
 cp -R "$SRC"/skills/* "$DEST/skills/"
 

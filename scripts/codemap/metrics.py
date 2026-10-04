@@ -114,7 +114,7 @@ def coverage_loader(path):
     crap = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(crap)
     data = crap.load_coverage(path)
-    return lambda file: crap.coverage_for(file, data) or {}
+    return lambda file: crap.coverage_for(file, data)
 
 
 def ratio(lines, start=None, end=None):

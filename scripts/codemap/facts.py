@@ -54,8 +54,8 @@ def base(path):
 
 
 class Facts:
-    def __init__(self, analysis, entities):
-        self.a, self.entities = analysis, entities
+    def __init__(self, analysis, entities, days=90):
+        self.a, self.entities, self.days = analysis, entities, days
         self.texts = analysis.texts
 
     def build(self):
@@ -250,7 +250,7 @@ class Facts:
                 first = posixpath.normpath(token).split("/", 1)[0]
                 beside = posixpath.normpath(posixpath.join(posixpath.dirname(path), token))
                 if first in tops and token not in self.a.tracked and beside not in self.a.tracked and not self.anywhere(token):
-                    stale.append("%s (%s)" % (where(text, m.start(), path), token))
+                    stale.append("%s (%s)" % (where(prose, m.start(), path), token))
         return stale
 
     def anywhere(self, token):
@@ -269,7 +269,7 @@ class Facts:
             found.append(item("TODO/FIXME/HACK/XXX markers: %d in production code, %d in tests (test ones are coverage gaps, not debt)" % (len(prod), len(tests)), prod[:6] + tests[:2]))
         churn = sorted(((e["metrics"]["changes"], e["path"]) for e in self.entities.values() if e["kind"] == "file" and e["metrics"].get("changes")), reverse=True)[:5]
         if churn:
-            found.append(item("Most-changed files (90 days): " + ", ".join("%s ×%d" % (p, n) for n, p in churn), [p for _, p in churn]))
+            found.append(item("Most-changed files (%d days): " % self.days + ", ".join("%s ×%d" % (p, n) for n, p in churn), [p for _, p in churn]))
         return found
 
 

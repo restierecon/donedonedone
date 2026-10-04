@@ -45,12 +45,16 @@ def name_pattern(kind, name):
     n = re.escape(name)
     parts = [r"%ss/%s\b" % (kind, n)]
     if kind == "agent":
-        parts += [r"`%s`" % n, r"\b%s\s+agents?\b" % n, r"\|\s*%s\s*\|" % n, r"(?i:\b%ss?\b)" % n]
+        parts += [r"`%s`" % n, r"\b%s\s+agents?\b" % n, r"\|\s*%s\s*\|" % n]
     else:
         parts += [r"(?<![\w/.-])/%s(?![\w-])" % n, r"\b%s`?\s+%s\b" % (n, kind)]
         if re.search(r"[-_]", name):
             parts.append(r"(?<![\w/.-])%s(?![\w-]|\.\w)" % n)
     return re.compile("|".join(parts))
+
+
+def prose_pattern(kind, name):
+    return re.compile(r"(?i:\b%ss?\b)" % re.escape(name)) if kind == "agent" else None
 
 
 class SetupLens:
@@ -152,14 +156,22 @@ class SetupLens:
         return sources + [("file:" + p, p) for p in sorted(scripts) if p not in self.owner]
 
     def link_by_name(self):
-        targets = [(cid, name_pattern(self.entities[cid]["kind"], cid.split(":", 1)[1][len(self.root):]))
-                   for cid in self.components if self.entities[cid]["kind"] in LIBRARY_KINDS]
+        targets = []
+        for cid in self.components:
+            kind, name = self.entities[cid]["kind"], cid.split(":", 1)[1][len(self.root):]
+            if kind in LIBRARY_KINDS:
+                targets.append((cid, name_pattern(kind, name), prose_pattern(kind, name)))
         for source, path in self.name_sources():
             text = self.a.texts[path]
-            for target, pattern in targets:
-                m = pattern.search(text)
-                if m and target != source:
-                    self.connect(source, target, "uses", "%s:%d" % (path, text.count("\n", 0, m.start()) + 1))
+            for target, strong, loose in targets:
+                if target == source:
+                    continue
+                m = strong.search(text)
+                kind = "uses"
+                if not m and loose and not any(e["to"] == target for e in self.entities[source]["out"]):
+                    m, kind = loose.search(text), "names"
+                if m:
+                    self.connect(source, target, kind, "%s:%d" % (path, text.count("\n", 0, m.start()) + 1))
 
     def settings(self):
         for name in ("settings.json", "settings.local.json"):
@@ -176,7 +188,8 @@ class SetupLens:
             for event, groups in hooks.items():
                 for i, group in enumerate(groups or []):
                     for j, hook in enumerate(group.get("hooks", [])):
-                        events.setdefault(event, []).append(self.add_hook(settings_path, event, "%d.%d" % (i, j), group.get("matcher"), hook))
+                        slot = ("local." if settings_path.endswith(".local.json") else "") + "%d.%d" % (i, j)
+                        events.setdefault(event, []).append(self.add_hook(settings_path, event, slot, group.get("matcher"), hook))
         if not events:
             return
         group = entity("group:%shooks" % self.root, "group", "Hooks (always on)", lens=self.lens,

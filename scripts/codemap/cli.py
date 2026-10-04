@@ -1,4 +1,5 @@
 import os
+import subprocess
 import sys
 
 from codemap.code_lens import CodeLens
@@ -39,7 +40,7 @@ def build_graph(rev, days, coverage_file, rules_file):
         "coverage_given": bool(coverage_file),
         "rules": rules,
         "seen": code.seen,
-        "facts": Facts(analysis, entities).build(),
+        "facts": Facts(analysis, entities, days).build(),
         "lenses": lenses,
         "entities": entities,
         "module_cycles": [cycle_path(c, medges) for c in strongly_connected({module_of(p) for p in analysis.texts}, medges)],
@@ -109,7 +110,8 @@ def impact(rev, changed):
         print("%-21s%s" % (label + ":", value))
 
 
-def check(rev, base, rules_file):
+def check(rev, base, rules_file, label=None):
+    label = label or base
     rules = load_rules(rules_file)
     head, base_analysis = Analysis(rev), Analysis(base)
     head_edges, base_edges = head.edges(), base_analysis.edges()
@@ -123,11 +125,11 @@ def check(rev, base, rules_file):
             culprits = sorted(p for p in head_imports if module_of(p) == source and any(module_of(t) == target for t in head_imports[p]))
             problems.append("new module cycle edge %s → %s (via %s)" % (source, target, ", ".join(culprits[:3])))
     if problems:
-        print("FAIL %d new architecture violation(s) against %s:" % (len(problems), base))
+        print("FAIL %d new architecture violation(s) against %s:" % (len(problems), label))
         for line in problems:
             print("  " + line)
         return 1
-    print("PASS %d forbid rule(s)%s, nothing new against %s" % (len(rules.get("forbid", [])), ", no new cycles" if rules.get("no_new_cycles", True) else "", base))
+    print("PASS %d forbid rule(s)%s, nothing new against %s" % (len(rules.get("forbid", [])), ", no new cycles" if rules.get("no_new_cycles", True) else "", label))
     return 0
 
 
@@ -157,7 +159,8 @@ def run_impact(args, rev):
     base = take(args, "--base")
     if bool(base) == bool(args):
         usage()
-    changed = args or [p for p in git("diff", "--name-only", "%s...%s" % (base, rev)).splitlines() if not p.startswith("vault/")]
+    top = os.getcwd()
+    changed = [os.path.relpath(a, top) for a in args] or [p for p in git("diff", "--name-only", "%s...%s" % (base, rev)).splitlines() if not p.startswith("vault/")]
     if not changed:
         print("CHANGE IMPACT: no files changed against %s" % base)
         return 0
@@ -169,7 +172,27 @@ def run_check(args, rev):
     rules_file, base = take(args, "--rules"), take(args, "--base")
     if not rules_file or not base or args:
         usage()
-    return check(rev, base, rules_file)
+    return check(rev, merge_base(base, rev), rules_file, base)
+
+
+def merge_base(base, rev):
+    result = subprocess.run(["git", "merge-base", base, rev], capture_output=True, text=True)
+    if result.returncode == 0 and result.stdout.strip():
+        return result.stdout.strip()
+    sys.stderr.write("codebase-graph.py: no merge-base for %s and %s (shallow clone?) — comparing against %s's tip\n" % (base, rev, base))
+    return base
+
+
+def absolute_paths(command, args):
+    path_flags = ("--coverage", "--rules", "--out")
+    value_flags = path_flags + ("--base", "--rev", "--days")
+    result = []
+    for i, arg in enumerate(args):
+        before = args[i - 1] if i else None
+        if before in path_flags or (command == "impact" and not arg.startswith("--") and before not in value_flags):
+            arg = os.path.abspath(arg)
+        result.append(arg)
+    return result
 
 
 def main():
@@ -180,5 +203,6 @@ def main():
     runner = {"build": run_build, "impact": run_impact, "check": run_check}.get(command)
     if not runner:
         usage()
+    args = absolute_paths(command, args)
     os.chdir(git("rev-parse", "--show-toplevel").strip())
     sys.exit(runner(args, take(args, "--rev", "HEAD")))

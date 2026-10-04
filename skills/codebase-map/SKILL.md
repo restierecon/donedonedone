@@ -24,8 +24,13 @@ before you build.
   the architecture violations HEAD adds over the base. gate.sh's `arch` step runs it.
 
 ## What it reads (any repo)
-- **Every tracked text file is a node.** Vendored, binary and >1 MB files are skipped
-  and counted.
+- **Every tracked text file is a node.** These are skipped and counted:
+  - vendored folders (`node_modules`, `vendor`, `.venv`, …), binary files and files
+    over 1 MB
+  - build output (`dist`, `build`, `target`, `out`, `coverage`), at the top level or
+    beside a package manifest. A source package named `build/` elsewhere stays.
+- **Paths you pass** (`--coverage`, `--rules`, `--out`, impact files) are relative to
+  where you run the command. The default `--out` is the repo's `.gate/`.
 - **Links:**
   - `import`: parsed, for Python, JS/TS (relative paths), Go and Java/Kotlin.
   - `reference`: a script, config or CI file naming another file's path, or a unique
@@ -136,5 +141,8 @@ End with one suggested next step.
 - **What counts:** `forbid` applies to dependencies (imports, plus references from
   scripts and config). `no_new_cycles` (default true) looks at import cycles only.
 - **Where the rules live:** the gate reads them from `main`, so a slice can't loosen
-  them on its branch. It fails only on violations the diff adds, so legacy ones show in
-  the map as flags instead.
+  them on its branch. It compares against the merge-base and fails only on violations
+  the diff adds, so legacy ones show in the map as flags instead. With no merge-base
+  (a shallow clone), it warns and compares against the base tip.
+- **Zone edges:** edges with both ends inside both zones are ignored, so `src/** ↛
+  src/legacy/**` and `src/legacy/** ↛ src/**` both work.

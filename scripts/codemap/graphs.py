@@ -140,5 +140,5 @@ def forbidden_edges(edges, rules):
         source_re, target_re = glob_regex(rule["from"]), glob_regex(rule["to"])
         for source, targets in edges.items():
             if source_re.match(source):
-                found |= {(source, t, rule["from"], rule["to"], rule.get("why", "")) for t in targets if target_re.match(t) and not source_re.match(t)}
+                found |= {(source, t, rule["from"], rule["to"], rule.get("why", "")) for t in targets if target_re.match(t) and not (target_re.match(source) and source_re.match(t))}
     return found

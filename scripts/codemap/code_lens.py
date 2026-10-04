@@ -59,7 +59,7 @@ class CodeLens:
                           "tested by": self.tested_by(path), "externals": sorted(self.a.externals[path])}
         record["metrics"] = {"lines": lines, "changes": self.churn.get(path, 0)}
         if covered is not None:
-            record["metrics"]["coverage"] = ratio(covered) if covered else 0.0
+            record["metrics"]["coverage"] = ratio(covered)
         self.entities[record["id"]] = record
         for fn in sorted(found, key=lambda f: -f["ccn"]):
             self.add_function(record, fn, how, covered)
@@ -105,7 +105,8 @@ class CodeLens:
         if coverage is not None and coverage < LOW_COVERAGE:
             flag(record, "untested", "line coverage %d%% (< %d%%)" % (round(coverage * 100), LOW_COVERAGE * 100))
         elif coverage is None and not record["meta"]["tested by"] and path not in self.test_reach:
-            flag(record, "untested", "no test file imports, references or reaches it (no coverage report given — a test may still run it in a way the map can't see)")
+            why = "it isn't in the coverage report either" if self.cover else "no coverage report given"
+            flag(record, "untested", "no test file imports, references or reaches it (%s — a test may still run it in a way the map can't see)" % why)
 
     def add_dirs(self):
         for path in sorted(self.a.texts):
