@@ -12,7 +12,7 @@ TEST_FILE = re.compile(r"(^|/)(tests?|__tests__|spec)/|(^|/)test_[^/]*\.py$|_tes
 
 
 def git(*args):
-    result = subprocess.run(["git", *args], capture_output=True, text=True)
+    result = subprocess.run(["git", *args], capture_output=True, text=True, encoding="utf-8", errors="replace")
     if result.returncode != 0:
         sys.exit("codebase-graph.py: git %s failed: %s" % (" ".join(args), result.stderr.strip()))
     return result.stdout

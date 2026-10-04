@@ -176,7 +176,7 @@ def run_check(args, rev):
 
 
 def merge_base(base, rev):
-    result = subprocess.run(["git", "merge-base", base, rev], capture_output=True, text=True)
+    result = subprocess.run(["git", "merge-base", base, rev], capture_output=True, text=True, encoding="utf-8", errors="replace")
     if result.returncode == 0 and result.stdout.strip():
         return result.stdout.strip()
     sys.stderr.write("codebase-graph.py: no merge-base for %s and %s (shallow clone?) — comparing against %s's tip\n" % (base, rev, base))
