@@ -1,4 +1,6 @@
 #!/bin/bash
+# shellcheck source=/dev/null
+[ -f "$(dirname "$0")/jq-text.sh" ] && . "$(dirname "$0")/jq-text.sh"
 
 command -v jq >/dev/null 2>&1 || exit 0
 
@@ -85,7 +87,7 @@ restore_human() {
     restored+=("$f")
   done
   [ ${#restored[@]} -eq 0 ] && return 0
-  echo "RESTORED: ${restored[*]} — human-only files changed during a tool call. Approvals come from approve-risk.sh run by a human in their own terminal; the risk policy is edited by a human between tool calls." >&2
+  echo "RESTORED: ${restored[*]} — human-only files changed during a tool call. Approvals come from approve-risk.sh and approve-ui.sh run by a human in their own terminal; the risk policy is edited by a human between tool calls." >&2
   return 1
 }
 

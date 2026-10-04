@@ -1,4 +1,6 @@
 #!/bin/bash
+# shellcheck source=/dev/null
+[ -f "$(dirname "$0")/jq-text.sh" ] && . "$(dirname "$0")/jq-text.sh"
 
 plan="${1:-vault/plan-draft.json}"
 command -v jq >/dev/null 2>&1 || { echo "check-plan: FAIL — jq not installed" >&2; exit 1; }
@@ -42,6 +44,11 @@ errors=$(jq -r --argjson external "$external" '
          then "\($s): auditor_triggers must be an array of the trust boundaries it crosses, [] for none"
          else .auditor_triggers[] | select(IN(triggers[]) | not)
            | "\($s): auditor_trigger \(tojson) unknown (one of: \(triggers | join(", ")))" end),
+        (if has("ui_contract") | not
+         then "\($s): missing ui_contract — the approved contract path for a slice that renders UI, null otherwise"
+         elif .ui_contract == null then empty
+         elif (.ui_contract | type) == "string" and (.ui_contract | test("^vault/ui/[^/]+/contract\\.md$")) then empty
+         else "\($s): ui_contract \(.ui_contract | tojson) must be null or vault/ui/<feature-slug>/contract.md" end),
         (if (.depends_on | type) != "array" then "\($s): depends_on must be an array"
          else .depends_on[] | select(IN($ids[], $external[]) | not)
            | "\($s): depends_on '\''\(.)'\'' unresolved (not in draft, task-tree.json or stories.md)" end),
@@ -56,6 +63,15 @@ errors=$(jq -r --argjson external "$external" '
                                                      | map(select(IN($ids[]))))})
        | from_entries | stuck | select(length > 0) | "plan: depends_on cycle among: \(join(", "))")
   end' "$plan" 2>&1) || { echo "check-plan: FAIL — $plan could not be checked: $errors" | head -3 >&2; exit 1; }
+
+ui_errors=""
+while IFS=$'\t' read -r sid contract; do
+  [ -n "$contract" ] || continue
+  verdict=$("$(dirname "$0")/ui-approval.sh" check "$contract" 2>&1) || ui_errors+="$sid: ${verdict#UI: }"$'\n'
+done < <(jq -r '.[]? | select(type == "object" and (.ui_contract | type) == "string"
+                                and (.ui_contract | test("^vault/ui/[^/]+/contract\\.md$")))
+                 | [(.id // "?"), .ui_contract] | @tsv' "$plan" 2>/dev/null)
+errors=$(printf '%s\n%s\n' "$errors" "$ui_errors" | sed '/^$/d')
 
 risk_gate="$(dirname "$0")/risk-gate.sh"
 risk_errors=$("$risk_gate" lint "$plan" 2>&1) || { echo "check-plan: FAIL — risk assessment could not be checked: $risk_errors" | head -3 >&2; exit 1; }

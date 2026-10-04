@@ -2,6 +2,8 @@
 set -e
 
 SRC="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=/dev/null
+[ -f "$SRC/scripts/jq-text.sh" ] && . "$SRC/scripts/jq-text.sh"
 DEST="$HOME/.claude"
 TS=$(date +%Y%m%d-%H%M%S)
 
@@ -42,11 +44,15 @@ for old in \
     echo "  retired ${old%%:*} (vault memory layer dropped) → ${old#*:}.bak-$TS"
   fi
 done
-cp "$SRC"/scripts/*.sh "$SRC"/scripts/*.py "$SRC"/scripts/ddd "$DEST/scripts/"
+cp "$SRC"/scripts/*.sh "$SRC"/scripts/*.py "$SRC"/scripts/*.html "$SRC"/scripts/ddd "$DEST/scripts/"
+rm -rf "$DEST/scripts/codemap"
+cp -R "$SRC/scripts/codemap" "$DEST/scripts/codemap"
+rm -rf "$DEST/scripts/codemap/__pycache__"
 chmod +x "$DEST"/scripts/*.sh "$DEST"/scripts/*.py "$DEST"/scripts/ddd
 mkdir -p "$DEST/context-firewall"
 rm -rf "$DEST/context-firewall/firewall"
 cp -R "$SRC/context-firewall/firewall" "$SRC/context-firewall/ddd.py" "$SRC/context-firewall/ddd.ps1" "$SRC/context-firewall/README.md" "$DEST/context-firewall/"
+rm -rf "$DEST/context-firewall/firewall/__pycache__" "$DEST/context-firewall/firewall/adapters/__pycache__"
 cp -R "$SRC"/skills/* "$DEST/skills/"
 
 rm -f "$DEST/scripts/generate-copilot-agents.sh"

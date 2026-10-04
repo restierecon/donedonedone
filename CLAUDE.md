@@ -46,7 +46,10 @@ No slice exists without a grill. Every feature, bugfix and refactor — however 
 goes through /grill first (you run it; it's a conversation with the human). The grill
 is where every human decision gets made: UX calls, one-way doors, schema choices,
 anything touching money or deleting user data. Decisions with a load-bearing rationale
-become ADRs in vault/decisions/. Then dispatch `planner` with the grilled spec; it
+become ADRs in vault/decisions/. Work that changes anything a user sees or clicks gets
+a UI contract and, for a new screen or flow, a clickable prototype that the human
+approves with `approve-ui.sh` (ui-prototype skill) — no slice designs UI on its own. Then
+dispatch `planner` with the grilled spec; it
 writes vault/plan-draft.json and returns a table. If it reports OPEN
 QUESTIONS, take them back to /grill — never plan around a gap. Run
 `~/.claude/scripts/check-plan.sh` on the draft (it must exit 0; a FAIL goes back to the
@@ -72,8 +75,8 @@ score. Load the risk-gate skill for the rubric, reassessment and approval steps.
   `check <ID> merge` on any git command that lands `slice/<ID>` on main; gate.sh's
   `scope` step fails a diff outside `risk.scope.files`. An unrecorded, changed or missing
   assessment fails closed.
-- Human approvals come only from `approve-risk.sh`, run by a human in their own
-  terminal. You cannot approve, and never try to: no agent may write
+- Human approvals come only from `approve-risk.sh` and `approve-ui.sh`, run by a human
+  in their own terminal. You cannot approve, and never try to: no agent may write
   `.git/donedonedone/approvals.jsonl` or `vault/risk-policy.json`. Ask once via
   pending-review.md and continue with non-dependent slices.
 - Scope expansion (a `scope` FAIL, a builder SCOPE-EXPANSION) → log a `scope` event,
@@ -135,6 +138,9 @@ merged, and never prune to make a failure disappear. `/harvest` backfills in bul
 - Slice start: `git checkout -b slice/<ID>` (parallel wave: a worktree — see the
   parallel-dispatch skill). Slice abandoned: delete branch and worktree.
 - Commits: Conventional Commits, imperative, slice ID — `feat(auth): add login endpoint (S002)`
+- No session links or Claude Code footers in commits, PRs or PR comments: omit
+  `Claude-Session:` trailers, claude.ai URLs and "Generated with/by Claude Code" lines,
+  and strip any footer a tool appends after posting; keep `Co-Authored-By`.
 
 ## Resolution Protocol (exhaust before flagging a human)
 - **Tier 1** — Builder retries on its own failing self-check. Max 3 attempts.
@@ -154,8 +160,8 @@ merged, and never prune to make a failure disappear. `/harvest` backfills in bul
 
 ## Flags (vault/flags/) — verification ergonomics required
 - pending-review.md — escalated slices, Tier 3 tiebreaks, architecture candidates,
-  retro proposals, test-budget overruns, nearby-improvement notes, risk approvals a
-  human must give (`approve-risk.sh …` — the exact command and why). Continue with
+  retro proposals, test-budget overruns, nearby-improvement notes, risk and UI approvals
+  a human must give (`approve-risk.sh …` / `approve-ui.sh …` — the exact command and why). Continue with
   non-dependent work.
 - blocked.md — Auditor CRITICAL only. Halt that slice, continue with next
   non-dependent slice. Never ship a known-critical finding.
@@ -183,7 +189,8 @@ dial yourself.
 
 ## State (per project, in vault/)
 project.md (purpose, stack, gate commands, domain language, autonomy dial,
-max_parallel_slices) · task-tree.json (LIVE slices only) · stories.md (append-only,
+max_parallel_slices) · architecture.json (optional fitness rules the gate's `arch` step
+holds; read from main, changed only by a human decision in /grill) · task-tree.json (LIVE slices only) · stories.md (append-only,
 every shipped slice) · log.jsonl (append-only via log-event.sh) · standing-orders.md ·
 decisions/ (ADRs) · findings/ · flags/. Deterministic state and audit only — no memory
 files; git and task-tree.json are the resume state.

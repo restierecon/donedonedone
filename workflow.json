@@ -1,0 +1,101 @@
+{
+  "name": "Autonomous engineering loop",
+  "description": "The Director (main session) grills, plans, gates and merges; agents build, review and audit each vertical slice. Hooks run on every session event regardless of stage.",
+  "stages": [
+    {
+      "id": "grill",
+      "label": "Grill",
+      "description": "Settle every human decision before any slice exists: UX calls (with an approved UI contract and prototype), one-way doors, risks. Decisions become ADRs; boundaries become fitness rules.",
+      "uses": ["skill:grill", "skill:ui-prototype", "script:approve-ui.sh", "skill:codebase-map"],
+      "next": ["plan"]
+    },
+    {
+      "id": "plan",
+      "label": "Plan slices",
+      "description": "The planner turns the grilled spec into autonomous vertical slices; the Director lints the draft.",
+      "uses": ["agent:planner", "skill:slice-planning", "skill:user-story", "script:check-plan.sh"],
+      "next": ["risk", {"to": "grill", "label": "open questions"}]
+    },
+    {
+      "id": "risk",
+      "label": "Risk gate",
+      "description": "Score each slice 0-100; the class sets the controls. Critical slices wait for a human authorization.",
+      "uses": ["skill:risk-gate", "script:risk-gate.sh", "script:approve-risk.sh"],
+      "next": ["dispatch"]
+    },
+    {
+      "id": "dispatch",
+      "label": "Dispatch",
+      "description": "Brief the builder (GOAL · SCOPE · ACCEPTANCE · VERIFY · FORBIDDEN · REPORT · STANDING); run independent slices in parallel worktrees.",
+      "uses": ["skill:brief-contract", "skill:parallel-dispatch", "script:guard.sh"],
+      "next": ["build"]
+    },
+    {
+      "id": "build",
+      "label": "Build",
+      "description": "Minimum necessary change, test-first, on slice/<ID>; self-check with the gate, clean the diff, harden trust boundaries.",
+      "uses": ["agent:builder", "skill:incremental-implementation", "skill:clean-diff", "skill:harden-diff"],
+      "next": ["gate"]
+    },
+    {
+      "id": "gate",
+      "label": "Gate",
+      "description": "The Director runs gate.sh once at the builder's SHA: lint, types, tests, build, CRAP, mutation, markers, comments, scope, arch.",
+      "uses": ["script:gate.sh", "script:crap-score.py", "script:mutation-report.py", "script:find-comments.sh", "script:codebase-graph.py", "skill:test-speed", "skill:crap-hotspots", "skill:mutation-survivors"],
+      "next": ["review", {"to": "build", "label": "FAIL → builder"}]
+    },
+    {
+      "id": "review",
+      "label": "Review",
+      "description": "Cold-eyes verdict against the acceptance criteria and the slop checklist, with blast radius and the evidence rung reached.",
+      "uses": ["agent:reviewer", "skill:blast-radius", "skill:codebase-map"],
+      "next": ["audit", {"to": "build", "label": "REJECTED (≤ 2 rounds)"}, {"to": "grill", "label": "escalate"}]
+    },
+    {
+      "id": "audit",
+      "label": "Audit",
+      "description": "Adversarial security pass.",
+      "when": "the slice has auditor_triggers, or its risk class is high or critical; otherwise recorded as skip",
+      "uses": ["agent:auditor", "skill:security-and-hardening"],
+      "next": ["merge", {"to": "build", "label": "findings"}]
+    },
+    {
+      "id": "merge",
+      "label": "Merge",
+      "description": "Risk check at the current patch-id (with any human approvals), squash-merge, tag, log the verdicts.",
+      "uses": ["script:risk-gate.sh", "script:log-event.sh", "skill:git-workflow-and-versioning"],
+      "next": ["harvest"]
+    },
+    {
+      "id": "harvest",
+      "label": "Harvest",
+      "description": "Append the slice's story to vault/stories.md and prune it from the task tree.",
+      "uses": ["skill:harvest"],
+      "next": ["review-cycle", {"to": "dispatch", "label": "next slice"}]
+    },
+    {
+      "id": "review-cycle",
+      "label": "Every 5 slices",
+      "description": "Architecture review (code lens) and learning loop (process lens), dispatched together; candidates go to pending review.",
+      "uses": ["skill:architecture-review", "skill:learning-loop", "agent:retro", "skill:codebase-map"],
+      "next": [{"to": "grill", "label": "accepted candidates"}]
+    }
+  ],
+  "on_demand": [
+    "skill:init-codebase",
+    "skill:create-verification-skill",
+    "skill:maintain-verification-skill",
+    "skill:principles",
+    "skill:unslop",
+    "skill:technical-writing",
+    "skill:api-and-interface-design",
+    "skill:code-review-and-quality",
+    "skill:context-engineering",
+    "skill:debugging-and-error-recovery",
+    "skill:deprecation-and-migration",
+    "skill:frontend-ui-engineering",
+    "skill:observability-and-instrumentation",
+    "skill:performance-optimization",
+    "skill:shipping-and-launch"
+  ]
+}

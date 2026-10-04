@@ -1,5 +1,7 @@
 #!/bin/bash
 # shellcheck disable=SC2016
+# shellcheck source=/dev/null
+[ -f "$(dirname "$0")/jq-text.sh" ] && . "$(dirname "$0")/jq-text.sh"
 
 DEFAULT_POLICY='{"thresholds":{"moderate":21,"elevated":41,"high":61,"critical":81},"weights":{"blast_radius":25,"reversibility":25,"security":25,"complexity":10,"uncertainty":15}}'
 
@@ -174,10 +176,10 @@ assessment_of() { jqlib 'assess($policy)' -c <<<"$1"; }
 
 events_of() {
   {
-    [ -f "$log" ] && cat "$log"
-    [ -n "${2:-}" ] && git -C "$root" show "$2:vault/log.jsonl" 2>/dev/null
-  } | jq -Rc --arg id "$1" 'fromjson? | select(type == "object" and .slice == $id)' | awk '!seen[$0]++' \
-    | jq -sc 'sort_by(.ts // "")'
+    [ -f "$log" ] && awk '{ print "F " $0 }' "$log"
+    [ -n "${2:-}" ] && git -C "$root" show "$2:vault/log.jsonl" 2>/dev/null | awk '{ print "G " $0 }'
+  } | awk '{ line = substr($0, 3) } /^F / { kept[line]++; print line; next } ++extra[line] > kept[line] { print line }' \
+    | jq -Rc --arg id "$1" 'fromjson? | select(type == "object" and .slice == $id)' | jq -sc 'sort_by(.ts // "")'
 }
 
 ledger_of() {

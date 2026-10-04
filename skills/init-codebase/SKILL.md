@@ -44,6 +44,8 @@ only what is missing, and always run step 6.
    `- gate.lint: <cmd>` · `- gate.types: <cmd>` · `- gate.test: <cmd>` (with a
    per-test timeout where the runner offers one, e.g. `--timeout=10` with pytest-timeout) ·
    `- gate.build: <cmd>` (quiet flags preferred, e.g. `pytest -q`) ·
+   `- gate.a11y: <cmd>` for a project with a UI — an accessibility check that exits
+   non-zero on a WCAG 2 AA violation (README → Gate commands has a Playwright + axe line) ·
    `- gate.test.focus: <cmd>` with `{}` where test files or ids go (`pytest -q {}`,
    `npx vitest run {}`, `go test {}`) — builders run only their own tests mid-loop ·
    `- gate.test.budget: <seconds>` — the gate flags a full suite slower than this ·
@@ -70,7 +72,20 @@ only what is missing, and always run step 6.
     It only manages its own marked block, so an existing AGENTS.md keeps its content, and
     the session-start hook keeps the block current after upgrades.
 11. Commit: `git add -A && git commit -m "chore: init autonomous workflow vault"`
-12. Existing codebase with `gate.crap` set: run the crap-hotspots skill
+12. Existing codebase: run `python3 ~/.claude/scripts/codebase-graph.py build` (codebase-map
+    skill), read the intent docs its FACTS list, then give me an onboarding brief in the
+    conversation (≤ 30 lines; nothing written to disk, so nothing goes stale). It covers
+    what the project says it is, what the code shows (stack, dependencies, entry points,
+    configuration, delivery), and where the two diverge.
+    - Every claim cites its evidence: a path from the facts, or a file you read.
+    - Never infer what files don't show. "Uses Clean Architecture" needs directories
+      that show it, and a database needs a driver in a manifest.
+    - Mark what the map couldn't settle as `[TODO]`.
+    - List every `[ASK USER]` item (the map's plus any divergence that needs intent) as
+      a numbered question. Those questions open the first /grill.
+    Show me `.gate/graph.html`. Offer once to record any boundary I name as a rule in
+    vault/architecture.json (the gate's `arch` step skips until that file exists on main).
+    With `gate.crap` set: run the crap-hotspots skill
     (~/.claude/skills/crap-hotspots/SKILL.md) once for a baseline card in
     vault/flags/pending-review.md, then commit it. Same with `gate.mutation` set: the
     mutation-survivors skill (~/.claude/skills/mutation-survivors/SKILL.md).
