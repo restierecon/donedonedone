@@ -101,7 +101,10 @@ override) adds, outside `vault/`:
 
 Run `gate.sh test` for one step, no arguments for all seven (the six above plus `crap`, see CRAP); a misspelled step name is an
 error, not a SKIP. Full logs land in `.gate/` (gitignored). The gate refuses to run on
-uncommitted changes outside `vault/` so `GATE: PASS @ <sha>` always describes that SHA;
+uncommitted changes outside `vault/` so `GATE: PASS @ sha=<sha> patch_id=<id>` always
+describes that SHA. The patch-id hashes the diff against the base outside `vault/`
+(`none` when the diff is empty or the base is missing): a clean rebase keeps it, so
+verdicts survive; any content change moves it, so verdicts go stale;
 `GATE_ALLOW_DIRTY=1` overrides it for a local look.
 
 ## Test speed

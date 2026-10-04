@@ -94,7 +94,7 @@ A failing check → fix and re-run; each re-run counts toward Termination's limi
 SLICE: [id] — [title]
 STATUS: COMPLETE / FAILED — [one-line reason]
 BRANCH: slice/[id]   SHA: [short sha gate.sh ran on]   FILES: [list]
-GATE: [gate.sh's final line, e.g. GATE: PASS @ sha]
+GATE: [gate.sh's final line, e.g. GATE: PASS @ sha=<sha> patch_id=<id>]
 CRITERIA: [each — MET / NOT MET — covering test name]
 DECISIONS: [new patterns/deps, one line each]
 FLAG CANDIDATES: [nearby improvements noticed, not made]

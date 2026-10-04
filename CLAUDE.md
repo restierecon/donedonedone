@@ -60,7 +60,10 @@ run concurrently: load the parallel-dispatch skill before starting a wave
    HEAD moved
 4. Auditor: CLEARED (only if triggers match; otherwise skip)
 After each gate: record the verdict in task-tree.json, log it with
-`~/.claude/scripts/log-event.sh <ID> <gate> <verdict> --sha <sha>`, commit. You do this
+`~/.claude/scripts/log-event.sh <ID> <gate> <verdict> --sha <sha> --patch-id <id> --evidence <rung>`
+(sha and patch_id from gate.sh's result line, the rung from the agent's EVIDENCE line:
+live-verified | unit-test-verified | type-check-only | verifier-blocked | verifier-failed),
+commit. Gate green is input to a verdict, not a verdict. You do this
 yourself — no scribe call per gate. On REJECTED/BLOCKED/CLEARED-WITH-FINDINGS, pass each
 CRITICAL line as `--signal` with its `--category`; log Tier 3 tiebreaks, escalations and
 every human correction of your work the same way. The scribe's compaction discards
@@ -76,6 +79,9 @@ every added line. An adopted codebase's existing comments stay until a slice rew
 those lines; removing them elsewhere is scope creep.
 
 ## Merge, Harvest & Prune
+Before merging, recompute the patch-id (`git diff main...slice/<ID> -- . ':(exclude)vault' |
+git patch-id --stable`): same as the approved verdicts' → they stand (a rebase alone
+changes only the sha); different → stale, re-run the gates.
 All gates pass → squash-merge to main (checkpoint noise stays on the branch), tag
 `<ID>-done`, delete the branch (and worktree), then dispatch scribe once: it appends
 the slice's story to vault/stories.md (format: harvest skill) and compacts handoffs.

@@ -270,10 +270,15 @@ if [ "$focused" -eq 1 ]; then
   exit 1
 fi
 
-sha=$(git rev-parse --short HEAD 2>/dev/null)
+sha=$(git -C "$top" rev-parse --short HEAD 2>/dev/null)
+patch_id=""
+if git -C "$top" rev-parse -q --verify "$base^{commit}" >/dev/null; then
+  patch_id=$(git -C "$top" diff "$base...HEAD" -- . ':(exclude)vault' | git patch-id --stable | cut -d' ' -f1)
+fi
+at="sha=$sha patch_id=${patch_id:-none}"
 if [ ${#failed[@]} -eq 0 ]; then
-  echo "GATE: PASS @ $sha"
+  echo "GATE: PASS @ $at"
   exit 0
 fi
-echo "GATE: FAIL (${failed[*]}) @ $sha"
+echo "GATE: FAIL (${failed[*]}) @ $at"
 exit 1

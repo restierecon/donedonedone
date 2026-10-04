@@ -27,8 +27,9 @@ up to `max_parallel_slices` (vault/project.md, default 3) at once:
 5. Process verdicts and squash-merges to main ONE AT A TIME, in whatever order they
    land — the merge stays Director-serial even though build/review was concurrent.
 6. Squash-merge conflict (a sibling already changed an overlapping file): re-dispatch
-   that builder once, in its worktree, to rebase onto current main, resolve, and re-run
-   gates. Second failure → escalate (vault/flags/pending-review.md); don't force it.
+   that builder once, in its worktree, to rebase onto current main and resolve. Then
+   compare gate.sh's new patch_id with the approved one: same → verdicts stand (clean
+   rebase); different → the resolution changed the slice, re-run every gate. Second failure → escalate (vault/flags/pending-review.md); don't force it.
 7. After merge (or on abandonment): `git worktree remove .worktrees/<ID>` and delete
    the branch.
 

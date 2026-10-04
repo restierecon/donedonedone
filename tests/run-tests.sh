@@ -600,9 +600,72 @@ if tail -1 "$repo/vault/log.jsonl" | jq -e '.slice == "S005"' >/dev/null && [ ! 
 else
   bad "writes to the main checkout's log from inside a worktree" "$(tail -1 "$repo/vault/log.jsonl")"
 fi
+(cd "$repo" && "$LOG_EVENT" S006 reviewer APPROVED --sha abc123 --patch-id 0f1e2d --evidence unit-test-verified >/dev/null)
+if tail -1 "$repo/vault/log.jsonl" | jq -e '.patch_id == "0f1e2d" and .evidence == "unit-test-verified" and .sha == "abc123"' >/dev/null; then
+  ok "records patch_id and evidence beside sha"
+else
+  bad "records patch_id and evidence beside sha" "$(tail -1 "$repo/vault/log.jsonl")"
+fi
+before=$(wc -l < "$repo/vault/log.jsonl")
+status=0; (cd "$repo" && "$LOG_EVENT" S006 reviewer APPROVED --evidence looked-fine >/dev/null 2>&1) || status=$?
+if [ "$status" -eq 1 ] && [ "$(wc -l < "$repo/vault/log.jsonl")" -eq "$before" ]; then
+  ok "rejects an evidence rung outside the ladder and writes nothing"
+else
+  bad "rejects an evidence rung outside the ladder and writes nothing" "exit $status"
+fi
 rm -rf "$repo/vault"
 status=0; (cd "$repo" && "$LOG_EVENT" S001 gate PASS >/dev/null 2>&1) || status=$?
 if [ "$status" -eq 1 ]; then ok "fails without a vault"; else bad "fails without a vault" "exit $status"; fi
+rm -rf "$repo"
+
+echo "== gate.sh — verdict binds to sha + patch_id =="
+repo=$(make_gate_repo '- gate.test: true')
+git -C "$repo" checkout -q -b slice/S001
+out=$(cd "$repo" && "$GATE" test 2>&1 | tail -1)
+sha=$(git -C "$repo" rev-parse --short HEAD)
+if [ "$out" = "GATE: PASS @ sha=$sha patch_id=none" ]; then ok "empty diff reports patch_id=none"; else bad "empty diff reports patch_id=none" "$out"; fi
+echo change > "$repo/file.txt"
+git -C "$repo" commit -q -am "slice work"
+pid=$(git -C "$repo" diff main...HEAD | git patch-id --stable | cut -d' ' -f1)
+out=$(cd "$repo" && "$GATE" test 2>&1 | tail -1)
+sha=$(git -C "$repo" rev-parse --short HEAD)
+if [ -n "$pid" ] && [ "$out" = "GATE: PASS @ sha=$sha patch_id=$pid" ]; then ok "result line carries sha and patch_id"; else bad "result line carries sha and patch_id" "$out"; fi
+git -C "$repo" checkout -q main
+echo other > "$repo/other.txt"
+git -C "$repo" add other.txt && git -C "$repo" commit -q -m "sibling lands"
+git -C "$repo" checkout -q slice/S001
+git -C "$repo" rebase -q main
+out=$(cd "$repo" && "$GATE" test 2>&1 | tail -1)
+newsha=$(git -C "$repo" rev-parse --short HEAD)
+if [ "$newsha" != "$sha" ] && [ "$out" = "GATE: PASS @ sha=$newsha patch_id=$pid" ]; then ok "a clean rebase changes sha, keeps patch_id"; else bad "a clean rebase changes sha, keeps patch_id" "$out"; fi
+echo '{"slices":[]}' > "$repo/vault/task-tree.json"
+git -C "$repo" add vault/task-tree.json && git -C "$repo" commit -q -m "record gate verdict"
+out=$(cd "$repo" && "$GATE" test 2>&1 | tail -1)
+case "$out" in
+  *"patch_id=$pid") ok "a vault bookkeeping commit on the slice branch keeps patch_id" ;;
+  *) bad "a vault bookkeeping commit on the slice branch keeps patch_id" "$out" ;;
+esac
+echo amended > "$repo/file.txt"
+git -C "$repo" commit -q -am "amend slice"
+out=$(cd "$repo" && "$GATE" test 2>&1 | tail -1)
+case "$out" in
+  *"patch_id=$pid"|*"patch_id=none") bad "a content change changes patch_id" "$out" ;;
+  *) ok "a content change changes patch_id" ;;
+esac
+printf '# Project\n## Gate\n- gate.test: false\n' > "$repo/vault/project.md"
+out=$(cd "$repo" && "$GATE" test 2>&1 | tail -1)
+if [ "$out" = "GATE: FAIL (test) @ sha=$(git -C "$repo" rev-parse --short HEAD) patch_id=$(git -C "$repo" diff main...HEAD -- . ':(exclude)vault' | git patch-id --stable | cut -d' ' -f1)" ]; then
+  ok "FAIL line carries sha and patch_id"
+else
+  bad "FAIL line carries sha and patch_id" "$out"
+fi
+printf '# Project\n## Gate\n- gate.test: true\n' > "$repo/vault/project.md"
+status=0; out=$(cd "$repo" && GATE_BASE=no-such-branch "$GATE" test 2>&1) || status=$?
+if [ "$status" -eq 0 ] && echo "$out" | tail -1 | grep -qx "GATE: PASS @ sha=[0-9a-f]* patch_id=none"; then
+  ok "a missing base reports patch_id=none without failing the gate"
+else
+  bad "a missing base reports patch_id=none without failing the gate" "exit $status: $out"
+fi
 rm -rf "$repo"
 
 echo "== gate.sh — worktrees =="
@@ -1112,10 +1175,10 @@ if grep -q 'Copyright (c) 2026 Lauren Tan' "$BR/LICENSE" 2>/dev/null; then ok "b
 if grep -qE 'arena|unslop|`how`|`why`|disable-model-invocation' "$BR/SKILL.md" 2>/dev/null; then bad "blast-radius has no pstack-only deps" "found"; else ok "blast-radius has no pstack-only deps"; fi
 if grep -q 'blast-radius' "$REVIEWER"; then ok "reviewer process invokes blast-radius"; else bad "reviewer process invokes blast-radius" "missing"; fi
 out_lines=$(sed -n '/^## Output Format/,$p' "$REVIEWER" | sed -n '2,/^## /p' | grep -v '^## ' | grep -c .)
-if grep -q '^BLAST RADIUS:' "$REVIEWER" && [ "$out_lines" -le 20 ]; then
-  ok "reviewer output has BLAST RADIUS and stays <= 20 lines"
+if grep -q '^BLAST RADIUS:' "$REVIEWER" && grep -q '^SHA: .*EVIDENCE:' "$REVIEWER" && [ "$out_lines" -le 20 ]; then
+  ok "reviewer output has BLAST RADIUS, keeps SHA/EVIDENCE, <= 20 lines"
 else
-  bad "reviewer output has BLAST RADIUS and stays <= 20 lines" "out_lines=$out_lines"
+  bad "reviewer output has BLAST RADIUS, keeps SHA/EVIDENCE, <= 20 lines" "out_lines=$out_lines"
 fi
 
 echo "== principles skill — index, references, LICENSE, checklist lines =="

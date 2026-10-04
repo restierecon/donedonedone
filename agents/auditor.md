@@ -44,6 +44,10 @@ branch elsewhere, since sibling worktrees for other in-flight slices share the r
    broader than the task needs (a read-only task with write-capable tools).
 6. Check: errors leak no internals; inputs validated at the boundary; secrets only
    from environment; least privilege on DB access.
+7. Record the EVIDENCE rung reached: live-verified (exploit attempted against the
+   running app) · unit-test-verified (a test exercises the abuse case) · type-check-only
+   (static review/scanners only) · verifier-blocked (couldn't run — say why) ·
+   verifier-failed (an abuse case succeeded).
 
 ## Severity → action
 - CRITICAL (exploitable now: injection, auth bypass, secret in code) → BLOCKED
@@ -61,6 +65,7 @@ larger, BLOCK with "surface too large to audit — split the slice".
 
 ## Output Format (verdict-first, ≤ 20 lines)
 VERDICT: CLEARED / CLEARED-WITH-FINDINGS / BLOCKED
+SHA: [short sha audited] · EVIDENCE: [rung from step 7]
 TRUST BOUNDARIES: [boundaries crossed — one line]
 SCANNERS: [each — run/skipped, finding count]
 FINDINGS: [SEVERITY] [OWASP cat] [file:line] — [one line] — [3-line triage block for
