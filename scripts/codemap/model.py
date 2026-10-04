@@ -1,7 +1,7 @@
 from codemap.imports import Resolver, go_module_name, PARSED_EXT
 from codemap.paths import PathIndex
 from codemap.references import edge_kind, mentions
-from codemap.repo import extension, read_tree
+from codemap.repo import extension, listing, read_tree
 
 LEVELS = {"high": 2, "medium": 1, "info": 0}
 DEPENDENCY_KINDS = ("import", "reference")
@@ -25,6 +25,7 @@ def worst(levels):
 class Analysis:
     def __init__(self, rev):
         self.texts, self.skipped = read_tree(rev)
+        self.tracked = {path for path, _ in listing(rev)}
         self.index = PathIndex(self.texts)
         resolver = Resolver(self.index, go_module_name(rev))
         self.imports, self.externals, self.links = {}, {}, {}

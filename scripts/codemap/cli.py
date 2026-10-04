@@ -2,6 +2,7 @@ import os
 import sys
 
 from codemap.code_lens import CodeLens
+from codemap.facts import Facts
 from codemap.graphs import cycle_edge_set, cycle_path, forbidden_edges, load_rules, module_edges, reverse, strongly_connected, closure
 from codemap.metrics import coverage_loader
 from codemap.model import Analysis
@@ -38,6 +39,7 @@ def build_graph(rev, days, coverage_file, rules_file):
         "coverage_given": bool(coverage_file),
         "rules": rules,
         "seen": code.seen,
+        "facts": Facts(analysis, entities).build(),
         "lenses": lenses,
         "entities": entities,
         "module_cycles": [cycle_path(c, medges) for c in strongly_connected({module_of(p) for p in analysis.texts}, medges)],

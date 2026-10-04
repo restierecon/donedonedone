@@ -348,10 +348,22 @@ function panel() {
   if (inner.length) h += `<h3>Inside (${inner.length})</h3><ul>` + inner.slice(0, 80).map(c => `<li>${link(c)}${E[c].risk && E[c].risk !== "low" ? ` <span class="badge ${E[c].risk}">${E[c].risk}</span>` : ""}</li>`).join("") + (inner.length > 80 ? `<li class="note">…and ${inner.length - 80} more</li>` : "") + "</ul>";
   h += "<h3>Depends on / leads to</h3>" + edgeList(n.out, "out");
   h += "<h3>Used by</h3>" + edgeList(incoming[selected] || [], "in");
+  if (n.id === "dir:." && G.facts && G.facts.length) h += factsHtml();
   if (n.id === lens.root) h += lensNotes();
   $("panel").innerHTML = h;
   $("panel").querySelectorAll("[data-jump]").forEach(a => a.addEventListener("click", () => jump(a.dataset.jump)));
   $("panel").querySelectorAll("[data-depth]").forEach(a => a.addEventListener("click", () => { stack = stack.slice(0, +a.dataset.depth + 1); selected = focus(); refresh(); }));
+}
+
+function evidenceHtml(ev) {
+  const m = ev.match(/^([^\s:]+)(.*)$/);
+  return m && E["file:" + m[1]] ? `<a class="link" data-jump="${esc("file:" + m[1])}">${esc(m[1])}</a>${esc(m[2])}` : esc(ev);
+}
+
+function factsHtml() {
+  return "<h3>Facts (with evidence)</h3>" + G.facts.map(s => `<p class="note"><b>${esc(s.section)}</b></p><ul>` +
+    s.items.map(i => `<li>${i.level !== "info" ? `<span class="kind ${i.level === "ask" ? "high" : "medium"}">${i.level === "ask" ? "ask user" : "todo"}</span>` : ""}${esc(i.fact.replace(/^\[(TODO|ASK USER)\] /, ""))}` +
+      (i.evidence.length ? `<br><span class="where">${i.evidence.map(evidenceHtml).join(" · ")}</span>` : "") + "</li>").join("") + "</ul>").join("");
 }
 
 function lensNotes() {

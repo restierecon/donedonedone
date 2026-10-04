@@ -35,6 +35,13 @@ Stop when a new question would not change the slice plan and item 7 finds nothin
 Typically 5-10 questions. Grilling is mandatory for all work, but scale it: a one-slice
 bugfix gets one confirming question (expected behavior + what must not change).
 
+## Starting from an onboarding brief
+After /init-codebase, its numbered `[ASK USER]` questions come first: what the docs
+claim against what the code shows, env vars read but undocumented, paths docs name
+that don't exist. Settle each one before the feature questions. An answer with a
+load-bearing why becomes an ADR; a dead path or variable becomes a cleanup candidate in
+vault/flags/pending-review.md, never a silent fix.
+
 ## Side effects as you go
 - New domain term agreed? Add it to the Domain Language table in vault/project.md.
 - A decision with a load-bearing rationale? Offer to record it as an ADR in

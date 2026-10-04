@@ -346,6 +346,15 @@ repository from its committed tree into `.gate/graph.json` and a self-contained
   parsed vs references scanned; complexity measured, estimated, not measured, n/a) and
   warns when more than 30% of the code has no complexity measure. A map that can't see
   a repo says so instead of looking clean.
+- **Facts, with evidence.** Stack (languages, manifests at any depth, monorepo
+  signals), dependencies split runtime / dev / optional per manifest, entry points,
+  environment variables (from templates, and as read in code), CI, containers,
+  security and lint config, intent docs, comment TODOs (production and tests apart)
+  and the most-changed files. What it can't establish is a `[TODO]`. What needs a
+  person is an `[ASK USER]`: env vars read but not documented, and paths docs name
+  that exist nowhere. `/init-codebase` turns these into an onboarding brief, kept in
+  the conversation and never written to disk, whose questions open the first
+  `/grill`.
 - **Workflow lens.** Wherever a repo holds a Claude Code setup (`agents/`, `skills/`,
   `commands/`, hooks in `settings.json`, at the root or in `.claude/`), the map adds a
   lens for it: stages → agents, skills and commands → hooks → scripts → functions. For
@@ -718,3 +727,9 @@ checkpoint before parallel waves. Skills imported or adapted from pstack
 (blast-radius, the verification skills, principles, unslop and
 technical-writing) are used under MIT; each folder carries pstack's LICENSE.
 Thanks to all of them for making this work public.
+
+The codebase map's facts and onboarding brief (stack and dependency detection, env
+templates against env reads, CI, container and security signals, intent vs reality, and
+the `[TODO]` / `[ASK USER]` evidence discipline) take their ideas from GitHub's
+[acquire-codebase-knowledge](https://github.com/github/awesome-copilot/tree/main/skills/acquire-codebase-knowledge)
+skill (MIT). They were reimplemented on the map, and no code was copied.

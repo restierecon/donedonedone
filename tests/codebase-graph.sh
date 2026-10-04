@@ -316,6 +316,81 @@ expect "a project's own .claude/ setup gets its lens, linked into the code" \
   "$(field "$repo" '[l["id"] for l in g["lenses"]] + [e["to"] for e in E["agent:.claude/helper"]["out"]]')" "['code', 'setup:.claude/', 'file:src/app.py']"
 rm -rf "$repo"
 
+echo "== codebase-graph.py — facts: stack, dependencies, config, delivery, intent =="
+repo=$(new_repo)
+mkdir -p "$repo/src/app" "$repo/web" "$repo/svc" "$repo/tests/fixtures/old" "$repo/.github/workflows" "$repo/docs"
+printf '{"name": "web", "main": "index.js", "scripts": {"start": "node index.js"}, "dependencies": {"express": "4"}, "devDependencies": {"vitest": "1"}, "workspaces": ["web"]}\n' > "$repo/package.json"
+printf '[project]\nname = "app"\ndependencies = ["requests>=2", "click"]\n[project.optional-dependencies]\nyaml = ["pyyaml"]\n[dependency-groups]\ndev = ["pytest", "ruff"]\n[project.scripts]\napp = "app:main"\n' > "$repo/pyproject.toml"
+printf 'pytest==8\n# a comment\nmypy\n' > "$repo/requirements-dev.txt"
+printf 'module example.com/svc\nrequire (\n  github.com/pkg/errors v0.9.1\n  golang.org/x/sys v0.1.0 // indirect\n)\n' > "$repo/svc/go.mod"
+printf "source 'https://rubygems.org'\ngem 'rails'\ngroup :development, :test do\n  gem 'rspec'\nend\n" > "$repo/Gemfile"
+printf '{"dependencies": {"left-pad": "1"}}\n' > "$repo/tests/fixtures/old/package.json"
+printf 'DATABASE_URL=\nPORT=8080\n' > "$repo/.env.example"
+printf 'import os\n"""\nos.getenv("DOC_ONLY")\n"""\nDB = os.environ["DATABASE_URL"]\nKEY = os.getenv("API_KEY")\n# TODO: retry on timeout\nPATTERN = "TODO|FIXME"\n' > "$repo/src/app/config.py"
+printf 'const port = process.env.PORT\n' > "$repo/web/server.js"
+printf 'import os\nX = os.getenv("TEST_ONLY")\n# FIXME flaky\n' > "$repo/tests/test_config.py"
+printf 'FROM python:3.12\nCMD ["python", "-m", "app"]\n' > "$repo/Dockerfile"
+printf 'on: push\n' > "$repo/.github/workflows/ci.yml"
+printf 'Report issues privately.\n' > "$repo/SECURITY.md"
+printf 'root = true\n' > "$repo/.editorconfig"
+# shellcheck disable=SC2016
+printf '# App\nSee src/app/config.py and src/app/legacy.py.\n\n```\ncp src/app/example.py here\n```\n' > "$repo/README.md"
+printf 'Run docs/setup.sh first.\n' > "$repo/docs/guide.md"
+printf 'echo setup\n' > "$repo/docs/setup.sh"
+commit "$repo" init
+out=$(build "$repo")
+fact() { field "$repo" '[i["fact"] for s in g["facts"] for i in s["items"] if s["section"] == sys.argv[3]]' "$1"; }
+evidence() { field "$repo" '[i["evidence"] for s in g["facts"] for i in s["items"] if s["section"] == sys.argv[3]]' "$1"; }
+expect "manifests are found at any depth, test fixtures left out" "$(evidence Stack | grep -o "tests/fixtures" || echo none)" "none"
+deps=$(fact Dependencies)
+if echo "$deps" | grep -q "package.json runtime (1): express" && echo "$deps" | grep -q "package.json dev (1): vitest" \
+   && echo "$deps" | grep -q "pyproject.toml runtime (2): click, requests" && echo "$deps" | grep -q "pyproject.toml dev (2): pytest, ruff" \
+   && echo "$deps" | grep -q "pyproject.toml optional (1): pyyaml" && echo "$deps" | grep -q "requirements-dev.txt dev (2): mypy, pytest" \
+   && echo "$deps" | grep -q "svc/go.mod runtime (1): github.com/pkg/errors" && echo "$deps" | grep -q "svc/go.mod indirect (1): golang.org/x/sys" \
+   && echo "$deps" | grep -q "Gemfile runtime (1): rails" && echo "$deps" | grep -q "Gemfile dev or test (1): rspec"; then
+  ok "dependencies are split runtime / dev / optional / indirect per manifest"
+else
+  bad "dependencies are split runtime / dev / optional / indirect per manifest" "$deps"
+fi
+expect "monorepo signals come from workspaces" "$(fact Stack | grep -c 'Monorepo signals')" "1"
+entries=$(fact "Entry points")
+if echo "$entries" | grep -q "package.json declares main, scripts.start" && echo "$entries" | grep -q "console scripts" && echo "$entries" | grep -q "Container start commands"; then
+  ok "entry points come from manifests, conventions and container CMDs"
+else
+  bad "entry points come from manifests, conventions and container CMDs" "$entries"
+fi
+config=$(fact Configuration)
+if echo "$config" | grep -q "Code reads 3 environment variables: API_KEY, DATABASE_URL, PORT" \
+   && echo "$config" | grep -q "\[ASK USER\] Read in code but missing from the env template: API_KEY" && ! echo "$config" | grep -q "DOC_ONLY\|TEST_ONLY"; then
+  ok "env reads are found in code (not docstrings or tests) and checked against the template"
+else
+  bad "env reads are found in code (not docstrings or tests) and checked against the template" "$config"
+fi
+expect "env read evidence points at the real line" "$(evidence Configuration | grep -o 'src/app/config.py:6' | head -1)" "src/app/config.py:6"
+delivery=$(fact Delivery)
+if echo "$delivery" | grep -q "CI: GitHub Actions (1 workflow files)" && echo "$delivery" | grep -q "Containers and orchestration" && echo "$delivery" | grep -q "Security and ownership config"; then
+  ok "CI, containers and security config are reported"
+else
+  bad "CI, containers and security config are reported" "$delivery"
+fi
+expect "intent: a doc path that exists nowhere is an [ASK USER]; fenced examples and doc-relative paths aren't" \
+  "$(evidence 'Intent vs reality')" "[['README.md'], ['README.md:2 (src/app/legacy.py)']]"
+expect "markers count comment TODOs only, production and tests apart" \
+  "$(fact Concerns | grep -o '[0-9] in production code, [0-9] in tests')" "1 in production code, 1 in tests"
+if echo "$out" | grep -q "^FACTS: Languages by production lines: .* · [0-9] sections · 0 \[TODO\] · 2 \[ASK USER\]"; then
+  ok "the summary leads with the stack and counts what needs a human"
+else
+  bad "the summary leads with the stack and counts what needs a human" "$out"
+fi
+rm -rf "$repo"
+repo=$(new_repo)
+printf 'echo hi\n' > "$repo/run.sh"
+commit "$repo" init
+build "$repo" >/dev/null
+expect "a bare repo says what it can't tell instead of guessing" \
+  "$(field "$repo" '[i["fact"].split(" —")[0] for s in g["facts"] for i in s["items"] if i["level"] == "todo"]')" "['[TODO] No dependency manifest found', '[TODO] No CI configuration found', '[TODO] No README, spec or ADR']"
+rm -rf "$repo"
+
 echo "== codebase-graph.py — this repo's own workflow.json stays in sync =="
 out=$(cd "$ROOT" && "$PY" "$GRAPH" build --out "$(mktemp -d)" 2>&1); status=$?
 if [ "$status" -eq 0 ] && echo "$out" | grep -q "^SETUP repo: Autonomous engineering loop — .* · OK"; then

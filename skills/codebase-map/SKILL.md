@@ -48,6 +48,33 @@ before you build.
   - `complex`: complexity ≥ 15.
   - `untested`: no test imports it, names it or reaches it, or coverage is under 50%.
 
+## Facts (any repo, each with evidence)
+`graph.json` → `facts`, shown on the code lens root and as one FACTS summary line:
+- **Stack:** languages by production lines, dependency manifests at any depth (test
+  fixtures excluded), and monorepo signals (workspaces, pnpm/lerna/nx/turbo/rush,
+  repeated manifests).
+- **Dependencies:** per manifest, split runtime / dev / optional / peer / indirect.
+  Parsed for package.json, pyproject.toml (PEP 621, dependency groups, Poetry),
+  requirements*.txt (a dev, test or lint name means dev), go.mod, Cargo.toml, Gemfile
+  groups and composer.json. Other manifests are listed only.
+- **Entry points:** what manifests declare (main, bin, scripts.start,
+  [project.scripts]), conventional files (`__main__.py`, `main.go` with
+  `package main`, root install/run scripts, Makefile), and container CMD/ENTRYPOINT.
+- **Configuration:** variables in env templates, and variables production code reads
+  (docstrings and tests excluded). A variable read but missing from the template is
+  an `[ASK USER]`.
+- **Delivery and tooling:** CI systems, containers and orchestration, security and
+  ownership config, lint, format and type configs.
+- **Intent vs reality:** the intent docs to read first (README, specs, ADRs). A path a
+  doc names that exists nowhere in the repo is an `[ASK USER]`; fenced examples and
+  paths relative to the doc are skipped.
+- **Concerns:** TODO/FIXME/HACK/XXX markers in comments, counted separately for
+  production and tests (test markers are coverage gaps, not debt), and the
+  most-changed files.
+
+Anything it can't establish is a `[TODO]`, never a guess. These facts feed
+/init-codebase's onboarding brief.
+
 ## Workflow lens (a repo holding a Claude Code setup)
 - **Detection:** a root with `agents/*.md`, `skills/*/SKILL.md`, `commands/*.md` or
   hooks in `settings.json`. Both the repo root (a setup like this one) and a project's
@@ -95,7 +122,7 @@ proposing a change. Rank by what hurts change most: import cycles and violations
 hubs that are hotspots, then the rest.
 
 ## Reporting to a human (≤ 15 lines)
-Lead with the GRAPH, SEEN and SETUP lines (include any WARNING or ERROR). Then, for each
+Lead with the GRAPH, SEEN, FACTS and SETUP lines (include any WARNING, [ASK USER] or ERROR). Then, for each
 high-risk item: name, signals, and the `why` that matters most. Then a link to the
 HTML: open it with the Artifact tool or send the file, and never paste its contents.
 End with one suggested next step.

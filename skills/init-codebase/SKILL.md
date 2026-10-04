@@ -71,8 +71,17 @@ only what is missing, and always run step 6.
     the session-start hook keeps the block current after upgrades.
 11. Commit: `git add -A && git commit -m "chore: init autonomous workflow vault"`
 12. Existing codebase: run `python3 ~/.claude/scripts/codebase-graph.py build` (codebase-map
-    skill) and show me its summary and `.gate/graph.html`, so the first grill starts from
-    the real module map. Offer once to record any boundary I name as a rule in
+    skill), read the intent docs its FACTS list, then give me an onboarding brief in the
+    conversation (≤ 30 lines; nothing written to disk, so nothing goes stale). It covers
+    what the project says it is, what the code shows (stack, dependencies, entry points,
+    configuration, delivery), and where the two diverge.
+    - Every claim cites its evidence: a path from the facts, or a file you read.
+    - Never infer what files don't show. "Uses Clean Architecture" needs directories
+      that show it, and a database needs a driver in a manifest.
+    - Mark what the map couldn't settle as `[TODO]`.
+    - List every `[ASK USER]` item (the map's plus any divergence that needs intent) as
+      a numbered question. Those questions open the first /grill.
+    Show me `.gate/graph.html`. Offer once to record any boundary I name as a rule in
     vault/architecture.json (the gate's `arch` step skips until that file exists on main).
     With `gate.crap` set: run the crap-hotspots skill
     (~/.claude/skills/crap-hotspots/SKILL.md) once for a baseline card in

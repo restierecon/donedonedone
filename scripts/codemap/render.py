@@ -37,6 +37,17 @@ def seen_lines(seen):
     return lines
 
 
+def facts_lines(facts):
+    counts = {"todo": 0, "ask": 0}
+    for section in facts:
+        for entry in section["items"]:
+            if entry["level"] in counts:
+                counts[entry["level"]] += 1
+    head = next((e["fact"] for s in facts if s["section"] == "Stack" for e in s["items"]), "no facts")
+    return ["FACTS: %s · %d sections · %d [TODO] · %d [ASK USER]" % (head, len(facts), counts["todo"], counts["ask"])] + \
+        ["  " + e["fact"] for s in facts for e in s["items"] if e["level"] == "ask"][:4]
+
+
 def flagged_lines(entities, limit=8):
     order = {"high": 0, "medium": 1}
     hits = [e for e in entities.values() if e.get("lens") == "code" and e["kind"] in ("dir", "file") and e["flags"]]
@@ -64,6 +75,6 @@ def summarize(graph, out_dir):
     count = lambda kind: sum(1 for e in entities.values() if e["kind"] == kind)
     print("GRAPH @ %s: %d dirs, %d files, %d functions, %d module cycles, %d file cycles" % (
         graph["rev"], count("dir"), count("file"), count("function"), len(graph["module_cycles"]), len(graph["file_cycles"])))
-    for line in seen_lines(graph["seen"]) + flagged_lines(entities) + setup_lines(graph):
+    for line in seen_lines(graph["seen"]) + facts_lines(graph.get("facts", [])) + flagged_lines(entities) + setup_lines(graph):
         print(line)
     print("  view: %s · data: %s" % (os.path.join(out_dir, "graph.html"), os.path.join(out_dir, "graph.json")))
