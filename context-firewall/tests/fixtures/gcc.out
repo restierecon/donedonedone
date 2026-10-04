@@ -1,0 +1,14 @@
+c.c: In function 'main':
+c.c:2:21: warning: initialization of 'int' from 'char *' makes integer from pointer without a cast [-Wint-conversion]
+    2 | int main(){ int x = "s"; undefined_fn(); return y; }
+      |                     ^~~
+c.c:2:26: warning: implicit declaration of function 'undefined_fn' [-Wimplicit-function-declaration]
+    2 | int main(){ int x = "s"; undefined_fn(); return y; }
+      |                          ^~~~~~~~~~~~
+c.c:2:49: error: 'y' undeclared (first use in this function)
+    2 | int main(){ int x = "s"; undefined_fn(); return y; }
+      |                                                 ^
+c.c:2:49: note: each undeclared identifier is reported only once for each function it appears in
+c.c:2:17: warning: unused variable 'x' [-Wunused-variable]
+    2 | int main(){ int x = "s"; undefined_fn(); return y; }
+      |                 ^

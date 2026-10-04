@@ -1,0 +1,112 @@
+============================= test session starts ==============================
+platform linux -- Python 3.11.15, pytest-9.1.1, pluggy-1.6.0 -- /root/.local/share/uv/tools/pytest/bin/python
+cachedir: .pytest_cache
+rootdir: /work/py
+collecting ... collected 64 items
+
+test_auth.py::test_many[0] PASSED                                        [  1%]
+test_auth.py::test_many[1] PASSED                                        [  3%]
+test_auth.py::test_many[2] PASSED                                        [  4%]
+test_auth.py::test_many[3] PASSED                                        [  6%]
+test_auth.py::test_many[4] PASSED                                        [  7%]
+test_auth.py::test_many[5] PASSED                                        [  9%]
+test_auth.py::test_many[6] PASSED                                        [ 10%]
+test_auth.py::test_many[7] PASSED                                        [ 12%]
+test_auth.py::test_many[8] PASSED                                        [ 14%]
+test_auth.py::test_many[9] PASSED                                        [ 15%]
+test_auth.py::test_many[10] PASSED                                       [ 17%]
+test_auth.py::test_many[11] PASSED                                       [ 18%]
+test_auth.py::test_many[12] PASSED                                       [ 20%]
+test_auth.py::test_many[13] PASSED                                       [ 21%]
+test_auth.py::test_many[14] PASSED                                       [ 23%]
+test_auth.py::test_many[15] PASSED                                       [ 25%]
+test_auth.py::test_many[16] PASSED                                       [ 26%]
+test_auth.py::test_many[17] PASSED                                       [ 28%]
+test_auth.py::test_many[18] PASSED                                       [ 29%]
+test_auth.py::test_many[19] PASSED                                       [ 31%]
+test_auth.py::test_many[20] PASSED                                       [ 32%]
+test_auth.py::test_many[21] PASSED                                       [ 34%]
+test_auth.py::test_many[22] PASSED                                       [ 35%]
+test_auth.py::test_many[23] PASSED                                       [ 37%]
+test_auth.py::test_many[24] PASSED                                       [ 39%]
+test_auth.py::test_many[25] PASSED                                       [ 40%]
+test_auth.py::test_many[26] PASSED                                       [ 42%]
+test_auth.py::test_many[27] PASSED                                       [ 43%]
+test_auth.py::test_many[28] PASSED                                       [ 45%]
+test_auth.py::test_many[29] PASSED                                       [ 46%]
+test_auth.py::test_many[30] PASSED                                       [ 48%]
+test_auth.py::test_many[31] PASSED                                       [ 50%]
+test_auth.py::test_many[32] PASSED                                       [ 51%]
+test_auth.py::test_many[33] PASSED                                       [ 53%]
+test_auth.py::test_many[34] PASSED                                       [ 54%]
+test_auth.py::test_many[35] PASSED                                       [ 56%]
+test_auth.py::test_many[36] PASSED                                       [ 57%]
+test_auth.py::test_many[37] PASSED                                       [ 59%]
+test_auth.py::test_many[38] PASSED                                       [ 60%]
+test_auth.py::test_many[39] PASSED                                       [ 62%]
+test_auth.py::test_many[40] PASSED                                       [ 64%]
+test_auth.py::test_many[41] PASSED                                       [ 65%]
+test_auth.py::test_many[42] PASSED                                       [ 67%]
+test_auth.py::test_many[43] PASSED                                       [ 68%]
+test_auth.py::test_many[44] PASSED                                       [ 70%]
+test_auth.py::test_many[45] PASSED                                       [ 71%]
+test_auth.py::test_many[46] PASSED                                       [ 73%]
+test_auth.py::test_many[47] PASSED                                       [ 75%]
+test_auth.py::test_many[48] PASSED                                       [ 76%]
+test_auth.py::test_many[49] PASSED                                       [ 78%]
+test_auth.py::test_many[50] PASSED                                       [ 79%]
+test_auth.py::test_many[51] PASSED                                       [ 81%]
+test_auth.py::test_many[52] PASSED                                       [ 82%]
+test_auth.py::test_many[53] PASSED                                       [ 84%]
+test_auth.py::test_many[54] PASSED                                       [ 85%]
+test_auth.py::test_many[55] PASSED                                       [ 87%]
+test_auth.py::test_many[56] PASSED                                       [ 89%]
+test_auth.py::test_many[57] PASSED                                       [ 90%]
+test_auth.py::test_many[58] PASSED                                       [ 92%]
+test_auth.py::test_many[59] PASSED                                       [ 93%]
+test_auth.py::test_session_refresh FAILED                                [ 95%]
+test_auth.py::test_token_provider FAILED                                 [ 96%]
+test_auth.py::test_crash FAILED                                          [ 98%]
+test_auth.py::test_skipped SKIPPED (later)                               [100%]
+
+=================================== FAILURES ===================================
+_____________________________ test_session_refresh _____________________________
+
+    def test_session_refresh():
+        s = Session("abc")
+>       assert s.refresh() == "abc-refreshed"
+E       AssertionError: assert 'abc-r' == 'abc-refreshed'
+E         
+E         - abc-refreshed
+E         + abc-r
+
+test_auth.py:15: AssertionError
+_____________________________ test_token_provider ______________________________
+
+    def test_token_provider():
+        data = {"a": 1, "b": 2}
+>       assert data == {"a": 1, "b": 3}
+E       AssertionError: assert {'a': 1, 'b': 2} == {'a': 1, 'b': 3}
+E         
+E         Omitting 1 identical items, use -vv to show
+E         Differing items:
+E         {'b': 2} != {'b': 3}
+E         
+E         Full diff:
+E           {...
+E         
+E         ...Full output truncated (6 lines hidden), use '-vv' to show
+
+test_auth.py:19: AssertionError
+__________________________________ test_crash __________________________________
+
+    def test_crash():
+>       raise ValueError("boom: provider unavailable")
+E       ValueError: boom: provider unavailable
+
+test_auth.py:22: ValueError
+=========================== short test summary info ============================
+FAILED test_auth.py::test_session_refresh - AssertionError: assert 'abc-r' ==...
+FAILED test_auth.py::test_token_provider - AssertionError: assert {'a': 1, 'b...
+FAILED test_auth.py::test_crash - ValueError: boom: provider unavailable
+=================== 3 failed, 60 passed, 1 skipped in 0.08s ====================

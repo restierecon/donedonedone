@@ -1,0 +1,64 @@
+
+  Session
+    ✓ case 0
+    ✓ case 1
+    ✓ case 2
+    ✓ case 3
+    ✓ case 4
+    ✓ case 5
+    ✓ case 6
+    ✓ case 7
+    ✓ case 8
+    ✓ case 9
+    ✓ case 10
+    ✓ case 11
+    ✓ case 12
+    ✓ case 13
+    ✓ case 14
+    ✓ case 15
+    ✓ case 16
+    ✓ case 17
+    ✓ case 18
+    ✓ case 19
+    ✓ case 20
+    ✓ case 21
+    ✓ case 22
+    ✓ case 23
+    ✓ case 24
+    ✓ case 25
+    ✓ case 26
+    ✓ case 27
+    ✓ case 28
+    ✓ case 29
+    1) refresh returns a new token
+
+  TokenProvider
+    ✓ builds
+    2) rejects expired tokens
+
+
+  31 passing (84ms)
+  2 failing
+  1 pending
+
+  1) Session
+       refresh returns a new token:
+
+      AssertionError [ERR_ASSERTION]: 'abc-r' == 'abc-refreshed'
+      + expected - actual
+
+      -abc-r
+      +abc-refreshed
+
+      at Context.<anonymous> (test/session.test.js:142:12)
+      at processImmediate (node:internal/timers:476:21)
+
+  2) TokenProvider
+       rejects expired tokens:
+     TypeError: provider.get is not a function
+      at TokenProvider.refresh (src/token.js:21:23)
+      at Context.<anonymous> (test/token.test.js:87:20)
+      at node_modules/mocha/lib/runnable.js:366:21
+
+
+

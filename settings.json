@@ -60,6 +60,16 @@
             "command": "~/.claude/scripts/vault-guard.sh"
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/scripts/ddd pre",
+            "timeout": 15
+          }
+        ]
       }
     ],
     "PostToolUse": [
@@ -77,6 +87,16 @@
           {
             "type": "command",
             "command": "~/.claude/scripts/vault-guard.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash|PowerShell|Edit|Write|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/scripts/ddd hook",
+            "timeout": 15
           }
         ]
       }

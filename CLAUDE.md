@@ -15,6 +15,9 @@ heavy reads go to agents; you consume structured verdicts (≤ 20 lines) only.
 - Output > 20 lines you won't use? Route it to a subagent.
 - Hand agents file paths, not file contents — they read what they need.
 - Lint/types/tests/build run only through `~/.claude/scripts/gate.sh`, never raw.
+- Shell output starting `[ddd]` was compacted by the context firewall; the full output is kept.
+  Need an omitted part? `~/.claude/scripts/ddd artifact <id>` with `--failure N`, `--file`,
+  `--section`, `--lines A-B` or `--raw` — never re-run the command to see it.
 - About to restate what the user said? Delete it.
 
 ## Agents

@@ -1,0 +1,33 @@
+
+/work/es/eslint.config.js
+  1:1  error  'module' is not defined  no-undef
+
+/work/es/f1.js
+  1:7   error    'unused1' is assigned a value but never used  no-unused-vars
+  2:5   error    'a' is not defined                            no-undef
+  2:7   warning  Expected '===' and instead saw '=='           eqeqeq
+  2:10  error    'b' is not defined                            no-undef
+  2:15  error    'foo' is not defined                          no-undef
+  3:7   error    'x' is assigned a value but never used        no-unused-vars
+  3:11  error    'y' is not defined                            no-undef
+
+/work/es/f2.js
+  1:7   error    'unused2' is assigned a value but never used  no-unused-vars
+  2:5   error    'a' is not defined                            no-undef
+  2:7   warning  Expected '===' and instead saw '=='           eqeqeq
+  2:10  error    'b' is not defined                            no-undef
+  2:15  error    'foo' is not defined                          no-undef
+  3:7   error    'x' is assigned a value but never used        no-unused-vars
+  3:11  error    'y' is not defined                            no-undef
+
+/work/es/f3.js
+  1:7   error    'unused3' is assigned a value but never used  no-unused-vars
+  2:5   error    'a' is not defined                            no-undef
+  2:7   warning  Expected '===' and instead saw '=='           eqeqeq
+  2:10  error    'b' is not defined                            no-undef
+  2:15  error    'foo' is not defined                          no-undef
+  3:7   error    'x' is assigned a value but never used        no-unused-vars
+  3:11  error    'y' is not defined                            no-undef
+
+✖ 22 problems (19 errors, 3 warnings)
+

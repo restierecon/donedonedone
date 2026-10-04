@@ -1,1 +1,2 @@
 * text=auto eol=lf
+context-firewall/tests/fixtures/** -text

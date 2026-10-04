@@ -1,0 +1,63 @@
+   Compiling rs v0.1.0 (/work/rs)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.16s
+     Running unittests src/lib.rs (target/debug/deps/rs-ffdf3d4f8e2db1ed)
+
+running 3 tests
+test tests::ok_one ... ok
+test tests::refresh_works ... FAILED
+test tests::token_panics ... FAILED
+
+failures:
+
+---- tests::refresh_works stdout ----
+
+thread 'tests::refresh_works' (2457) panicked at src/lib.rs:6:34:
+assertion `left == right` failed
+  left: "abc-r"
+ right: "abc-refreshed"
+stack backtrace:
+   0: __rustc::rust_begin_unwind
+             at /rustc/2d8144b7880597b6e6d3dfd63a9a9efae3f533d3/library/std/src/panicking.rs:689:5
+   1: core::panicking::panic_fmt
+             at /rustc/2d8144b7880597b6e6d3dfd63a9a9efae3f533d3/library/core/src/panicking.rs:80:14
+   2: core::panicking::assert_failed_inner
+             at /rustc/2d8144b7880597b6e6d3dfd63a9a9efae3f533d3/library/core/src/panicking.rs:439:17
+   3: core::panicking::assert_failed::<alloc::string::String, &str>
+             at /rustc/2d8144b7880597b6e6d3dfd63a9a9efae3f533d3/library/core/src/panicking.rs:394:5
+   4: rs::tests::refresh_works
+             at ./src/lib.rs:6:34
+   5: rs::tests::refresh_works::{closure#0}
+             at ./src/lib.rs:6:31
+   6: <rs::tests::refresh_works::{closure#0} as core::ops::function::FnOnce<()>>::call_once
+             at /rustc/2d8144b7880597b6e6d3dfd63a9a9efae3f533d3/library/core/src/ops/function.rs:250:5
+   7: <fn() -> core::result::Result<(), alloc::string::String> as core::ops::function::FnOnce<()>>::call_once
+             at /rustc/2d8144b7880597b6e6d3dfd63a9a9efae3f533d3/library/core/src/ops/function.rs:250:5
+note: Some details are omitted, run with `RUST_BACKTRACE=full` for a verbose backtrace.
+
+---- tests::token_panics stdout ----
+
+thread 'tests::token_panics' (2458) panicked at src/lib.rs:7:33:
+token provider unavailable
+stack backtrace:
+   0: __rustc::rust_begin_unwind
+             at /rustc/2d8144b7880597b6e6d3dfd63a9a9efae3f533d3/library/std/src/panicking.rs:689:5
+   1: core::panicking::panic_fmt
+             at /rustc/2d8144b7880597b6e6d3dfd63a9a9efae3f533d3/library/core/src/panicking.rs:80:14
+   2: rs::tests::token_panics
+             at ./src/lib.rs:7:33
+   3: rs::tests::token_panics::{closure#0}
+             at ./src/lib.rs:7:30
+   4: <rs::tests::token_panics::{closure#0} as core::ops::function::FnOnce<()>>::call_once
+             at /rustc/2d8144b7880597b6e6d3dfd63a9a9efae3f533d3/library/core/src/ops/function.rs:250:5
+   5: <fn() -> core::result::Result<(), alloc::string::String> as core::ops::function::FnOnce<()>>::call_once
+             at /rustc/2d8144b7880597b6e6d3dfd63a9a9efae3f533d3/library/core/src/ops/function.rs:250:5
+note: Some details are omitted, run with `RUST_BACKTRACE=full` for a verbose backtrace.
+
+
+failures:
+    tests::refresh_works
+    tests::token_panics
+
+test result: FAILED. 1 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.28s
+
+error: test failed, to rerun pass `--lib`

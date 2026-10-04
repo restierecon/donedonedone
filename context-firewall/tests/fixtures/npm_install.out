@@ -1,0 +1,55 @@
+npm WARN deprecated pkg0@1.0.0: This package is no longer supported.
+npm WARN deprecated pkg1@1.0.1: This package is no longer supported.
+npm WARN deprecated pkg2@1.0.2: This package is no longer supported.
+npm WARN deprecated pkg3@1.0.3: This package is no longer supported.
+npm WARN deprecated pkg4@1.0.4: This package is no longer supported.
+npm WARN deprecated pkg5@1.0.5: This package is no longer supported.
+npm WARN deprecated pkg6@1.0.6: This package is no longer supported.
+npm WARN deprecated pkg7@1.0.7: This package is no longer supported.
+npm WARN deprecated pkg8@1.0.8: This package is no longer supported.
+npm WARN deprecated pkg9@1.0.9: This package is no longer supported.
+npm WARN deprecated pkg10@1.0.10: This package is no longer supported.
+npm WARN deprecated pkg11@1.0.11: This package is no longer supported.
+npm WARN deprecated pkg12@1.0.12: This package is no longer supported.
+npm WARN deprecated pkg13@1.0.13: This package is no longer supported.
+npm WARN deprecated pkg14@1.0.14: This package is no longer supported.
+npm WARN deprecated pkg15@1.0.15: This package is no longer supported.
+npm WARN deprecated pkg16@1.0.16: This package is no longer supported.
+npm WARN deprecated pkg17@1.0.17: This package is no longer supported.
+npm WARN deprecated pkg18@1.0.18: This package is no longer supported.
+npm WARN deprecated pkg19@1.0.19: This package is no longer supported.
+npm WARN deprecated pkg20@1.0.20: This package is no longer supported.
+npm WARN deprecated pkg21@1.0.21: This package is no longer supported.
+npm WARN deprecated pkg22@1.0.22: This package is no longer supported.
+npm WARN deprecated pkg23@1.0.23: This package is no longer supported.
+npm WARN deprecated pkg24@1.0.24: This package is no longer supported.
+⠸⠐ idealTree:lib: sill idealTree buildDeps
+⠸⠐ idealTree:lib: sill idealTree buildDeps
+⠸⠐ idealTree:lib: sill idealTree buildDeps
+⠸⠐ idealTree:lib: sill idealTree buildDeps
+⠸⠐ idealTree:lib: sill idealTree buildDeps
+⠸⠐ idealTree:lib: sill idealTree buildDeps
+⠸⠐ idealTree:lib: sill idealTree buildDeps
+⠸⠐ idealTree:lib: sill idealTree buildDeps
+⠸⠐ idealTree:lib: sill idealTree buildDeps
+⠸⠐ idealTree:lib: sill idealTree buildDeps
+⠸⠐ idealTree:lib: sill idealTree buildDeps
+⠸⠐ idealTree:lib: sill idealTree buildDeps
+⠸⠐ idealTree:lib: sill idealTree buildDeps
+⠸⠐ idealTree:lib: sill idealTree buildDeps
+⠸⠐ idealTree:lib: sill idealTree buildDeps
+⠸⠐ idealTree:lib: sill idealTree buildDeps
+⠸⠐ idealTree:lib: sill idealTree buildDeps
+⠸⠐ idealTree:lib: sill idealTree buildDeps
+⠸⠐ idealTree:lib: sill idealTree buildDeps
+⠸⠐ idealTree:lib: sill idealTree buildDeps
+
+added 1342 packages, and audited 1343 packages in 41s
+
+212 packages are looking for funding
+  run `npm fund` for details
+
+7 vulnerabilities (2 low, 4 moderate, 1 high)
+
+To address issues that do not require attention, run:
+  npm audit fix

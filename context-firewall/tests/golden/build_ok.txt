@@ -1,0 +1,7 @@
+[ddd] build | art-ID | exit 0 | build:diagnostics/high | ~5.3k->94 tok est
+BUILD PASSED (exit 0)
+Errors: 0  Warnings: 1
+webpack 5.90.0 compiled with 1 warning in 18412 ms
+WARNINGS (1):
+./src/legacy.ts:12:4 export 'old' (imported as 'old') was not found in './util'
+[ddd] full output: ddd artifact art-ID [--section NAME | --lines A-B | --raw]

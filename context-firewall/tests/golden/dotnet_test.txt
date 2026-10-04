@@ -1,0 +1,14 @@
+[ddd] test | art-ID | exit 1 | dotnet test/high | ~278->172 tok est
+TEST RESULT
+Status: FAILED
+Passed: 211  Failed: 1  Skipped: 3  Total: 215
+Failed!  - Failed:     1, Passed:   211, Skipped:     3, Total:   215, Duration: 1 s - Auth.Tests.dll (net8.0)
+FAILURES
+1. Auth.Tests.SessionTests.RefreshReturnsNewToken
+   /work/Auth.Tests/SessionTests.cs:42
+   Assert.Equal() Failure: Strings differ
+   Expected: "abc-refreshed"
+   Actual:   "abc-r"
+   at Auth.Tests.SessionTests.RefreshReturnsNewToken() in /work/Auth.Tests/SessionTests.cs:line 42
+   (raw L11-20; --failure 1)
+[ddd] full output: ddd artifact art-ID [--section NAME | --lines A-B | --raw]

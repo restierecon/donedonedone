@@ -1,0 +1,12 @@
+[ddd] test | art-ID | exit 1 | maven surefire/high | ~1.4k->168 tok est
+TEST RESULT
+Status: FAILED
+Passed: 15  Failed: 1  Errors: 0  Skipped: 1  Total: 17
+[ERROR] Tests run: 17, Failures: 1, Errors: 0, Skipped: 1
+FAILURES
+1. com.acme.auth.SessionTest.refreshReturnsNewToken
+   [ERROR] com.acme.auth.SessionTest.refreshReturnsNewToken  Time elapsed: 0.01 s  <<< FAILURE!
+   org.opentest4j.AssertionFailedError: expected: <abc-refreshed> but was: <abc-r>
+   at com.acme.auth.SessionTest.refreshReturnsNewToken(SessionTest.java:42)
+   (raw L49-57; --failure 1)
+[ddd] full output: ddd artifact art-ID [--section NAME | --lines A-B | --raw]

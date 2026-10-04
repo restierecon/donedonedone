@@ -1,0 +1,60 @@
+[ddd] directory-listing | art-ID | exit 0 | listing:paths/medium | ~1.5k->364 tok est
+LISTING  entries: 158  files: 119  dirs: 38  (depth 2 shown; heavy dirs collapsed)
+.github/
+  workflows/ (1 files)
+agents/
+  auditor.md
+  builder.md
+  planner.md
+  retro.md
+  reviewer.md
+  scribe.md
+context-firewall/
+  firewall/ (58 files)
+  tests/ (2 files)
+  ddd.py
+evals/
+  README.md
+  scorecard.md
+scripts/
+  agents-md.sh
+  checkpoint.sh
+  find-comments.sh
+  gate.sh
+  generate-agents.sh
+  guard.sh
+  lint.sh
+  log-event.sh
+  session-start.sh
+  validate-manifests.sh
+skills/
+  api-and-interface-design/ (1 files)
+  architecture-review/ (1 files)
+  code-review-and-quality/ (1 files)
+  compaction/ (1 files)
+  context-engineering/ (1 files)
+  debugging-and-error-recovery/ (1 files)
+  deprecation-and-migration/ (1 files)
+  frontend-ui-engineering/ (1 files)
+  git-workflow-and-versioning/ (1 files)
+  grill/ (1 files)
+  harvest/ (1 files)
+  incremental-implementation/ (1 files)
+  init-vault/ (1 files)
+  learning-loop/ (1 files)
+  observability-and-instrumentation/ (1 files)
+  parallel-dispatch/ (1 files)
+  performance-optimization/ (1 files)
+  security-and-hardening/ (1 files)
+  shipping-and-launch/ (1 files)
+  slice-planning/ (1 files)
+  user-story/ (4 files)
+tests/
+  fixtures/ (9 files)
+  run-tests.sh
+CLAUDE.md
+install.sh
+LICENSE
+README.md
+settings.json
+[ddd] full output: ddd artifact art-ID [--section NAME | --lines A-B | --raw]

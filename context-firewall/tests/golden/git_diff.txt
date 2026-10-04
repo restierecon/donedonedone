@@ -1,0 +1,45 @@
+[ddd] git-diff | art-ID | exit 0 | unified-diff/high | ~9.5k->313 tok est
+GIT DIFF
+Files changed: 6  Insertions: +766  Deletions: -4
+Hunks hidden for 1 lock/generated file(s): package-lock.json
+FILES:
+B logo.png  (binary)
+M package-lock.json  +756 -1
+M src/api/routes.ts  +2 -2
+M src/auth/session.py  +7 -1  [Session, rotate]
+A src/auth/token.ts  +1 -0
+R src/helpers_old.ts -> src/helpers.ts  +0 -0  (similarity 100%)
+--- src/api/routes.ts  (raw L766-787)
+@@ -3,7 +3,7 @@ line 2
+ ... (2 unchanged lines)
+ line 5
+-line 6
++line 6 changed
+ line 7
+ ... (2 unchanged lines)
+@@ -28,7 +28,7 @@ line 27
+ ... (2 unchanged lines)
+ line 30
+-line 31
++line 31 changed
+ line 32
+ ... (2 unchanged lines)
+--- src/auth/session.py  (raw L788-806)
+@@ -4,7 +4,13 @@ class Session:
+ ... (2 unchanged lines)
+         data = self.store.get(token)
+-        return data
++        if data is None:
++            raise KeyError(token)
++        return TokenProvider.refresh(data)
+
+ ... (1 unchanged lines)
+         self.store.clear()
++
++
++def rotate(session, provider):
++    return provider.rotate(session.store)
+--- src/auth/token.ts  (raw L807-813)
+@@ -0,0 +1 @@
++new
+[ddd] full output: ddd artifact art-ID [--section NAME | --lines A-B | --raw]

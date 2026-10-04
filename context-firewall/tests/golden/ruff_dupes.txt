@@ -1,0 +1,8 @@
+[ddd] lint | art-ID | exit 1 | lint:diagnostics/high | ~1.4k->118 tok est
+LINT FAILED (exit 1)
+Errors: 0  Warnings: 0  Issues: 119  (repeats collapsed below)
+Found 119 errors.
+ISSUES (119):
+src/mod1.py:1:1 E501 Line too long (91 > 88)
+  same at: src/mod2.py:2:1, src/mod3.py:3:1, src/mod4.py:4:1, src/mod0.py:5:1, src/mod1.py:6:1, ... (+113)  [x119 similar]
+[ddd] full output: ddd artifact art-ID [--section NAME | --lines A-B | --raw]

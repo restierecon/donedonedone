@@ -1,0 +1,13 @@
+[ddd] stack-trace | art-ID | exit 1 | stack-trace/medium | ~694->224 tok est
+STACK TRACE  traces: 1  frames: 30 (4 application frames shown, library frames collapsed)
+Exception: java.lang.IllegalStateException: Session expired for user 42
+L1: 2026-10-04 10:41:02.123 ERROR 4242 --- [nio-8080-exec-1] o.a.c.c.C.[.[.[/].[dispatcherServlet]    : Servlet.service() threw exception
+L2: java.lang.IllegalStateException: Session expired for user 42
+L3: 	at com.acme.auth.Session.refresh(Session.java:88)
+L4: 	at com.acme.auth.TokenProvider.refresh(TokenProvider.java:31)
+    ... 26 framework/library frames
+L31: Caused by: java.io.IOException: store unavailable
+L32: 	at com.acme.auth.SessionStore.get(SessionStore.java:19)
+L33: 	at com.acme.auth.Session.refresh(Session.java:85)
+	... 27 more
+[ddd] full output: ddd artifact art-ID [--section NAME | --lines A-B | --raw]

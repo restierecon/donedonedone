@@ -1,0 +1,484 @@
+.
+├── src
+│   ├── auth
+│   │   ├── file0.ts
+│   │   ├── file1.ts
+│   │   ├── file2.ts
+│   │   ├── file3.ts
+│   │   ├── file4.ts
+│   │   └── file5.ts
+│   ├── api
+│   │   ├── file0.ts
+│   │   ├── file1.ts
+│   │   ├── file2.ts
+│   │   ├── file3.ts
+│   │   ├── file4.ts
+│   │   └── file5.ts
+│   ├── services
+│   │   ├── file0.ts
+│   │   ├── file1.ts
+│   │   ├── file2.ts
+│   │   ├── file3.ts
+│   │   ├── file4.ts
+│   │   └── file5.ts
+│   └── util
+│       ├── file0.ts
+│       ├── file1.ts
+│       ├── file2.ts
+│       ├── file3.ts
+│       ├── file4.ts
+│       └── file5.ts
+├── tests
+│   ├── auth
+│   │   ├── file0.ts
+│   │   ├── file1.ts
+│   │   ├── file2.ts
+│   │   ├── file3.ts
+│   │   ├── file4.ts
+│   │   └── file5.ts
+│   ├── api
+│   │   ├── file0.ts
+│   │   ├── file1.ts
+│   │   ├── file2.ts
+│   │   ├── file3.ts
+│   │   ├── file4.ts
+│   │   └── file5.ts
+│   ├── services
+│   │   ├── file0.ts
+│   │   ├── file1.ts
+│   │   ├── file2.ts
+│   │   ├── file3.ts
+│   │   ├── file4.ts
+│   │   └── file5.ts
+│   └── util
+│       ├── file0.ts
+│       ├── file1.ts
+│       ├── file2.ts
+│       ├── file3.ts
+│       ├── file4.ts
+│       └── file5.ts
+├── node_modules
+│   ├── pkg0
+│   │   ├── file0.ts
+│   │   ├── file1.ts
+│   │   ├── file2.ts
+│   │   ├── file3.ts
+│   │   ├── file4.ts
+│   │   └── file5.ts
+│   ├── pkg1
+│   │   ├── file0.ts
+│   │   ├── file1.ts
+│   │   ├── file2.ts
+│   │   ├── file3.ts
+│   │   ├── file4.ts
+│   │   └── file5.ts
+│   ├── pkg2
+│   │   ├── file0.ts
+│   │   ├── file1.ts
+│   │   ├── file2.ts
+│   │   ├── file3.ts
+│   │   ├── file4.ts
+│   │   └── file5.ts
+│   ├── pkg3
+│   │   ├── file0.ts
+│   │   ├── file1.ts
+│   │   ├── file2.ts
+│   │   ├── file3.ts
+│   │   ├── file4.ts
+│   │   └── file5.ts
+│   ├── pkg4
+│   │   ├── file0.ts
+│   │   ├── file1.ts
+│   │   ├── file2.ts
+│   │   ├── file3.ts
+│   │   ├── file4.ts
+│   │   └── file5.ts
+│   ├── pkg5
+│   │   ├── file0.ts
+│   │   ├── file1.ts
+│   │   ├── file2.ts
+│   │   ├── file3.ts
+│   │   ├── file4.ts
+│   │   └── file5.ts
+│   ├── pkg6
+│   │   ├── file0.ts
+│   │   ├── file1.ts
+│   │   ├── file2.ts
+│   │   ├── file3.ts
+│   │   ├── file4.ts
+│   │   └── file5.ts
+│   ├── pkg7
+│   │   ├── file0.ts
+│   │   ├── file1.ts
+│   │   ├── file2.ts
+│   │   ├── file3.ts
+│   │   ├── file4.ts
+│   │   └── file5.ts
+│   ├── pkg8
+│   │   ├── file0.ts
+│   │   ├── file1.ts
+│   │   ├── file2.ts
+│   │   ├── file3.ts
+│   │   ├── file4.ts
+│   │   └── file5.ts
+│   ├── pkg9
+│   │   ├── file0.ts
+│   │   ├── file1.ts
+│   │   ├── file2.ts
+│   │   ├── file3.ts
+│   │   ├── file4.ts
+│   │   └── file5.ts
+│   ├── pkg10
+│   │   ├── file0.ts
+│   │   ├── file1.ts
+│   │   ├── file2.ts
+│   │   ├── file3.ts
+│   │   ├── file4.ts
+│   │   └── file5.ts
+│   ├── pkg11
+│   │   ├── file0.ts
+│   │   ├── file1.ts
+│   │   ├── file2.ts
+│   │   ├── file3.ts
+│   │   ├── file4.ts
+│   │   └── file5.ts
+│   ├── pkg12
+│   │   ├── file0.ts
+│   │   ├── file1.ts
+│   │   ├── file2.ts
+│   │   ├── file3.ts
+│   │   ├── file4.ts
+│   │   └── file5.ts
+│   ├── pkg13
+│   │   ├── file0.ts
+│   │   ├── file1.ts
+│   │   ├── file2.ts
+│   │   ├── file3.ts
+│   │   ├── file4.ts
+│   │   └── file5.ts
+│   ├── pkg14
+│   │   ├── file0.ts
+│   │   ├── file1.ts
+│   │   ├── file2.ts
+│   │   ├── file3.ts
+│   │   ├── file4.ts
+│   │   └── file5.ts
+│   ├── pkg15
+│   │   ├── file0.ts
+│   │   ├── file1.ts
+│   │   ├── file2.ts
+│   │   ├── file3.ts
+│   │   ├── file4.ts
+│   │   └── file5.ts
+│   ├── pkg16
+│   │   ├── file0.ts
+│   │   ├── file1.ts
+│   │   ├── file2.ts
+│   │   ├── file3.ts
+│   │   ├── file4.ts
+│   │   └── file5.ts
+│   ├── pkg17
+│   │   ├── file0.ts
+│   │   ├── file1.ts
+│   │   ├── file2.ts
+│   │   ├── file3.ts
+│   │   ├── file4.ts
+│   │   └── file5.ts
+│   ├── pkg18
+│   │   ├── file0.ts
+│   │   ├── file1.ts
+│   │   ├── file2.ts
+│   │   ├── file3.ts
+│   │   ├── file4.ts
+│   │   └── file5.ts
+│   ├── pkg19
+│   │   ├── file0.ts
+│   │   ├── file1.ts
+│   │   ├── file2.ts
+│   │   ├── file3.ts
+│   │   ├── file4.ts
+│   │   └── file5.ts
+│   ├── pkg20
+│   │   ├── file0.ts
+│   │   ├── file1.ts
+│   │   ├── file2.ts
+│   │   ├── file3.ts
+│   │   ├── file4.ts
+│   │   └── file5.ts
+│   ├── pkg21
+│   │   ├── file0.ts
+│   │   ├── file1.ts
+│   │   ├── file2.ts
+│   │   ├── file3.ts
+│   │   ├── file4.ts
+│   │   └── file5.ts
+│   ├── pkg22
+│   │   ├── file0.ts
+│   │   ├── file1.ts
+│   │   ├── file2.ts
+│   │   ├── file3.ts
+│   │   ├── file4.ts
+│   │   └── file5.ts
+│   ├── pkg23
+│   │   ├── file0.ts
+│   │   ├── file1.ts
+│   │   ├── file2.ts
+│   │   ├── file3.ts
+│   │   ├── file4.ts
+│   │   └── file5.ts
+│   ├── pkg24
+│   │   ├── file0.ts
+│   │   ├── file1.ts
+│   │   ├── file2.ts
+│   │   ├── file3.ts
+│   │   ├── file4.ts
+│   │   └── file5.ts
+│   ├── pkg25
+│   │   ├── file0.ts
+│   │   ├── file1.ts
+│   │   ├── file2.ts
+│   │   ├── file3.ts
+│   │   ├── file4.ts
+│   │   └── file5.ts
+│   ├── pkg26
+│   │   ├── file0.ts
+│   │   ├── file1.ts
+│   │   ├── file2.ts
+│   │   ├── file3.ts
+│   │   ├── file4.ts
+│   │   └── file5.ts
+│   ├── pkg27
+│   │   ├── file0.ts
+│   │   ├── file1.ts
+│   │   ├── file2.ts
+│   │   ├── file3.ts
+│   │   ├── file4.ts
+│   │   └── file5.ts
+│   ├── pkg28
+│   │   ├── file0.ts
+│   │   ├── file1.ts
+│   │   ├── file2.ts
+│   │   ├── file3.ts
+│   │   ├── file4.ts
+│   │   └── file5.ts
+│   ├── pkg29
+│   │   ├── file0.ts
+│   │   ├── file1.ts
+│   │   ├── file2.ts
+│   │   ├── file3.ts
+│   │   ├── file4.ts
+│   │   └── file5.ts
+│   ├── pkg30
+│   │   ├── file0.ts
+│   │   ├── file1.ts
+│   │   ├── file2.ts
+│   │   ├── file3.ts
+│   │   ├── file4.ts
+│   │   └── file5.ts
+│   ├── pkg31
+│   │   ├── file0.ts
+│   │   ├── file1.ts
+│   │   ├── file2.ts
+│   │   ├── file3.ts
+│   │   ├── file4.ts
+│   │   └── file5.ts
+│   ├── pkg32
+│   │   ├── file0.ts
+│   │   ├── file1.ts
+│   │   ├── file2.ts
+│   │   ├── file3.ts
+│   │   ├── file4.ts
+│   │   └── file5.ts
+│   ├── pkg33
+│   │   ├── file0.ts
+│   │   ├── file1.ts
+│   │   ├── file2.ts
+│   │   ├── file3.ts
+│   │   ├── file4.ts
+│   │   └── file5.ts
+│   ├── pkg34
+│   │   ├── file0.ts
+│   │   ├── file1.ts
+│   │   ├── file2.ts
+│   │   ├── file3.ts
+│   │   ├── file4.ts
+│   │   └── file5.ts
+│   ├── pkg35
+│   │   ├── file0.ts
+│   │   ├── file1.ts
+│   │   ├── file2.ts
+│   │   ├── file3.ts
+│   │   ├── file4.ts
+│   │   └── file5.ts
+│   ├── pkg36
+│   │   ├── file0.ts
+│   │   ├── file1.ts
+│   │   ├── file2.ts
+│   │   ├── file3.ts
+│   │   ├── file4.ts
+│   │   └── file5.ts
+│   ├── pkg37
+│   │   ├── file0.ts
+│   │   ├── file1.ts
+│   │   ├── file2.ts
+│   │   ├── file3.ts
+│   │   ├── file4.ts
+│   │   └── file5.ts
+│   ├── pkg38
+│   │   ├── file0.ts
+│   │   ├── file1.ts
+│   │   ├── file2.ts
+│   │   ├── file3.ts
+│   │   ├── file4.ts
+│   │   └── file5.ts
+│   ├── pkg39
+│   │   ├── file0.ts
+│   │   ├── file1.ts
+│   │   ├── file2.ts
+│   │   ├── file3.ts
+│   │   ├── file4.ts
+│   │   └── file5.ts
+│   ├── pkg40
+│   │   ├── file0.ts
+│   │   ├── file1.ts
+│   │   ├── file2.ts
+│   │   ├── file3.ts
+│   │   ├── file4.ts
+│   │   └── file5.ts
+│   ├── pkg41
+│   │   ├── file0.ts
+│   │   ├── file1.ts
+│   │   ├── file2.ts
+│   │   ├── file3.ts
+│   │   ├── file4.ts
+│   │   └── file5.ts
+│   ├── pkg42
+│   │   ├── file0.ts
+│   │   ├── file1.ts
+│   │   ├── file2.ts
+│   │   ├── file3.ts
+│   │   ├── file4.ts
+│   │   └── file5.ts
+│   ├── pkg43
+│   │   ├── file0.ts
+│   │   ├── file1.ts
+│   │   ├── file2.ts
+│   │   ├── file3.ts
+│   │   ├── file4.ts
+│   │   └── file5.ts
+│   ├── pkg44
+│   │   ├── file0.ts
+│   │   ├── file1.ts
+│   │   ├── file2.ts
+│   │   ├── file3.ts
+│   │   ├── file4.ts
+│   │   └── file5.ts
+│   ├── pkg45
+│   │   ├── file0.ts
+│   │   ├── file1.ts
+│   │   ├── file2.ts
+│   │   ├── file3.ts
+│   │   ├── file4.ts
+│   │   └── file5.ts
+│   ├── pkg46
+│   │   ├── file0.ts
+│   │   ├── file1.ts
+│   │   ├── file2.ts
+│   │   ├── file3.ts
+│   │   ├── file4.ts
+│   │   └── file5.ts
+│   ├── pkg47
+│   │   ├── file0.ts
+│   │   ├── file1.ts
+│   │   ├── file2.ts
+│   │   ├── file3.ts
+│   │   ├── file4.ts
+│   │   └── file5.ts
+│   ├── pkg48
+│   │   ├── file0.ts
+│   │   ├── file1.ts
+│   │   ├── file2.ts
+│   │   ├── file3.ts
+│   │   ├── file4.ts
+│   │   └── file5.ts
+│   ├── pkg49
+│   │   ├── file0.ts
+│   │   ├── file1.ts
+│   │   ├── file2.ts
+│   │   ├── file3.ts
+│   │   ├── file4.ts
+│   │   └── file5.ts
+│   ├── pkg50
+│   │   ├── file0.ts
+│   │   ├── file1.ts
+│   │   ├── file2.ts
+│   │   ├── file3.ts
+│   │   ├── file4.ts
+│   │   └── file5.ts
+│   ├── pkg51
+│   │   ├── file0.ts
+│   │   ├── file1.ts
+│   │   ├── file2.ts
+│   │   ├── file3.ts
+│   │   ├── file4.ts
+│   │   └── file5.ts
+│   ├── pkg52
+│   │   ├── file0.ts
+│   │   ├── file1.ts
+│   │   ├── file2.ts
+│   │   ├── file3.ts
+│   │   ├── file4.ts
+│   │   └── file5.ts
+│   ├── pkg53
+│   │   ├── file0.ts
+│   │   ├── file1.ts
+│   │   ├── file2.ts
+│   │   ├── file3.ts
+│   │   ├── file4.ts
+│   │   └── file5.ts
+│   ├── pkg54
+│   │   ├── file0.ts
+│   │   ├── file1.ts
+│   │   ├── file2.ts
+│   │   ├── file3.ts
+│   │   ├── file4.ts
+│   │   └── file5.ts
+│   ├── pkg55
+│   │   ├── file0.ts
+│   │   ├── file1.ts
+│   │   ├── file2.ts
+│   │   ├── file3.ts
+│   │   ├── file4.ts
+│   │   └── file5.ts
+│   ├── pkg56
+│   │   ├── file0.ts
+│   │   ├── file1.ts
+│   │   ├── file2.ts
+│   │   ├── file3.ts
+│   │   ├── file4.ts
+│   │   └── file5.ts
+│   ├── pkg57
+│   │   ├── file0.ts
+│   │   ├── file1.ts
+│   │   ├── file2.ts
+│   │   ├── file3.ts
+│   │   ├── file4.ts
+│   │   └── file5.ts
+│   ├── pkg58
+│   │   ├── file0.ts
+│   │   ├── file1.ts
+│   │   ├── file2.ts
+│   │   ├── file3.ts
+│   │   ├── file4.ts
+│   │   └── file5.ts
+│   └── pkg59
+│       ├── file0.ts
+│       ├── file1.ts
+│       ├── file2.ts
+│       ├── file3.ts
+│       ├── file4.ts
+│       └── file5.ts
+├── package.json
+└── tsconfig.json
+
+270 directories, 400 files

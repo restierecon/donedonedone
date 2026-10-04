@@ -1,0 +1,24 @@
+[ddd] generic-command | art-ID | exit 1 | generic/low | ~914->235 tok est
+121 lines (showing head, tail and error/warning lines)
+ERRORS / WARNINGS
+L121: ✖ 失败: 期待 'a' 実際 'b' — Fehler in Straße.py:12
+MOST REPEATED LINES
+L1: ✔ テスト 0 été 你好 🚀 résultat ok  [x120 similar]
+HEAD
+L1: ✔ テスト 0 été 你好 🚀 résultat ok
+L2: ✔ テスト 1 été 你好 🚀 résultat ok
+L3: ✔ テスト 2 été 你好 🚀 résultat ok
+L4: ✔ テスト 3 été 你好 🚀 résultat ok
+L5: ✔ テスト 4 été 你好 🚀 résultat ok
+TAIL
+L112: ✔ テスト 111 été 你好 🚀 résultat ok
+L113: ✔ テスト 112 été 你好 🚀 résultat ok
+L114: ✔ テスト 113 été 你好 🚀 résultat ok
+L115: ✔ テスト 114 été 你好 🚀 résultat ok
+L116: ✔ テスト 115 été 你好 🚀 résultat ok
+L117: ✔ テスト 116 été 你好 🚀 résultat ok
+L118: ✔ テスト 117 été 你好 🚀 résultat ok
+L119: ✔ テスト 118 été 你好 🚀 résultat ok
+L120: ✔ テスト 119 été 你好 🚀 résultat ok
+L121: ✖ 失败: 期待 'a' 実際 'b' — Fehler in Straße.py:12
+[ddd] full output: ddd artifact art-ID [--section NAME | --lines A-B | --raw]

@@ -1,0 +1,30 @@
+ RUN  v1.6.0 /work/app
+
+ ✓ src/util/format.test.ts  (12 tests) 8ms
+ ✓ src/api/routes.test.ts  (30 tests) 41ms
+ ❯ src/auth/session.test.ts  (4 tests | 1 failed) 12ms
+   × Session > refresh returns a new token
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/auth/session.test.ts > Session > refresh returns a new token
+AssertionError: expected 'abc-r' to be 'abc-refreshed' // Object.is equality
+
+- Expected
++ Received
+
+- abc-refreshed
++ abc-r
+
+ ❯ src/auth/session.test.ts:142:15
+    140|     const s = new Session(store);
+    141|     const t = await s.refresh("abc");
+    142|     expect(t).toBe("abc-refreshed");
+       |               ^
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed | 2 passed (3)
+      Tests  1 failed | 45 passed (46)
+   Start at  10:41:02
+   Duration  1.32s (transform 210ms, setup 0ms, collect 400ms, tests 61ms)

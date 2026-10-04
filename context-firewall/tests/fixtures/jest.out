@@ -1,0 +1,81 @@
+PASS src/api/routes.test.ts
+PASS src/util/format.test.ts
+FAIL src/auth/session.test.ts
+  Session
+    ✓ creates a session (3 ms)
+    ✕ refresh returns a new token (5 ms)
+    ✓ handles case 0 (6 ms)
+    ✓ handles case 1 (3 ms)
+    ✓ handles case 2 (7 ms)
+    ✓ handles case 3 (1 ms)
+    ✓ handles case 4 (2 ms)
+    ✓ handles case 5 (9 ms)
+    ✓ handles case 6 (2 ms)
+    ✓ handles case 7 (6 ms)
+    ✓ handles case 8 (1 ms)
+    ✓ handles case 9 (9 ms)
+    ✓ handles case 10 (4 ms)
+    ✓ handles case 11 (1 ms)
+    ✓ handles case 12 (2 ms)
+    ✓ handles case 13 (7 ms)
+    ✓ handles case 14 (7 ms)
+    ✓ handles case 15 (2 ms)
+    ✓ handles case 16 (4 ms)
+    ✓ handles case 17 (2 ms)
+    ✓ handles case 18 (9 ms)
+    ✓ handles case 19 (7 ms)
+    ✓ handles case 20 (1 ms)
+    ✓ handles case 21 (2 ms)
+    ✓ handles case 22 (4 ms)
+    ✓ handles case 23 (1 ms)
+    ✓ handles case 24 (7 ms)
+    ✓ handles case 25 (1 ms)
+    ✓ handles case 26 (4 ms)
+    ✓ handles case 27 (1 ms)
+    ✓ handles case 28 (9 ms)
+    ✓ handles case 29 (3 ms)
+    ✓ handles case 30 (5 ms)
+    ✓ handles case 31 (7 ms)
+    ✓ handles case 32 (3 ms)
+    ✓ handles case 33 (9 ms)
+    ✓ handles case 34 (2 ms)
+    ✓ handles case 35 (5 ms)
+    ✓ handles case 36 (9 ms)
+    ✓ handles case 37 (3 ms)
+    ✓ handles case 38 (2 ms)
+    ✓ handles case 39 (4 ms)
+  ● Session › refresh returns a new token
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: "abc-refreshed"
+    Received: "abc-r"
+
+      140 |     const s = new Session(store);
+      141 |     const t = await s.refresh("abc");
+    > 142 |     expect(t).toBe("abc-refreshed");
+          |               ^
+      143 |   });
+      144 |
+
+      at Object.<anonymous> (src/auth/session.test.ts:142:15)
+      at processTicksAndRejections (node:internal/process/task_queues:95:5)
+
+  ● TokenProvider › refresh rejects expired tokens
+
+    TypeError: provider.get is not a function
+
+      85 |   it("refresh rejects expired tokens", async () => {
+      86 |     const p = new TokenProvider();
+    > 87 |     await expect(p.refresh("old")).rejects.toThrow("expired");
+         |                    ^
+
+      at TokenProvider.refresh (src/auth/token.ts:21:23)
+      at Object.<anonymous> (src/auth/token.test.ts:87:20)
+      at node_modules/jest-circus/build/utils.js:298:28
+
+Test Suites: 2 failed, 41 passed, 43 total
+Tests:       2 failed, 12 skipped, 1244 passed, 1258 total
+Snapshots:   0 total
+Time:        18.412 s
+Ran all test suites.

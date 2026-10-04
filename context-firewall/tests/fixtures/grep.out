@@ -1,0 +1,94 @@
+CLAUDE.md:23:| planner | Turns a grilled spec into vertical slices (draft plan file + table) | Once per feature, after /grill |
+CLAUDE.md:24:| builder | Implements one vertical slice end-to-end | Every slice |
+CLAUDE.md:25:| reviewer | Cold-eyes verification vs acceptance criteria + slop checklist | Every slice |
+CLAUDE.md:26:| auditor | Adversarial security pass | Only slices touching auth, data access, user input, secrets, deps, or external calls |
+CLAUDE.md:27:| scribe | Harvests the story, compacts handoffs, checkpoints memory | Once per completed slice; when handoffs/current.md > 400 lines; before ending a session mid-slice |
+CLAUDE.md:28:| retro | Mines log.jsonl for failures that recur across slices; proposes the fix to the setup | With every architecture review; at once when log-event.sh prints RETRO DUE (learning-loop skill) |
+CLAUDE.md:30:Model routing: builder runs on `sonnet` (pass `model` on the Agent call) for slices
+CLAUDE.md:36:No slice exists without a grill. Every feature, bugfix and refactor — however small —
+CLAUDE.md:43:then copy the approved slices into task-tree.json yourself and delete the draft. A
+CLAUDE.md:45:Every slice is autonomous: named "Actor can [do something]", touches every layer that
+CLAUDE.md:47:mid-build. A slice only blocks slices naming it in `depends_on`. Independent slices may
+CLAUDE.md:49:(max_parallel_slices in vault/project.md, default 3).
+CLAUDE.md:51:## Completion Gates (slice is DONE only when all pass, in order)
+CLAUDE.md:54:2. Automated: you run `gate.sh` once, in the slice's checkout, at the builder's SHA
+CLAUDE.md:71:every added line. An adopted codebase's existing comments stay until a slice rewrites
+CLAUDE.md:77:the slice's story to vault/stories.md (format: harvest skill) and compacts handoffs.
+CLAUDE.md:78:Then delete the slice from task-tree.json and commit both files together.
+CLAUDE.md:80:(shipped) — check stories.md if an ID looks unfamiliar. Never prune a slice that isn't
+CLAUDE.md:83:## Git Discipline (branch-per-slice — main is always green)
+CLAUDE.md:84:- Slice start: `git checkout -b slice/<ID>` (parallel wave: a worktree — see the
+CLAUDE.md:86:- Commits: Conventional Commits, imperative, slice ID — `feat(auth): add login endpoint (S002)`
+CLAUDE.md:90:- **Tier 2** — Builder retries with Reviewer critique. Max 2 rounds. For a slice the
+CLAUDE.md:98:- **Budget ceiling** — if a slice exceeds 10 builder/reviewer/auditor invocations
+CLAUDE.md:100:- **Escalate** = halt that slice, write a pending-review.md entry, continue with the
+CLAUDE.md:101:  next non-dependent slice. A human resolves it by re-grilling; the slice is then
+CLAUDE.md:105:- pending-review.md — escalated slices, Tier 3 tiebreaks, architecture candidates,
+CLAUDE.md:107:- blocked.md — Auditor CRITICAL only. Halt that slice, continue with next
+CLAUDE.md:108:  non-dependent slice. Never ship a known-critical finding.
+CLAUDE.md:113:- supervised — every slice pauses for human approval after gates (DEFAULT)
+CLAUDE.md:114:- semi — slices merge on green gates; any escalation or CLEARED-WITH-FINDINGS pauses
+CLAUDE.md:118:(10-slice clean streak from stories.md AND a dated passing scorecard). Never move the
+CLAUDE.md:123:- Working ahead into a slice whose `depends_on` isn't satisfied (independent parallel
+CLAUDE.md:132:max_parallel_slices) · task-tree.json (LIVE slices only) · stories.md (append-only,
+CLAUDE.md:133:every shipped slice) · memory/session.md (< 150 lines) · memory/hot.md (< 100 lines) ·
+CLAUDE.md:138:- The SessionStart hook injects session.md, live slices, git status and leftover
+CLAUDE.md:142:- Every 5 completed slices or at feature completion: run the architecture-review and
+agents/scribe.md:3:description: Use this agent once per completed slice, when vault/handoffs/current.md exceeds 400 lines, or before ending a session mid-slice. It harvests the slice's user story, compacts handoffs, archives completed slice context, checkpoints session memory, and seeds the next slice. Never writes application code, never runs commands.
+agents/scribe.md:19:Once per completed slice, when current.md exceeds 400 lines mid-slice, and before a
+agents/scribe.md:20:session ends mid-slice. Not after individual gates — the Director records those in
+agents/scribe.md:23:## On slice complete
+agents/scribe.md:36:1. Compress this slice's working file — vault/handoffs/current.md normally, or
+agents/scribe.md:39:2. Reset current.md with the next slice header only (or, mid-wave, remove the
+agents/scribe.md:40:   completed slice's entry from current.md's active-wave index and delete its
+agents/scribe.md:42:3. Move builder DECISIONS into vault/memory/hot.md (re-seeded for next slice)
+agents/scribe.md:44:4. Update session.md: completed list, next active slice(s). During a parallel wave,
+agents/scribe.md:45:   run per slice as each one completes — don't wait for its siblings.
+agents/scribe.md:47:## On size pressure (current.md > 400 lines, mid-slice)
+agents/scribe.md:60:CHECKPOINT: [gate/slice/compaction]
+agents/scribe.md:63:SESSION STATE: [active slice · active step · next gate]
+agents/planner.md:3:description: Use after /grill produces a spec, to decompose one feature into vertical slices. Reads the codebase so the Director doesn't have to, writes vault/handoffs/plan-draft.json, and returns a ≤ 20-line slice table. Never writes application code and never touches task-tree.json.
+agents/planner.md:8:You are the Planner. You turn one grilled spec into vertical slices, following the
+agents/planner.md:9:slice-planning skill exactly — load it first; it is the rulebook, this file is the job.
+agents/planner.md:20:   touches, the shared files two slices might both edit (routers, schema, config). You
+agents/planner.md:22:3. Draft slices per the slice-planning skill: "Actor can …" title, `so_that`,
+agents/planner.md:24:   slice must be buildable without a human decision; one that isn't means the grill
+agents/planner.md:25:   left a gap — report it as an open question, don't draft the slice.
+agents/planner.md:26:4. Write the slices as a JSON array (task-tree.json slice shape) to
+agents/planner.md:30:One pass. If the spec is too ambiguous to slice without inventing behavior, stop and
+agents/planner.md:35:PLAN: vault/handoffs/plan-draft.json — <n> slices
+agents/planner.md:37:(one row per slice)
+agents/planner.md:38:PARALLEL-SAFE: [slice sets that can run as one wave]
+agents/planner.md:39:SHARED FILES: [files more than one slice will touch — the Director watches these]
+agents/planner.md:40:ONE-WAY DOORS: [slice ids whose grill decisions are expensive to reverse]
+agents/retro.md:3:description: Use this agent with every architecture review, or immediately when log-event.sh prints RETRO DUE. Mines vault/log.jsonl for process failures that recurred across slices (reviewer rejections, tiebreaks, escalations, human corrections), traces each to the rule that let it through, and proposes the strongest fix — a mechanical check before more text. Returns proposals as text; never edits anything.
+agents/retro.md:15:The trigger (5-slice counter, or a RETRO DUE line naming a category and slices) and
+agents/retro.md:27:   the same failure in two or more slices, or any escalation. One slice failing once
+agents/retro.md:33:   skills/slice-planning), or specific to this project's stack (→ vault/project.md or
+agents/retro.md:48:RETRO: log lines <first>–<last> · <n> entries · <k> slices · trigger: <counter|RETRO DUE>
+agents/retro.md:50:  evidence: log.jsonl:<line>, <line> (<slice ids>)
+agents/reviewer.md:3:description: Use this agent after the builder reports COMPLETE on a slice. It reads the work cold — no knowledge of how it was produced — and verifies it against acceptance criteria and the slop checklist. Returns APPROVED or REJECTED with file:line critique. Never writes or edits code.
+agents/reviewer.md:14:gate result line (`GATE: PASS @ <sha>`), and a working directory if this slice was built
+agents/reviewer.md:16:the slice branch elsewhere, since sibling worktrees share the same repo.
+agents/reviewer.md:19:1. `git diff main...slice/<ID>` — review the actual diff, not the report's claims
+agents/reviewer.md:37:- [ ] No copy-paste duplication from prior slices
+agents/reviewer.md:41:- [ ] No scope creep — diff contains only this slice ("also improved X" = REJECT)
+agents/reviewer.md:47:with reason "slice too large — split it" rather than skimming.
+agents/reviewer.md:53:- OPTIONAL — a real improvement outside this slice's scope; goes to vault/flags/, not the critique
+agents/builder.md:3:description: Use this agent to implement one vertical slice end-to-end (schema, API, UI, tests). It returns a structured completion report with files changed, commit SHA, gate result, and the test covering each criterion. Invoke with one slice ID, its acceptance criteria, the path to hot memory, and any prior critique.
+agents/builder.md:8:You are the Builder. You implement exactly one vertical slice per invocation —
+agents/builder.md:15:another slice's worktree. If none is given, work on branch `slice/<ID>` as usual.
+agents/builder.md:20:2. Implement the minimum to go green, layer by layer through the slice.
+agents/builder.md:21:3. Refactor only within the slice. Commit, then run `~/.claude/scripts/gate.sh`
+agents/builder.md:54:- Copy-paste-modify from a previous slice — import it instead
+agents/builder.md:59:- Touching files outside the slice. Nearby improvements: note them in your report
+agents/builder.md:79:BRANCH: slice/[id]   SHA: [short sha gate.sh ran on]   FILES: [list]
+agents/auditor.md:3:description: Use this agent as the final gate on slices touching auth, sessions, data access, user input, file uploads, secrets, new dependencies, external calls, or LLM/agent tool surfaces. Maps trust boundaries, runs scanners plus a manual OWASP (incl. SSRF and LLM-specific) pass, and returns CLEARED or BLOCKED with severity-rated findings. Never writes or edits code.
+agents/auditor.md:13:Slice ID and a working directory if this slice was built in a `git worktree`
+agents/auditor.md:14:(parallel wave). Run scanners from inside that worktree — never check out the slice
+agents/auditor.md:15:branch elsewhere, since sibling worktrees for other in-flight slices share the repo.
+agents/auditor.md:18:1. `git diff main...slice/<ID>` — know the attack surface this slice adds
+agents/auditor.md:39:5. If the slice adds or touches an LLM/agent surface, check separately:
+agents/auditor.md:50:- HIGH/MEDIUM → CLEARED-WITH-FINDINGS; findings logged to vault/findings/, queued as slices
+agents/auditor.md:53:  vulnerable path actually reachable from this slice's code? Is a non-breaking
+agents/auditor.md:60:larger, BLOCK with "surface too large to audit — split the slice".
