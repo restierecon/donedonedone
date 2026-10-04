@@ -1,4 +1,6 @@
 #!/bin/bash
+# shellcheck source=/dev/null
+[ -f "$(dirname "$0")/jq-text.sh" ] && . "$(dirname "$0")/jq-text.sh"
 
 [ -t 0 ] || input=$(cat)
 here="$(cd "$(dirname "$0")" && pwd)"

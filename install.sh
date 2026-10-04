@@ -2,6 +2,8 @@
 set -e
 
 SRC="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=/dev/null
+[ -f "$SRC/scripts/jq-text.sh" ] && . "$SRC/scripts/jq-text.sh"
 DEST="$HOME/.claude"
 TS=$(date +%Y%m%d-%H%M%S)
 

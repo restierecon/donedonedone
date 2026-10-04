@@ -1,4 +1,6 @@
 #!/bin/bash
+# shellcheck source=/dev/null
+[ -f "$(dirname "$0")/jq-text.sh" ] && . "$(dirname "$0")/jq-text.sh"
 
 plan="${1:-vault/plan-draft.json}"
 command -v jq >/dev/null 2>&1 || { echo "check-plan: FAIL — jq not installed" >&2; exit 1; }

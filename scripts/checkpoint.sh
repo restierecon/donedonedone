@@ -1,4 +1,6 @@
 #!/bin/bash
+# shellcheck source=/dev/null
+[ -f "$(dirname "$0")/jq-text.sh" ] && . "$(dirname "$0")/jq-text.sh"
 
 [ -t 0 ] || input=$(cat)
 root=$(echo "${input:-}" | jq -r '.cwd // .workspace_roots[0]? // empty' 2>/dev/null)

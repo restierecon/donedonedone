@@ -1,4 +1,6 @@
 #!/bin/bash
+# shellcheck source=/dev/null
+[ -f "$(dirname "$0")/jq-text.sh" ] && . "$(dirname "$0")/jq-text.sh"
 
 input=$(cat)
 file=$(echo "$input" | jq -r '.tool_input.file_path // .tool_input.filePath // .file_path // empty' 2>/dev/null)
