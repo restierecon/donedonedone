@@ -201,6 +201,15 @@ class Cli(unittest.TestCase):
         self.assertIn("--- sent to the model ---", show.stdout)
         self.assertIn("retrievals   2", show.stdout)
 
+    def test_repeat_runs_without_a_session_are_never_called_duplicates(self):
+        script = "for i in range(3000): print('same line', i)"
+        ddd("run", "--", PY, "-c", script, env=self.env)
+        second = ddd("run", "--", PY, "-c", script, env=self.env)
+        self.assertNotIn("NO NEW INFORMATION", second.stdout)
+        ddd("run", "--session", "s1", "--", PY, "-c", script, env=self.env)
+        third = ddd("run", "--session", "s1", "--", PY, "-c", script, env=self.env)
+        self.assertIn("NO NEW INFORMATION", third.stdout)
+
     def test_small_command_output_is_printed_untouched(self):
         done = ddd("run", "--", PY, "-c", "import sys; print('hi'); print('warn', file=sys.stderr)", env=self.env)
         self.assertEqual((done.stdout, done.stderr.strip()), ("hi\n", "warn"))

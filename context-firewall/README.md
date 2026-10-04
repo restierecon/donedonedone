@@ -172,7 +172,9 @@ When the runner's exit code and its parsed summary disagree, the status says so
   `[xN]`. Lines that match only after numbers are normalised are marked
   `[xN similar]`.
 - **Across calls:** when a command's output is byte-identical to one delivered earlier
-  in the same session, the model gets a two-line `NO NEW INFORMATION` pointer instead.
+  in the same Claude session, the model gets a two-line `NO NEW INFORMATION` pointer instead.
+  A plain `ddd run` from a terminal has no session, so it never does this unless you pass
+  `--session` or set `DDD_SESSION`.
   The same applies when only timings, timestamps, hex ids or temp paths differ. The
   window is 20 minutes (`dedup.windowSeconds`). Strict mode never does this. A
   different exit code always counts as new information.

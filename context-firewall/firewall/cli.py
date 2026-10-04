@@ -47,6 +47,8 @@ def _session(args: argparse.Namespace) -> str:
 def _emit(result: CommandResult, args: argparse.Namespace) -> int:
     store = _store(args)
     settings = config.load(store.root, getattr(args, "mode", None))
+    if not (getattr(args, "session", None) or os.environ.get("DDD_SESSION")):
+        settings.data["dedup"]["enabled"] = False
     if not settings.enabled:
         _raw(sys.stdout, result.stdout)
         _raw(sys.stderr, result.stderr)
