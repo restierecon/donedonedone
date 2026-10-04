@@ -12,8 +12,8 @@ if ! echo "$input" | jq -e 'type == "object"' >/dev/null 2>&1; then
 fi
 
 field() { echo "$input" | jq -r "$1 // empty"; }
-event="" tool="" agent_id="" agent_type="" cmd="" file_path=""
-if ! parsed=$(echo "$input" | jq -r '@sh "event=\(.hook_event_name // "") tool=\(.tool_name // "") agent_id=\(.agent_id // "") agent_type=\(.agent_type // "") cmd=\(.tool_input.command // "") file_path=\(.tool_input.file_path // .tool_input.filePath // .tool_input.notebook_path // .tool_input.path // "")"' 2>/dev/null); then
+event="" tool="" agent_id="" cmd="" file_path=""
+if ! parsed=$(echo "$input" | jq -r '@sh "event=\(.hook_event_name // "") tool=\(.tool_name // "") agent_id=\(.agent_id // "") cmd=\(.tool_input.command // "") file_path=\(.tool_input.file_path // .tool_input.filePath // .tool_input.notebook_path // .tool_input.path // "")"' 2>/dev/null); then
   echo "BLOCKED: guard.sh could not read the hook payload's fields. Failing closed." >&2
   exit 2
 fi
@@ -115,20 +115,16 @@ if [ -n "$agent_id" ]; then
       && block "BLOCKED: task-tree.json is written by the Director only. Return your verdict as text."
     protected_name "$file_path" 'log\.jsonl' \
       && block "BLOCKED: vault/log.jsonl is written by the Director only (log-event.sh). Return your verdict as text."
-    [ "$agent_type" != "scribe" ] && protected_name "$file_path" 'memory/session\.md' \
-      && block "BLOCKED: session.md is written by the Director or the scribe only."
   fi
   if [ "$tool" = "Bash" ]; then
     plain=$(normalize "$cmd")
     protected_name "$plain" 'log-event' \
       && block "BLOCKED: vault/log.jsonl is written by the Director only (log-event.sh). Return your verdict as text."
-    if protected_name "$plain" 'vault|task-tree|log\.jsonl|session\.md' && ! read_only_shell "$plain"; then
+    if protected_name "$plain" 'vault|task-tree|log\.jsonl' && ! read_only_shell "$plain"; then
       protected_name "$plain" 'task-tree' \
         && block "BLOCKED: task-tree.json is written by the Director only. Return your verdict as text."
       protected_name "$plain" 'log\.jsonl' \
         && block "BLOCKED: vault/log.jsonl is written by the Director only (log-event.sh). Return your verdict as text."
-      protected_name "$plain" 'session\.md' \
-        && block "BLOCKED: session.md is written by the Director or the scribe only."
       block "BLOCKED: a subagent's shell commands may only read vault/ (cat, grep, jq, git diff/log/show, no redirects). Use the Write tool for a vault file your manifest names."
     fi
   fi

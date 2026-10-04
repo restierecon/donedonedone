@@ -19,7 +19,7 @@ state="$common/skeletoncrew-vault-guard"
 busy="$state/director-busy"
 mkdir -p "$state" || exit 0
 
-protected=(vault/task-tree.json vault/log.jsonl vault/memory/session.md)
+protected=(vault/task-tree.json vault/log.jsonl)
 
 key() { printf '%s' "$1" | tr '/' '_'; }
 
@@ -70,7 +70,7 @@ restore() {
 director_may_touch_vault() {
   case "$tool" in
     Bash|runTerminalCommand|run_in_terminal)
-      echo "$cmd" | grep -qiE 'vault|task-tree|log\.jsonl|log-event|session\.md|(^|[^[:alnum:]_-])git[[:space:]]' ;;
+      echo "$cmd" | grep -qiE 'vault|task-tree|log\.jsonl|log-event|(^|[^[:alnum:]_-])git[[:space:]]' ;;
     *)
       [ -n "$file_path" ] && echo "$file_path" | grep -qi 'vault' ;;
   esac
@@ -122,10 +122,6 @@ restored=()
 for f in "${protected[@]}"; do
   if ! has_snapshot "$f"; then snapshot "$f"; continue; fi
   changed "$f" || continue
-  if [ "$f" = "vault/memory/session.md" ] && [ "$agent_type" = "scribe" ]; then
-    snapshot "$f"
-    continue
-  fi
   restore "$f"
   restored+=("$f")
 done

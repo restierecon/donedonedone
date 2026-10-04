@@ -1,6 +1,6 @@
 ---
 name: planner
-description: Use after /grill produces a spec, to decompose one feature into vertical slices. Reads the codebase so the Director doesn't have to, writes vault/handoffs/plan-draft.json, and returns a ≤ 20-line slice table. Never writes application code and never touches task-tree.json.
+description: Use after /grill produces a spec, to decompose one feature into vertical slices. Reads the codebase so the Director doesn't have to, writes vault/plan-draft.json, and returns a ≤ 20-line slice table. Never writes application code and never touches task-tree.json.
 tools: Read, Grep, Glob, Write
 model: inherit
 ---
@@ -24,7 +24,7 @@ and paths to vault/project.md and vault/stories.md.
    slice must be buildable without a human decision; one that isn't means the grill
    left a gap — report it as an open question, don't draft the slice.
 4. Write the slices as a JSON array (task-tree.json slice shape) to
-   vault/handoffs/plan-draft.json. That is the only file you write. The Director
+   vault/plan-draft.json. That is the only file you write. The Director
    runs `check-plan.sh` on it (fields, "Actor can" title, a `verify` step, every
    `depends_on` resolving, no cycles, no bare "skip" gate); a draft it rejects comes
    back to you with the output.
@@ -35,7 +35,7 @@ report the open questions instead of guessing — the Director takes them back t
 Examine at most 25 files.
 
 ## Output Format (≤ 20 lines)
-PLAN: vault/handoffs/plan-draft.json — <n> slices
+PLAN: vault/plan-draft.json — <n> slices
 | id | title | depends_on |
 (one row per slice)
 PARALLEL-SAFE: [slice sets that can run as one wave]

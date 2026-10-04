@@ -32,10 +32,9 @@ up to `max_parallel_slices` (vault/project.md, default 3) at once:
    across whichever slices just finished building.
 4. Vault bookkeeping stays out of slice branches during a wave: builder/reviewer/
    auditor commits inside a worktree touch application code only. The Director's own
-   commits (task-tree.json, log.jsonl, scribe's memory/handoffs edits) land directly on
+   commits (task-tree.json, log.jsonl, stories.md) land directly on
    main, in the main checkout — never on a slice branch. Slice branches stay vault-free
-   so a squash-merge only touches code and sibling bookkeeping never collides. Per-slice
-   working notes go in vault/handoffs/active/<ID>.md, indexed from current.md.
+   so a squash-merge only touches code and sibling bookkeeping never collides.
 5. Process verdicts and squash-merges to main ONE AT A TIME, in whatever order they
    land — the merge stays Director-serial even though build/review was concurrent.
 6. Squash-merge conflict (a sibling already changed an overlapping file): re-dispatch

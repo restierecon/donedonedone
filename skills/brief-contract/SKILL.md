@@ -40,5 +40,5 @@ STANDING:
 2. <order 2, verbatim>
 ```
 
-Slice ID, hot-memory path, and prior critique still go in the brief as free text,
+Slice ID and prior critique still go in the brief as free text,
 around these headers.

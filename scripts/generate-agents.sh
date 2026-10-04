@@ -48,21 +48,13 @@ windows_note() {
     "PowerShell, go through Git Bash: \`& \"\$env:ProgramFiles\\Git\\bin\\bash.exe\" -c '~/.claude/scripts/gate.sh test -- <targets>'\`"
 }
 
-cursor_model() {
-  case "$1" in
-    haiku) echo "fast" ;;
-    *) echo "inherit" ;;
-  esac
-}
-
 generate_cursor() {
-  local count=0 src_file name tools description model ro body
+  local count=0 src_file name tools description ro body
   for src_file in "$SRC"/*.md; do
     [ -e "$src_file" ] || continue
     name=$(basename "$src_file" .md)
     tools=$(sed -n 's/^tools: //p' "$src_file")
     description=$(sed -n 's/^description: //p' "$src_file")
-    model=$(cursor_model "$(sed -n 's/^model: //p' "$src_file")")
     ro=true
     echo "$tools" | grep -qE '(^|[ ,])(Write|Edit|MultiEdit)([ ,]|$)' && ro=false
     body=$(awk '/^---$/{n++; next} n>=2' "$src_file")
@@ -70,7 +62,7 @@ generate_cursor() {
       echo "---"
       echo "name: $name"
       echo "description: $description"
-      echo "model: $model"
+      echo "model: inherit"
       echo "readonly: $ro"
       echo "---"
       echo "$body"

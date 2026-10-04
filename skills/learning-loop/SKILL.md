@@ -7,8 +7,8 @@ description: Use with every architecture review (same 5-slice counter), immediat
 
 Per-slice capture, batched learning. Every gate verdict, Tier 3 tiebreak, escalation
 and human correction is already in vault/log.jsonl (the Director writes it through
-`~/.claude/scripts/log-event.sh`). The scribe's compaction discards reasoning trails,
-so the log is the only surviving record of what went wrong — this skill turns it into
+`~/.claude/scripts/log-event.sh`). There are no memory files and reasoning trails
+die with the session, so the log is the only surviving record of what went wrong — this skill turns it into
 changes to the setup.
 
 ## When

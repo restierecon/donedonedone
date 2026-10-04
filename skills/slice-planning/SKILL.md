@@ -71,7 +71,7 @@ two slices race on files neither one's `depends_on` protected.
 
 ## Output
 Normally run by the `planner` agent, which writes the slices as a JSON array to
-vault/handoffs/plan-draft.json; the Director copies approved slices into
+vault/plan-draft.json; the Director copies approved slices into
 vault/task-tree.json. Slice shape:
 { "id": "S00n", "title": "Actor can ...", "so_that": "...",
   "status": "todo", "depends_on": [], "acceptance_criteria": ["..."],

@@ -136,14 +136,11 @@ rm -rf "$fakebin"
 echo "== guard.sh — vault integrity (gate files are Director-only) =="
 expect_block "subagent cannot Write task-tree.json"      guard_file Write 'vault/task-tree.json' builder
 expect_block "subagent cannot Edit task-tree.json"       guard_file Edit 'vault/task-tree.json' builder
-expect_block "scribe cannot write task-tree.json"        guard_file Write 'vault/task-tree.json' scribe
-expect_block "subagent cannot Edit session.md"           guard_file Edit 'vault/memory/session.md' builder
-expect_allow "scribe may write session.md"               guard_file Write 'vault/memory/session.md' scribe
+expect_block "planner cannot write task-tree.json"       guard_file Write 'vault/task-tree.json' planner
 expect_allow "Director may Write task-tree.json"         guard_file Write 'vault/task-tree.json'
-expect_allow "Director may Write session.md"             guard_file Write 'vault/memory/session.md'
 expect_allow "subagent may write ordinary files"         guard_file Write 'src/app.py' builder
 expect_block "subagent cannot redirect into task-tree"   guard_bash 'echo "{}" > vault/task-tree.json' builder
-expect_block "subagent cannot tee into session.md"       guard_bash 'cat notes | tee vault/memory/session.md' builder
+expect_block "subagent cannot tee into task-tree"        guard_bash 'cat notes | tee vault/task-tree.json' builder
 expect_allow "subagent may read task-tree.json"          guard_bash 'cat vault/task-tree.json' builder
 expect_allow "Director may redirect into task-tree"      guard_bash 'echo "{}" > vault/task-tree.json'
 
@@ -155,7 +152,7 @@ expect_block "brief missing VERIFY blocks reviewer" guard_agent Agent reviewer "
 expect_block "lowercase header does not count"      guard_agent Agent builder "${FULL_BRIEF/GOAL:/goal:}"
 expect_block "header mid-line does not count"       guard_agent Agent builder "${FULL_BRIEF/GOAL:/see GOAL:}"
 expect_block "empty brief blocks builder"           guard_agent Agent builder ''
-expect_allow "non-gated agent type unaffected"      guard_agent Agent scribe 'just checkpoint'
+expect_allow "non-gated agent type unaffected"      guard_agent Agent planner 'just plan'
 msg=$(jq -n --arg p $'GOAL: x\nACCEPTANCE: x\nVERIFY: x\nFORBIDDEN: x\nREPORT: x' \
   '{tool_name: "Agent", tool_input: {subagent_type: "builder", prompt: $p}}' | "$GUARD" 2>&1 >/dev/null)
 if echo "$msg" | grep -q 'SCOPE' && echo "$msg" | grep -q 'STANDING' && ! echo "$msg" | grep -q 'GOAL'; then
@@ -195,7 +192,7 @@ expect_block "subagent cannot write log.jsonl from python" guard_bash "python3 -
 expect_block "subagent cannot hide a write in a command substitution" guard_bash 'cat $(cp x vault/task-tree.json)' builder
 expect_allow "subagent may pipe task-tree.json through jq" guard_bash 'jq .slices vault/task-tree.json | head' builder
 expect_allow "subagent may diff task-tree.json"          guard_bash 'git diff main -- vault/task-tree.json' builder
-expect_block "scribe's vault writes go through Write, not the shell" guard_bash 'cp draft vault/memory/session.md' scribe
+expect_block "planner's vault writes go through Write, not the shell" guard_bash 'cp draft vault/plan-draft.json' planner
 
 echo "== checkpoint.sh — branch discipline =="
 make_repo() {
@@ -498,7 +495,7 @@ echo "== gate.sh — built-in markers step =="
 repo=$(make_gate_repo '')
 git -C "$repo" checkout -q -b slice/S001
 printf 'ok = 1\ncard = "XXXX-1234"\n' > "$repo/app.py"
-mkdir -p "$repo/vault/memory" && echo "TODO: next slice" > "$repo/vault/memory/hot.md"
+mkdir -p "$repo/vault/flags" && echo "TODO: next slice" > "$repo/vault/flags/pending-review.md"
 git -C "$repo" add -A && git -C "$repo" commit -q -m "feat: clean slice"
 status=0; out=$(cd "$repo" && "$GATE" markers 2>&1) || status=$?
 if [ "$status" -eq 0 ] && echo "$out" | grep -q "^markers PASS"; then
@@ -606,7 +603,7 @@ else
 fi
 rm -rf "$repo"
 
-echo "== log-event.sh — structured, compaction-proof log =="
+echo "== log-event.sh — structured, append-only log =="
 repo=$(make_repo)
 : > "$repo/vault/log.jsonl"
 echo "hand-written line from before the script" >> "$repo/vault/log.jsonl"
@@ -804,20 +801,41 @@ fi
 rm -rf "$repo"
 
 echo "== session-start.sh — resume context in one injection =="
+nv=$(mktemp -d)
+out=$(cd "$nv" && "$SESSION_START" </dev/null 2>&1)
+rm -rf "$nv"
+if [ -z "$out" ]; then ok "silent without a vault"; else bad "silent without a vault" "$out"; fi
 repo=$(make_repo)
-out=$(cd "$repo" && "$SESSION_START" </dev/null 2>&1)
-if [ -z "$out" ]; then ok "silent without session.md"; else bad "silent without session.md" "$out"; fi
-mkdir -p "$repo/vault/memory"
-echo "# Session State" > "$repo/vault/memory/session.md"
 echo '{"slices":[{"id":"S003","title":"User can export notes","status":"todo","depends_on":["S001"]}]}' \
   > "$repo/vault/task-tree.json"
 git -C "$repo" worktree add -q "$repo/.worktrees/S009" -b slice/S009
 out=$(cd "$repo" && "$SESSION_START" </dev/null 2>&1)
-if echo "$out" | grep -q "^# Session State" && echo "$out" | grep -q "S003 · todo · \[S001\]" \
-   && echo "$out" | grep -q "leftover worktrees" && echo "$out" | grep -q "S009"; then
-  ok "prints session.md, live-slice summary, leftover worktrees"
+if echo "$out" | grep -q "S003 · todo · \[S001\]" && echo "$out" | grep -q "leftover worktrees" \
+   && echo "$out" | grep -q "S009" && ! echo "$out" | grep -q "init-codebase"; then
+  ok "prints live-slice summary and leftover worktrees, no migration hint"
 else
-  bad "prints session.md, live-slice summary, leftover worktrees" "$out"
+  bad "prints live-slice summary and leftover worktrees, no migration hint" "$out"
+fi
+rm -rf "$repo"
+
+repo=$(make_repo)
+mkdir -p "$repo/vault/memory" "$repo/vault/handoffs"
+echo "SESSION-SENTINEL" > "$repo/vault/memory/session.md"
+echo "HANDOFF-SENTINEL" > "$repo/vault/handoffs/current.md"
+echo '{"slices":[{"id":"S007","status":"building","depends_on":[],"title":"User can resume"}]}' > "$repo/vault/task-tree.json"
+git -C "$repo" add -A && git -C "$repo" commit -q -m "old vault"
+out=$(cd "$repo" && "$SESSION_START" </dev/null 2>&1)
+if [ "$(echo "$out" | grep -c 'init-codebase')" -eq 1 ] && echo "$out" | grep -q 'S007' \
+   && ! echo "$out" | grep -q 'SENTINEL'; then
+  ok "a retired memory layer gets a one-line migration hint, never injected"
+else
+  bad "a retired memory layer gets a one-line migration hint, never injected" "$out"
+fi
+if [ -f "$repo/vault/memory/session.md" ] && [ -f "$repo/vault/handoffs/current.md" ] \
+   && [ -z "$(git -C "$repo" status --porcelain -- vault)" ]; then
+  ok "session-start deletes nothing from a retired memory layer"
+else
+  bad "session-start deletes nothing from a retired memory layer" "$(git -C "$repo" status --porcelain)"
 fi
 rm -rf "$repo"
 
@@ -852,12 +870,10 @@ if [ "$after" -eq $((before + 1)) ]; then ok "checkpoint finds the project via w
 rm -rf "$repo"
 
 repo=$(make_repo)
-mkdir -p "$repo/vault/memory"
-echo "# Session State" > "$repo/vault/memory/session.md"
 printf '<!-- skeletoncrew:protocol:begin old -->\nstale\n<!-- skeletoncrew:protocol:end -->\n' > "$repo/AGENTS.md"
 out=$(cd /tmp && jq -n --arg r "$repo" '{hook_event_name: "sessionStart", workspace_roots: [$r]}' \
   | AGENTS_MD_SRC="$ROOT/CLAUDE.md" "$SESSION_START" 2>/dev/null)
-if echo "$out" | jq -e '.additional_context | test("# Session State")' >/dev/null 2>&1 \
+if echo "$out" | jq -e '.additional_context | test("git reality check")' >/dev/null 2>&1 \
    && grep -q "Autonomous Engineering Protocol" "$repo/AGENTS.md" && ! grep -q "^stale$" "$repo/AGENTS.md"; then
   ok "session-start answers Cursor with additional_context JSON and refreshes AGENTS.md"
 else
@@ -879,10 +895,10 @@ else
   bad "copilot target emits every agent plus the orchestrator" "$(ls "$gen/copilot")"
 fi
 if grep -q "^readonly: true" "$gen/cursor/reviewer.md" && grep -q "^readonly: true" "$gen/cursor/auditor.md" \
-   && grep -q "^readonly: false" "$gen/cursor/builder.md" && grep -q "^model: fast" "$gen/cursor/scribe.md"; then
-  ok "cursor target maps write-less agents to readonly, haiku to fast"
+   && grep -q "^readonly: false" "$gen/cursor/builder.md" && grep -q "^model: inherit" "$gen/cursor/reviewer.md"; then
+  ok "cursor target maps write-less agents to readonly, every model to inherit"
 else
-  bad "cursor target maps write-less agents to readonly, haiku to fast" "$(grep -h '^readonly\|^model' "$gen"/cursor/*.md | tr '\n' ' ')"
+  bad "cursor target maps write-less agents to readonly, every model to inherit" "$(grep -h '^readonly\|^model' "$gen"/cursor/*.md | tr '\n' ' ')"
 fi
 roster_ok=1
 for f in "$ROOT"/agents/*.md; do
@@ -1093,6 +1109,50 @@ else
 fi
 rm -rf "$home"
 
+home=$(mktemp -d)
+mkdir -p "$home/.claude/agents" "$home/.claude/skills/compaction" "$home/.copilot/agents" "$home/.cursor/agents"
+echo old > "$home/.claude/agents/scribe.md"
+echo old > "$home/.claude/skills/compaction/SKILL.md"
+echo old > "$home/.copilot/agents/scribe.agent.md"
+echo old > "$home/.cursor/agents/scribe.md"
+status=0; out=$(HOME="$home" "$INSTALL" 2>&1) || status=$?
+if [ "$status" -eq 0 ] && [ ! -e "$home/.claude/agents/scribe.md" ] && [ ! -e "$home/.claude/skills/compaction" ] \
+   && [ ! -e "$home/.copilot/agents/scribe.agent.md" ] && [ ! -e "$home/.cursor/agents/scribe.md" ]; then
+  ok "install retires the scribe agent and compaction skill from every live folder"
+else
+  bad "install retires the scribe agent and compaction skill from every live folder" "exit $status: $out"
+fi
+if [ "$(cat "$home"/.claude/scribe-agent.md.bak-* "$home"/.claude/compaction-skill.bak-*/SKILL.md \
+     "$home"/.copilot/scribe-agent.md.bak-* "$home"/.cursor/scribe-agent.md.bak-* 2>/dev/null)" = "$(printf 'old\nold\nold\nold')" ] \
+   && echo "$out" | grep -q 'retired.*scribe' && echo "$out" | grep -q 'retired.*compaction'; then
+  ok "install moves the retired memory layer to backups and says so, never deletes it"
+else
+  bad "install moves the retired memory layer to backups and says so, never deletes it" "$out"
+fi
+rm -rf "$home"
+
+echo "== memory layer retired (resume = session-start.sh + git + task-tree.json) =="
+if [ ! -e "$ROOT/agents/scribe.md" ] && [ ! -e "$ROOT/skills/compaction" ]; then
+  ok "scribe agent and compaction skill are not shipped"
+else
+  bad "scribe agent and compaction skill are not shipped" "still present"
+fi
+if grep -qE 'scribe|session\.md|hot\.md|handoffs' "$ROOT/CLAUDE.md"; then
+  bad "CLAUDE.md names no scribe or memory file" "$(grep -nE 'scribe|session\.md|hot\.md|handoffs' "$ROOT/CLAUDE.md")"
+else
+  ok "CLAUDE.md names no scribe or memory file"
+fi
+if grep -qE 'Create directories:.*vault/(memory|handoffs)|Create vault/memory' "$ROOT/skills/init-codebase/SKILL.md"; then
+  bad "init-codebase no longer creates the memory layer" "found"
+else
+  ok "init-codebase no longer creates the memory layer"
+fi
+if grep -q 'git rm -r' "$ROOT/skills/init-codebase/SKILL.md"; then
+  ok "init-codebase migrates an old vault with git rm"
+else
+  bad "init-codebase migrates an old vault with git rm" "no migration step"
+fi
+
 echo "== guard.sh — bypasses that used to get through =="
 # shellcheck disable=SC2016
 {
@@ -1171,9 +1231,8 @@ vg() {
 make_vault_repo() {
   local d
   d=$(make_repo)
-  mkdir -p "$d/vault/memory"
+  mkdir -p "$d/vault"
   echo '{"slices":[{"id":"S001","status":"building"}]}' > "$d/vault/task-tree.json"
-  echo 'session v1' > "$d/vault/memory/session.md"
   git -C "$d" add -A && git -C "$d" commit -q -m vault
   (cd "$d" && "$VAULT_GUARD" --snapshot </dev/null)
   echo "$d"
@@ -1197,18 +1256,6 @@ if [ "$status" -eq 2 ] && [ ! -s "$repo/vault/log.jsonl" ]; then
   ok "a forged log.jsonl line is undone when the subagent stops"
 else
   bad "a forged log.jsonl line is undone when the subagent stops" "exit $status: $out"
-fi
-rm -rf "$repo"
-
-repo=$(make_vault_repo)
-echo 'session v2' > "$repo/vault/memory/session.md"
-status=0; vg "$repo" PostToolUse scribe Write >/dev/null || status=$?
-echo 'session v3' > "$repo/vault/memory/session.md"
-status2=0; vg "$repo" PostToolUse builder >/dev/null || status2=$?
-if [ "$status" -eq 0 ] && [ "$status2" -eq 2 ] && grep -q 'session v2' "$repo/vault/memory/session.md"; then
-  ok "the scribe's session.md change is kept; a builder's is undone"
-else
-  bad "the scribe's session.md change is kept; a builder's is undone" "exit $status/$status2: $(cat "$repo/vault/memory/session.md")"
 fi
 rm -rf "$repo"
 

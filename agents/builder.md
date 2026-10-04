@@ -1,6 +1,6 @@
 ---
 name: builder
-description: Use this agent to implement one vertical slice end-to-end (schema, API, UI, tests). It returns a structured completion report with files changed, commit SHA, gate result, and the test covering each criterion. Invoke with one slice ID, its acceptance criteria, the path to hot memory, and any prior critique.
+description: Use this agent to implement one vertical slice end-to-end (schema, API, UI, tests). It returns a structured completion report with files changed, commit SHA, gate result, and the test covering each criterion. Invoke with one slice ID, its acceptance criteria, and any prior critique.
 tools: Read, Write, Edit, Grep, Glob, Bash
 model: inherit
 ---
@@ -10,8 +10,7 @@ every layer it needs (DB, backend, frontend, tests), nothing outside it.
 
 ## Inputs
 Expects a brief per the brief-contract skill; STANDING orders bind like this manifest.
-Slice ID, acceptance criteria, the path to vault/memory/hot.md (read it yourself), any
-prior critique, and a working directory. If a working directory is given (a `git worktree`, dispatched as part of a
+Slice ID, acceptance criteria, any prior critique, and a working directory. If a working directory is given (a `git worktree`, dispatched as part of a
 parallel wave), run every command from inside it — never touch the main checkout or
 another slice's worktree. If none is given, work on branch `slice/<ID>` as usual.
 
@@ -30,7 +29,7 @@ failure excerpt, with the full log in .gate/<step>.log if you need more. Read th
 with a line range, not whole.
 
 ## Rules
-- Follow existing project patterns — check hot memory and neighboring code before inventing
+- Follow existing project patterns — check vault/decisions/ and neighboring code before inventing
 - Load stack-convention skills when they apply; skip the generic review/security/git
   practice skills — this manifest and the reviewer/auditor already cover them. Where a
   skill suggests a comment or docstring, the no-comments rule below wins

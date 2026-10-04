@@ -1,7 +1,7 @@
 # Autonomous Engineering Setup for Claude Code
 
-A lean, hardened multi-agent setup: 6 agents, 30 skills, mechanical guardrails,
-session-surviving memory, a learning loop that turns repeated failures into fixes, and an autonomy dial you turn up only as trust is earned.
+A lean, hardened multi-agent setup: 5 agents, 29 skills, mechanical guardrails,
+git-backed resume (no memory files), a learning loop that turns repeated failures into fixes, and an autonomy dial you turn up only as trust is earned.
 Built for Claude Code; also works with GitHub Copilot in VS Code and with Cursor (see below).
 
 Built on: vertical slices (tracer bullets) · red-green-refactor TDD · the test pyramid ·
@@ -40,18 +40,18 @@ builds. Nothing after the grill should need you unless a slice escalates.
 | Path | What |
 |---|---|
 | CLAUDE.md | Global protocol — the main session IS the Director |
-| agents/ | planner · builder · reviewer · auditor · scribe · retro (least-privilege tools, model-per-agent) |
-| skills/ | protocol-native: grill · slice-planning · parallel-dispatch · compaction · architecture-review · learning-loop · test-speed · crap-hotspots · blast-radius · brief-contract · `/init-codebase` · `/harvest` · `/create-verification-skill` · `/maintain-verification-skill` (opt-in, `/`-only: a project-local `verify-*` skill that lets the reviewer reach live-verified evidence) — plus a general engineering-practice library, a principles index (19 pstack principles, read on demand) and pstack's prose skills: unslop · technical-writing (docs/README/ADR work) (see Credits) |
+| agents/ | planner · builder · reviewer · auditor · retro (least-privilege tools, model-per-agent) |
+| skills/ | protocol-native: grill · slice-planning · parallel-dispatch · architecture-review · learning-loop · test-speed · crap-hotspots · blast-radius · brief-contract · `/init-codebase` · `/harvest` · `/create-verification-skill` · `/maintain-verification-skill` (opt-in, `/`-only: a project-local `verify-*` skill that lets the reviewer reach live-verified evidence) — plus a general engineering-practice library, a principles index (19 pstack principles, read on demand) and pstack's prose skills: unslop · technical-writing (docs/README/ADR work) (see Credits) |
 | settings.json | Permission deny/ask lists + hooks on 6 events + env that keeps Claude Code on Windows in Git Bash |
 | scripts/ | guard.sh (PreToolUse) · vault-guard.sh (Pre/PostToolUse, SubagentStop — restores Director-only files) · lint.sh (PostToolUse) · checkpoint.sh (Stop) · session-start.sh (SessionStart) · crap-score.py (lizard + coverage report → CRAP lines for `gate.crap`) · gate.sh (quiet lint/types/test/build runner + diff-scoped CRAP, TODO/FIXME and no-comments checks) · find-comments.sh (the comment detector behind that check) · log-event.sh (the Director's structured log.jsonl writer) · check-plan.sh (the Director's lint for a planner draft: fields, "Actor can" titles, resolvable acyclic `depends_on`, gates as a verdict or `skip: <reason>`) · generate-agents.sh (Copilot/Cursor agents, install-time) · agents-md.sh (protocol block in a project's AGENTS.md, for Cursor/Copilot) |
 | tests/ | Test harness for the hook scripts — run after any script edit; CI runs it too |
-| evals/ | 14-task benchmark + scorecard — run before trusting, re-run after any manifest edit |
+| evals/ | 15-task benchmark + scorecard — run before trusting, re-run after any manifest edit |
 
 ## The loop
 grill (mandatory; settles every human decision) → planner (vertical slices, all
 autonomous) → per slice on its own branch:
 builder (test-first) → gate.sh once → reviewer (cold eyes + slop checklist) →
-auditor (security surfaces only) → merge + tag → scribe (story + compaction, once).
+auditor (security surfaces only) → merge + tag → Director harvests the story.
 Failures resolve through 3 self-healing tiers. A slice that exhausts them, hits the
 budget ceiling (10 builder/reviewer/auditor calls), or fails a merge twice **escalates**:
 it halts, lands in `vault/flags/pending-review.md`, and goes back through the grill —
@@ -60,8 +60,8 @@ other slices keep going. Every 5 slices: architecture review.
 ## Learning loop
 Every gate verdict goes into `vault/log.jsonl` through `log-event.sh`, with the CRITICAL
 critique lines and a category attached when a gate fails. Tier 3 tiebreaks, escalations
-and your corrections are logged the same way. The scribe discards reasoning trails when
-it compacts; this log is never compacted, so the failure signal survives.
+and your corrections are logged the same way. There are no memory files and reasoning
+trails die with the session; this log is append-only, so the failure signal survives.
 
 Every 5 slices, alongside architecture review (code lens), the `retro` agent reads the
 log since the last retro (process lens). It only reports a failure that recurred across
@@ -234,15 +234,14 @@ Where the protocol spends tokens, and what keeps it down:
 - **Test output** — the biggest avoidable cost. Every check runs through `gate.sh`,
   which prints one line per step and a ≤ 30-line failure excerpt; full logs stay in
   `.gate/`. The full gate runs once per slice (Director), not three times.
-- **Subagent cold starts** — scribe runs once per slice, not after every gate; the
-  planner reads the codebase for decomposition so the Director's long-lived context
+- **Subagent cold starts** — no bookkeeping agent: the Director records gates and
+  harvests the story itself; the planner reads the codebase for decomposition so the Director's long-lived context
   doesn't; agents get file paths, not pasted contents.
-- **Model choice** — builder drops to sonnet for small slices; reviewer is sonnet,
-  scribe haiku.
+- **Model choice** — builder drops to sonnet for small slices; reviewer is sonnet.
 - **Always-loaded text** — the global CLAUDE.md is kept small (rarely-needed procedure
   lives in on-demand skills like parallel-dispatch) and is inert outside a vault project.
-- **Resume** — the SessionStart hook injects session state, live slices, git status and
-  leftover worktrees in one go.
+- **Resume** — the SessionStart hook injects live slices, git status and leftover
+  worktrees in one go; git and task-tree.json are the only resume state.
 
 These are design estimates, not measurements. To measure, run eval E1 against two
 manifest commits and compare cost and token counts.
@@ -273,7 +272,7 @@ jq is missing, the payload isn't JSON, or a field has the wrong type).
   keys, `secrets/`) are blocked for every tool and in shell commands, including Cursor's
   `beforeReadFile`. `cp .env.example .env` and `.gitignore` edits stay allowed.
 - Subagents (identified by the hook's `agent_id`) can't Write/Edit/NotebookEdit
-  task-tree.json or log.jsonl, or session.md unless they are the scribe; matching is
+  task-tree.json or log.jsonl; matching is
   case-insensitive, for macOS and Windows. A subagent shell command that mentions vault/
   at all must be plainly read-only (`cat`, `grep`, `jq`, `git diff/log/show`… with no
   redirect, substitution or `--output`), and log-event.sh is off limits.
@@ -286,10 +285,10 @@ jq is missing, the payload isn't JSON, or a field has the wrong type).
   Run claude-in-chrome in a dedicated, signed-out Chrome profile all the same.
 
 **2. vault-guard.sh — undoes what got through, by content, not by syntax.** It snapshots
-the main checkout's task-tree.json, log.jsonl and memory/session.md (in `.git/`, at
+the main checkout's task-tree.json and log.jsonl (in `.git/`, at
 session start and after each Director call that may touch them). After every subagent
 tool call, and when a subagent stops, any change to those files is restored from the
-snapshot and the subagent is told. Only the scribe's session.md change is kept. A
+snapshot and the subagent is told. A
 change that turns up during a Director call that shouldn't touch vault/ is reported to
 the Director and then accepted as theirs. gate.sh adds the worktree case: a slice branch
 that changes those files fails the gate before a squash-merge carries it into main.
@@ -319,7 +318,12 @@ In each existing project:
 1. Add `gate.*` lines to `vault/project.md` (see Gate commands). `gate.test` is now
    required — the gate fails without it (`- gate.test: none` if there are no tests).
    Commit before running the gate: it now refuses uncommitted changes outside `vault/`.
-2. Add `.gate/` and `vault/handoffs/plan-draft.json` to `.gitignore`.
+2. Add `.gate/` and `vault/plan-draft.json` to `.gitignore`.
+   The vault memory layer is gone: install.sh backs up a stale scribe agent and
+   compaction skill (Claude, Copilot and Cursor copies) as `.bak-<timestamp>` outside
+   the live folders, and session-start.sh prints a hint while `vault/memory` or
+   `vault/handoffs` remains. Re-run `/init-codebase`: on a clean tree it `git rm -r`s
+   them in their own commit (history keeps them).
 3. Run `~/.claude/scripts/agents-md.sh` once in the project so Cursor and Copilot get
    the protocol through AGENTS.md; commit it.
 4. Slices already in `task-tree.json` with a `mode: afk|hitl` field keep working; the
@@ -392,7 +396,7 @@ Known gaps under Cursor:
   ignores its exit code. Files still get formatted; errors surface at `gate.sh`.
 - **Session context injection may not work.** Cursor has a reported bug where
   `sessionStart`'s `additional_context` isn't injected. If the agent doesn't see its
-  session state, it can read `vault/memory/session.md` itself.
+  live slices, it can read `vault/task-tree.json` and `git log` itself.
 - **Hook payload fields are unverified.** They come from secondary sources (Cursor's
   docs weren't reachable when this was written). If a hook doesn't fire, check Cursor's
   hooks docs and adjust the event names in `install.sh`.
@@ -468,10 +472,10 @@ Installed to `~/.claude/scripts/`. Each one's behavior is pinned by a named test
 | find-comments.sh | `find-comments.sh --base <ref>` or `find-comments.sh <file>...` | Prints `path:line: text` for every comment added since `<ref>`, or in the given files. Exit 1 when it finds one, 2 on bad usage. |
 | log-event.sh | `log-event.sh <ID\|-> <event> <verdict> [--sha S] [--patch-id P] [--evidence E] [--attempt N] [--category C]... [--signal TEXT]...` | Appends one JSON line to the main checkout's `vault/log.jsonl`. Up to 5 signals of 200 chars. Unknown events, categories or evidence rungs exit 1 and list the valid ones. Prints `RETRO DUE` when a category recurs across slices. |
 | guard.sh | PreToolUse hook (every tool) | Exit 2 blocks the call and feeds the reason back. Fails closed without jq or on a malformed payload. Understands Claude Code, VS Code Copilot (its own tool names; an unknown tool carrying a command is treated as a shell call) and Cursor (`beforeShellExecution` and `beforeReadFile`, answered with allow/deny JSON). See Safety model. |
-| vault-guard.sh | PreToolUse, PostToolUse, PostToolUseFailure, SubagentStop hook; `vault-guard.sh --snapshot` | Restores task-tree.json, log.jsonl and session.md in the main checkout when a subagent changes them (exit 2 tells it why); warns the Director about unexplained changes. Snapshots live in `.git/skeletoncrew-vault-guard/`. Claude Code only — other tools' payloads don't name the subagent. |
+| vault-guard.sh | PreToolUse, PostToolUse, PostToolUseFailure, SubagentStop hook; `vault-guard.sh --snapshot` | Restores task-tree.json and log.jsonl in the main checkout when a subagent changes them (exit 2 tells it why); warns the Director about unexplained changes. Snapshots live in `.git/skeletoncrew-vault-guard/`. Claude Code only — other tools' payloads don't name the subagent. |
 | lint.sh | PostToolUse hook | Formats the edited file, exit 2 with lint errors. Reads Claude Code's `file_path`, Copilot's `filePath` and Cursor's top-level `file_path`; Cursor ignores the exit code, so there errors surface at the gate. |
 | checkpoint.sh | Stop hook | Commits progress on `slice/*` branches only (never main, a feature branch or a detached HEAD), inside worktrees too. Scans with `gitleaks git --staged` (v8.19+) or `gitleaks protect --staged` (older) and aborts on a finding. |
-| session-start.sh | SessionStart hook | Injects session.md, live slices, git status and leftover worktrees; plain text, or `{"additional_context": ...}` for Cursor. Refreshes the AGENTS.md protocol block. |
+| session-start.sh | SessionStart hook | Injects live slices, git status and leftover worktrees (plus a one-line migration hint while vault/memory or vault/handoffs exists; deletes nothing); plain text, or `{"additional_context": ...}` for Cursor. Refreshes the AGENTS.md protocol block. |
 | agents-md.sh | `agents-md.sh [project-dir]` | Writes the protocol into the project's AGENTS.md between its markers; leaves everything else in the file alone. |
 | generate-agents.sh | `generate-agents.sh <copilot\|cursor> [dest]` | Emits derived agents (always overwritten, never hand-edit). Copilot gets an `orchestrator` whose roster is every agent in `agents/`; it isn't called "director" because that name means the main Claude Code session. |
 | validate-manifests.sh | `validate-manifests.sh` | Checks agent and skill frontmatter, and that CLAUDE.md's Agents table matches `agents/`. |

@@ -32,6 +32,16 @@ if [ -d "$DEST/skills/init-vault" ]; then
   mv "$DEST/skills/init-vault" "$DEST/init-vault-skill.bak-$TS"
   echo "  retired skills/init-vault (renamed /init-codebase) → init-vault-skill.bak-$TS"
 fi
+for old in \
+  "$DEST/agents/scribe.md:$DEST/scribe-agent.md" \
+  "$DEST/skills/compaction:$DEST/compaction-skill" \
+  "$HOME/.copilot/agents/scribe.agent.md:$HOME/.copilot/scribe-agent.md" \
+  "$HOME/.cursor/agents/scribe.md:$HOME/.cursor/scribe-agent.md"; do
+  if [ -e "${old%%:*}" ]; then
+    mv "${old%%:*}" "${old#*:}.bak-$TS"
+    echo "  retired ${old%%:*} (vault memory layer dropped) → ${old#*:}.bak-$TS"
+  fi
+done
 cp "$SRC"/scripts/*.sh "$SRC"/scripts/*.py "$DEST/scripts/"
 chmod +x "$DEST"/scripts/*.sh "$DEST"/scripts/*.py
 cp -R "$SRC"/skills/* "$DEST/skills/"

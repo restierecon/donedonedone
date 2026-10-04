@@ -3,23 +3,28 @@ name: init-codebase
 description: Initialize this project for the autonomous engineering workflow (vault, project config, git discipline). Use when setting up a new project for the Autonomous Engineering Protocol, or when asked to run /init-codebase.
 ---
 
-Initialize this project for the autonomous workflow. Do all of the following:
+Initialize this project for the autonomous workflow. Do all of the following.
+Re-running on an existing vault upgrades it: never overwrite an existing file, create
+only what is missing, and always run step 6.
 
 1. Verify this is a git repo (`git rev-parse`); if not, `git init`.
 2. Verify `.env` and `.env.*` are in .gitignore — add them if missing. Never proceed
    without this. Also verify `.worktrees/` (parallel-slice git worktrees), `.gate/`
-   (gate.sh logs) and `vault/handoffs/plan-draft.json` (the planner's scratch output,
+   (gate.sh logs) and `vault/plan-draft.json` (the planner's scratch output,
    never source of truth) are gitignored — add them if missing.
-3. Create directories: vault/handoffs/archive, vault/decisions, vault/findings, vault/flags, vault/memory
+3. Create directories: vault/decisions, vault/findings, vault/flags
 4. Create vault/task-tree.json:
    {"project": "", "autonomy_note": "dial lives in project.md", "slices_since_arch_review": 0, "slices": []}
 5. Create vault/log.jsonl (empty file) and vault/stories.md containing only the
    header "# Shipped Stories" plus the line "One entry per merged slice, newest last.
    task-tree.json holds live work only." — every merged slice is harvested here and
    then pruned from task-tree.json.
-6. Create vault/memory/session.md with: "# Session State — fresh project, no active slice. Read vault/project.md and task-tree.json to begin."
-7. Create vault/memory/hot.md and vault/handoffs/current.md with headers only.
-   Create vault/standing-orders.md: header "# Standing Orders", the line "Numbered;
+6. Migration — drop the retired memory layer. If vault/memory or vault/handoffs exists:
+   require a clean working tree (`git status --porcelain` empty; otherwise stop and ask
+   me to commit first), then `git rm -r` whichever of the two exist and commit that
+   alone: `git commit -m "chore(vault): drop memory layer"`. Git history keeps them;
+   never delete them any other way. Resume state is git + task-tree.json from here on.
+7. Create vault/standing-orders.md: header "# Standing Orders", the line "Numbered;
    pasted verbatim into every builder/reviewer/auditor brief (STANDING). Append, never
    renumber.", then these starting orders:
    1. Work only inside the assigned branch or worktree; never touch main directly.

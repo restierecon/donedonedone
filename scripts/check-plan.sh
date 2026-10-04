@@ -1,6 +1,6 @@
 #!/bin/bash
 
-plan="${1:-vault/handoffs/plan-draft.json}"
+plan="${1:-vault/plan-draft.json}"
 command -v jq >/dev/null 2>&1 || { echo "check-plan: FAIL — jq not installed" >&2; exit 1; }
 [ -f "$plan" ] || { echo "check-plan: FAIL — no plan at $plan" >&2; exit 1; }
 

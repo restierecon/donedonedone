@@ -5,8 +5,9 @@ description: Turn merged slices into user stories in vault/stories.md and prune 
 
 Harvest every merged slice out of vault/task-tree.json into vault/stories.md, then
 prune it from the tree. Safe to re-run — already-harvested slices are skipped, and a
-slice that isn't merged is never pruned. Runs as the Director (only the Director
-writes task-tree.json).
+slice that isn't merged is never pruned. The Director runs it inline, never via a
+subagent (only the Director writes task-tree.json) — after every merge for that one
+slice, or as /harvest to backfill many.
 
 1. If vault/ does not exist, stop and offer /init-codebase. If vault/stories.md is
    missing, create it with the header "# Shipped Stories" and the line

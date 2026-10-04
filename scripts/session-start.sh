@@ -5,7 +5,7 @@ event=$(echo "${input:-}" | jq -r '.hook_event_name // empty' 2>/dev/null)
 root=$(echo "${input:-}" | jq -r '.cwd // .workspace_roots[0]? // empty' 2>/dev/null)
 if [ -n "$root" ] && [ -d "$root" ]; then cd "$root" || exit 0; fi
 
-[ -f vault/memory/session.md ] || exit 0
+[ -d vault ] || exit 0
 
 "$(dirname "$0")/vault-guard.sh" --snapshot </dev/null >/dev/null 2>&1
 
@@ -14,7 +14,9 @@ if [ -f AGENTS.md ] && grep -qF '<!-- skeletoncrew:protocol:begin' AGENTS.md; th
 fi
 
 context() {
-  cat vault/memory/session.md
+  if [ -d vault/memory ] || [ -d vault/handoffs ]; then
+    echo "!! retired memory layer found (vault/memory or vault/handoffs): remove it via the init-codebase migration step (clean tree, git rm, own commit)."
+  fi
 
   if [ -f vault/task-tree.json ] && command -v jq >/dev/null 2>&1; then
     echo "--- live slices (id · status · depends_on · title) ---"
