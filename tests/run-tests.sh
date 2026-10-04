@@ -1104,6 +1104,20 @@ status=0; "$vm/scripts/validate-manifests.sh" >/dev/null 2>&1 || status=$?
 if [ "$status" -eq 0 ]; then ok "pstack skill with LICENSE passes"; else bad "pstack skill with LICENSE passes" "exit $status"; fi
 rm -rf "$vm"
 
+echo "== reviewer — blast radius wiring =="
+REVIEWER="$ROOT/agents/reviewer.md"
+BR="$ROOT/skills/blast-radius"
+if grep -q 'Copyright (c) 2026 Lauren Tan' "$BR/LICENSE" 2>/dev/null; then ok "blast-radius ships pstack MIT LICENSE"; else bad "blast-radius ships pstack MIT LICENSE" "missing"; fi
+# shellcheck disable=SC2016
+if grep -qE 'arena|unslop|`how`|`why`|disable-model-invocation' "$BR/SKILL.md" 2>/dev/null; then bad "blast-radius has no pstack-only deps" "found"; else ok "blast-radius has no pstack-only deps"; fi
+if grep -q 'blast-radius' "$REVIEWER"; then ok "reviewer process invokes blast-radius"; else bad "reviewer process invokes blast-radius" "missing"; fi
+out_lines=$(sed -n '/^## Output Format/,$p' "$REVIEWER" | sed -n '2,/^## /p' | grep -v '^## ' | grep -c .)
+if grep -q '^BLAST RADIUS:' "$REVIEWER" && [ "$out_lines" -le 20 ]; then
+  ok "reviewer output has BLAST RADIUS and stays <= 20 lines"
+else
+  bad "reviewer output has BLAST RADIUS and stays <= 20 lines" "out_lines=$out_lines"
+fi
+
 echo ""
 echo "$pass passed, $fail failed"
 [ "$fail" -eq 0 ]

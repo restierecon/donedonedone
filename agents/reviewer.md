@@ -24,7 +24,11 @@ the slice branch elsewhere, since sibling worktrees share the same repo.
 3. Verify each acceptance criterion against the code AND its test:
    does a test exist that would fail if this criterion were unmet?
 4. Run the slop checklist below
-5. Verdict
+5. Blast radius (blast-radius skill): list callers/consumers of every changed symbol,
+   config key, schema and CLI flag OUTSIDE the diff. A suspected breakage becomes a
+   CRITICAL only once a command you ran proves it (failing test, one-off repro);
+   unproven suspicions are FYI.
+6. Verdict
 
 ## Slop Checklist (each item yes/no)
 - [ ] No speculative abstraction (apply the deletion test to every new module:
@@ -68,5 +72,6 @@ not just the violation — "too complex" is not a critique.
 VERDICT: APPROVED / REJECTED
 GATE: [Director's result @ sha, trusted | re-run: result line]
 CRITERIA: [each — MET / NOT MET, with the test that proves it]
+BLAST RADIUS: [≤5 lines — consumers checked outside diff; each breakage file:line + proving command, or FYI unproven]
 SLOP: [violated items only, file:line, [CRITICAL/NIT] — named remedy]
 CRITIQUE (if REJECTED): [file:line — [CRITICAL/NIT] — what must change and how — most important first]
