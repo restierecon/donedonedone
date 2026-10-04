@@ -1,0 +1,22 @@
+[ddd] lint | art-ID | exit 1 | lint:diagnostics/high | ~427->300 tok est
+LINT FAILED (exit 1)
+Errors: 19  Warnings: 3  (repeats collapsed below)
+✖ 22 problems (19 errors, 3 warnings)
+ERRORS (19):
+/work/es/eslint.config.js:1:1 no-undef 'module' is not defined
+/work/es/f1.js:1:7 no-unused-vars 'unused1' is assigned a value but never used
+  same at: /work/es/f2.js:1:7, /work/es/f3.js:1:7  [x3 similar]
+/work/es/f1.js:2:5 no-undef 'a' is not defined
+  same at: /work/es/f2.js:2:5, /work/es/f3.js:2:5  [x3]
+/work/es/f1.js:2:10 no-undef 'b' is not defined
+  same at: /work/es/f2.js:2:10, /work/es/f3.js:2:10  [x3]
+/work/es/f1.js:2:15 no-undef 'foo' is not defined
+  same at: /work/es/f2.js:2:15, /work/es/f3.js:2:15  [x3]
+/work/es/f1.js:3:7 no-unused-vars 'x' is assigned a value but never used
+  same at: /work/es/f2.js:3:7, /work/es/f3.js:3:7  [x3]
+/work/es/f1.js:3:11 no-undef 'y' is not defined
+  same at: /work/es/f2.js:3:11, /work/es/f3.js:3:11  [x3]
+WARNINGS (3):
+/work/es/f1.js:2:7 eqeqeq Expected '===' and instead saw '=='
+  same at: /work/es/f2.js:2:7, /work/es/f3.js:2:7  [x3]
+[ddd] full output: ddd artifact art-ID [--section NAME | --lines A-B | --raw]

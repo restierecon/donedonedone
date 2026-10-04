@@ -1,0 +1,59 @@
+[ddd] directory-listing | art-ID | exit 0 | listing:get-childitem/high | ~1.0k->201 tok est
+LISTING  entries: 64  files: 62  dirs: 2  (depth 2 shown; heavy dirs collapsed)
+api/
+  r0.ts
+  r1.ts
+  r10.ts
+  r11.ts
+  r12.ts
+  r13.ts
+  r14.ts
+  r15.ts
+  r16.ts
+  r17.ts
+  r18.ts
+  r19.ts
+  r2.ts
+  r20.ts
+  r21.ts
+  r22.ts
+  r23.ts
+  r24.ts
+  r25.ts
+  r26.ts
+  r27.ts
+  r28.ts
+  r29.ts
+  r3.ts
+  r4.ts
+  ... 5 more entries (--file api)
+auth/
+  f0.ts
+  f1.ts
+  f10.ts
+  f11.ts
+  f12.ts
+  f13.ts
+  f14.ts
+  f15.ts
+  f16.ts
+  f17.ts
+  f18.ts
+  f19.ts
+  f2.ts
+  f20.ts
+  f21.ts
+  f22.ts
+  f23.ts
+  f24.ts
+  f25.ts
+  f26.ts
+  f27.ts
+  f28.ts
+  f29.ts
+  f3.ts
+  f4.ts
+  ... 5 more entries (--file auth)
+index.ts
+main.ts
+[ddd] full output: ddd artifact art-ID [--section NAME | --lines A-B | --raw]

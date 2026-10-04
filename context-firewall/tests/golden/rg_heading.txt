@@ -1,0 +1,35 @@
+[ddd] search | art-ID | exit 0 | search:heading/high | ~1.5k->822 tok est
+SEARCH
+Query: slice
+Matches: 58  Files: 6
+agents/auditor.md (9): 3, 13, 14, 15, 18, 39, 50, 53, 60
+  3: description: Use this agent as the final gate on slices touching auth, sessions, data access, user input, file uploads, secrets, new dependencies, external calls, or LLM/agent tool surfaces. Maps trus ...[+172 chars]
+  13: Slice ID and a working directory if this slice was built in a `git worktree`
+  14: (parallel wave). Run scanners from inside that worktree — never check out the slice
+  ... 6 more in this file (--file agents/auditor.md)
+agents/builder.md (8): 3, 8, 15, 20, 21, 54, 59, 79
+  3: description: Use this agent to implement one vertical slice end-to-end (schema, API, UI, tests). It returns a structured completion report with files changed, commit SHA, gate result, and the test cov ...[+120 chars]
+  8: You are the Builder. You implement exactly one vertical slice per invocation —
+  15: another slice's worktree. If none is given, work on branch `slice/<ID>` as usual.
+  ... 5 more in this file (--file agents/builder.md)
+agents/reviewer.md (8): 3, 14, 16, 19, 37, 41, 47, 53
+  3: description: Use this agent after the builder reports COMPLETE on a slice. It reads the work cold — no knowledge of how it was produced — and verifies it against acceptance criteria and the slop check ...[+87 chars]
+  14: gate result line (`GATE: PASS @ <sha>`), and a working directory if this slice was built
+  16: the slice branch elsewhere, since sibling worktrees share the same repo.
+  ... 5 more in this file (--file agents/reviewer.md)
+agents/retro.md (6): 3, 15, 27, 33, 48, 50
+  3: description: Use this agent with every architecture review, or immediately when log-event.sh prints RETRO DUE. Mines vault/log.jsonl for process failures that recurred across slices (reviewer rejectio ...[+211 chars]
+  15: The trigger (5-slice counter, or a RETRO DUE line naming a category and slices) and
+  27: the same failure in two or more slices, or any escalation. One slice failing once
+  ... 3 more in this file (--file agents/retro.md)
+agents/scribe.md (13): 3, 19, 20, 23, 36, 39, 40, 42, 44, 45, 47, 60, 63
+  3: description: Use this agent once per completed slice, when vault/handoffs/current.md exceeds 400 lines, or before ending a session mid-slice. It harvests the slice's user story, compacts handoffs, arc ...[+136 chars]
+  19: Once per completed slice, when current.md exceeds 400 lines mid-slice, and before a
+  20: session ends mid-slice. Not after individual gates — the Director records those in
+  ... 10 more in this file (--file agents/scribe.md)
+agents/planner.md (14): 3, 8, 9, 20, 22, 24, 25, 26, 30, 35, 37, 38, 39, 40
+  3: description: Use after /grill produces a spec, to decompose one feature into vertical slices. Reads the codebase so the Director doesn't have to, writes vault/handoffs/plan-draft.json, and returns a ≤ ...[+85 chars]
+  8: You are the Planner. You turn one grilled spec into vertical slices, following the
+  9: slice-planning skill exactly — load it first; it is the rulebook, this file is the job.
+  ... 11 more in this file (--file agents/planner.md)
+[ddd] full output: ddd artifact art-ID [--section NAME | --lines A-B | --raw]

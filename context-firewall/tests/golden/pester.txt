@@ -1,0 +1,13 @@
+[ddd] test | art-ID | exit 1 | pester/high | ~465->145 tok est
+TEST RESULT
+Status: FAILED
+Passed: 32  Failed: 1  Skipped: 1
+Tests Passed: 32, Failed: 1, Skipped: 1 NotRun: 0
+FAILURES
+1. Update-Token refreshes the token
+   C:\work\tests\Token.Tests.ps1:14
+   Expected 'abc-refreshed', but got 'abc-r'.
+   at $t | Should -Be 'abc-refreshed', C:\work\tests\Token.Tests.ps1:14
+   at <ScriptBlock>, C:\work\tests\Token.Tests.ps1:14
+   (raw L35-38; --failure 1)
+[ddd] full output: ddd artifact art-ID [--section NAME | --lines A-B | --raw]

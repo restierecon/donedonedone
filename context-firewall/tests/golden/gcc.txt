@@ -1,0 +1,12 @@
+[ddd] build | art-ID | exit 1 | build:diagnostics/high | ~217->166 tok est
+BUILD FAILED (exit 1)
+Errors: 1  Warnings: 3  Notes: 1
+ERRORS (1):
+c.c:2:49 'y' undeclared (first use in this function)
+WARNINGS (3):
+c.c:2:21 -Wint-conversion initialization of 'int' from 'char *' makes integer from pointer without a cast
+c.c:2:26 -Wimplicit-function-declaration implicit declaration of function 'undefined_fn'
+c.c:2:17 -Wunused-variable unused variable 'x'
+NOTES (1):
+c.c:2:49 each undeclared identifier is reported only once for each function it appears in
+[ddd] full output: ddd artifact art-ID [--section NAME | --lines A-B | --raw]

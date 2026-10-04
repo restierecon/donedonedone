@@ -1,0 +1,55 @@
+[ddd] json | art-ID | exit 0 | json-outline/high | ~10k->461 tok est
+JSON  dict  41622 chars  (structure outline; values over 80 chars clipped)
+{5 keys}
+  "name": "app"
+  "version": "1.2.3"
+  "scripts": {80 keys}
+    "s0": "node scripts/s0.js --flag"
+    "s1": "node scripts/s1.js --flag"
+    "s2": "node scripts/s2.js --flag"
+    "s3": "node scripts/s3.js --flag"
+    "s4": "node scripts/s4.js --flag"
+    "s5": "node scripts/s5.js --flag"
+    "s6": "node scripts/s6.js --flag"
+    "s7": "node scripts/s7.js --flag"
+    "s8": "node scripts/s8.js --flag"
+    "s9": "node scripts/s9.js --flag"
+    "s10": "node scripts/s10.js --flag"
+    "s11": "node scripts/s11.js --flag"
+    "s12": "node scripts/s12.js --flag"
+    "s13": "node scripts/s13.js --flag"
+    "s14": "node scripts/s14.js --flag"
+    "s15": "node scripts/s15.js --flag"
+    "s16": "node scripts/s16.js --flag"
+    "s17": "node scripts/s17.js --flag"
+    "s18": "node scripts/s18.js --flag"
+    "s19": "node scripts/s19.js --flag"
+    ... 60 more keys (--section outline)
+  "dependencies": {120 keys}
+    "dep0": "^0.0.0"
+    "dep1": "^1.0.0"
+    "dep2": "^2.0.0"
+    "dep3": "^3.0.0"
+    "dep4": "^4.0.0"
+    "dep5": "^5.0.0"
+    "dep6": "^6.0.0"
+    "dep7": "^7.0.0"
+    "dep8": "^8.0.0"
+    "dep9": "^9.0.0"
+    "dep10": "^10.0.0"
+    "dep11": "^11.0.0"
+    "dep12": "^12.0.0"
+    "dep13": "^13.0.0"
+    "dep14": "^14.0.0"
+    "dep15": "^15.0.0"
+    "dep16": "^16.0.0"
+    "dep17": "^17.0.0"
+    "dep18": "^18.0.0"
+    "dep19": "^19.0.0"
+    ... 100 more keys (--section outline)
+  "items": [200 items: dict]
+    [0]: {3 keys}
+      "id": 0
+      "title": "Item 0 with a long title Item 0 with a long title Item 0 with a long title "
+      "tags": [2 items: str]
+[ddd] full output: ddd artifact art-ID [--section NAME | --lines A-B | --raw]

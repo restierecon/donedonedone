@@ -1,0 +1,20 @@
+[ddd] test | art-ID | exit 1 | mocha/high | ~279->159 tok est
+TEST RESULT
+Status: FAILED
+Passed: 31  Failed: 2  Skipped: 1
+31 passing (84ms)
+2 failing
+1 pending
+FAILURES
+1. Session refresh returns a new token
+   test/session.test.js:142
+   AssertionError [ERR_ASSERTION]: 'abc-r' == 'abc-refreshed'
+   + expected - actual
+   -abc-r
+   +abc-refreshed
+   (raw L44-55; --failure 1)
+2. TokenProvider rejects expired tokens
+   src/token.js:21
+   TypeError: provider.get is not a function
+   (raw L56-65; --failure 2)
+[ddd] full output: ddd artifact art-ID [--section NAME | --lines A-B | --raw]

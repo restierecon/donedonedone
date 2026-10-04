@@ -1,0 +1,15 @@
+[ddd] test | art-ID | exit 1 | go test/high | ~569->130 tok est
+TEST RESULT
+Status: FAILED
+Passed: 31  Failed: 2  Skipped: 0
+FAIL	example.com/auth	0.003s
+FAILURES
+1. TestRefresh
+   auth_test.go:9
+   auth_test.go:9: Refresh() = "abc-r", want "abc-refreshed"
+   (raw L3-3; --failure 1)
+2. TestToken
+   auth_test.go:20
+   auth_test.go:20: token provider: unexpected nil
+   (raw L68-68; --failure 2)
+[ddd] full output: ddd artifact art-ID [--section NAME | --lines A-B | --raw]

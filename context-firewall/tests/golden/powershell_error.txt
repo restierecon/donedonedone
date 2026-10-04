@@ -1,0 +1,8 @@
+[ddd] generic-command | art-ID | exit 1 | powershell:error-records/medium | ~629->206 tok est
+POWERSHELL  error records: 6  distinct: 1  (source echo and ~~~ underlines dropped)
+L1: Get-Item : Cannot find path 'C:\work\app\missing0.txt' because it does not exist.
+L2: At C:\work\scripts\deploy.ps1:12 char:5
+L5: + CategoryInfo          : ObjectNotFound: (C:\work\app\missing0.txt:String) [Get-Item], ItemNotFoundException
+L6: + FullyQualifiedErrorId : PathNotFound,Microsoft.PowerShell.Commands.GetItemCommand
+  same error again: C:\work\scripts\deploy.ps1:13 char:5, C:\work\scripts\deploy.ps1:14 char:5, C:\work\scripts\deploy.ps1:15 char:5, C:\work\scripts\deploy.ps1:16 char:5, C:\work\scripts\deploy.ps1:17 char:5  [x6 similar]
+[ddd] full output: ddd artifact art-ID [--section NAME | --lines A-B | --raw]

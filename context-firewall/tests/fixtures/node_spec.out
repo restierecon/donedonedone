@@ -1,0 +1,70 @@
+✖ refresh works (3.782327ms)
+✔ case 0 (0.2866ms)
+✔ case 1 (0.128616ms)
+✔ case 2 (0.09603ms)
+✔ case 3 (0.092138ms)
+✔ case 4 (0.082092ms)
+✔ case 5 (0.076391ms)
+✔ case 6 (0.151738ms)
+✔ case 7 (0.286521ms)
+✔ case 8 (0.352903ms)
+✔ case 9 (0.142406ms)
+✔ case 10 (0.061211ms)
+✔ case 11 (0.045265ms)
+✔ case 12 (0.043102ms)
+✔ case 13 (0.042885ms)
+✔ case 14 (0.037081ms)
+✔ case 15 (0.037741ms)
+✔ case 16 (0.040109ms)
+✔ case 17 (0.046843ms)
+✔ case 18 (0.052946ms)
+✔ case 19 (0.10263ms)
+✔ case 20 (0.070465ms)
+✔ case 21 (0.061461ms)
+✔ case 22 (0.09391ms)
+✔ case 23 (0.041461ms)
+✔ case 24 (0.035001ms)
+✖ token provider (0.123712ms)
+ℹ tests 27
+ℹ suites 0
+ℹ pass 25
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 123.533704
+
+✖ failing tests:
+
+test at nt/auth.test.mjs:3:1
+✖ refresh works (3.782327ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + 'abc-r'
+  - 'abc-refreshed'
+          ^
+  
+      at TestContext.<anonymous> (file:///work/nt/auth.test.mjs:3:38)
+      at Test.runInAsyncScope (node:async_hooks:214:14)
+      at Test.run (node:internal/test_runner/test:1047:25)
+      at Test.start (node:internal/test_runner/test:944:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:296:17) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'abc-r',
+    expected: 'abc-refreshed',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at nt/auth.test.mjs:5:1
+✖ token provider (0.123712ms)
+  TypeError: provider.get is not a function
+      at TestContext.<anonymous> (file:///work/nt/auth.test.mjs:5:38)
+      at Test.runInAsyncScope (node:async_hooks:214:14)
+      at Test.run (node:internal/test_runner/test:1047:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+      at Test.postRun (node:internal/test_runner/test:1173:19)
+      at Test.run (node:internal/test_runner/test:1101:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:744:7)

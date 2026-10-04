@@ -1,0 +1,12 @@
+[ddd] lint | art-ID | exit 1 | lint:diagnostics/high | ~227->125 tok est
+LINT FAILED (exit 1)
+Errors: 0  Warnings: 0  Issues: 6  (repeats collapsed below)
+Found 6 errors.
+ISSUES (6):
+m.py:1:8 F401 `os` imported but unused
+  same at: n.py:1:8  [x2]
+m.py:2:8 F401 `sys` imported but unused
+  same at: n.py:2:8  [x2]
+m.py:5:12 F821 Undefined name `undefined_name`
+  same at: n.py:5:12  [x2]
+[ddd] full output: ddd artifact art-ID [--section NAME | --lines A-B | --raw]

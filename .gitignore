@@ -2,3 +2,5 @@
 .remember/
 .ruff_cache/
 .worktrees/
+.ddd/
+__pycache__/

@@ -1,0 +1,25 @@
+[ddd] test | art-ID | exit 1 | tap/high | ~924->173 tok est
+TEST RESULT
+Status: FAILED
+Passed: 25  Failed: 2  Skipped: 0  Todo: 0  Total: 27
+# tests 27
+# pass 25
+# fail 2
+FAILURES
+1. refresh works
+   /work/nt/auth.test.mjs:3
+   error: |-
+   Expected values to be strictly equal:
+   + actual - expected
+   + 'abc-r'
+   - 'abc-refreshed'
+   ^
+   name: 'AssertionError'
+   expected: 'abc-refreshed'
+   (raw L3-28; --failure 1)
+2. token provider
+   /work/nt/auth.test.mjs:5
+   error: 'provider.get is not a function'
+   name: 'TypeError'
+   (raw L180-197; --failure 2)
+[ddd] full output: ddd artifact art-ID [--section NAME | --lines A-B | --raw]

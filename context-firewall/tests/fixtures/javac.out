@@ -1,0 +1,9 @@
+jv/A.java:1: error: incompatible types: String cannot be converted to int
+public class A { void m() { int x = "s"; foo(); } }
+                                    ^
+jv/A.java:1: error: cannot find symbol
+public class A { void m() { int x = "s"; foo(); } }
+                                         ^
+  symbol:   method foo()
+  location: class A
+2 errors

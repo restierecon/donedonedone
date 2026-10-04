@@ -1,0 +1,92 @@
+Collecting pkg0>=1.0
+  Downloading pkg0-1.0.0-py3-none-any.whl (12 kB)
+Collecting pkg1>=1.0
+  Downloading pkg1-1.0.1-py3-none-any.whl (12 kB)
+Collecting pkg2>=1.0
+  Downloading pkg2-1.0.2-py3-none-any.whl (12 kB)
+Collecting pkg3>=1.0
+  Downloading pkg3-1.0.3-py3-none-any.whl (12 kB)
+Collecting pkg4>=1.0
+  Downloading pkg4-1.0.4-py3-none-any.whl (12 kB)
+Collecting pkg5>=1.0
+  Downloading pkg5-1.0.5-py3-none-any.whl (12 kB)
+Collecting pkg6>=1.0
+  Downloading pkg6-1.0.6-py3-none-any.whl (12 kB)
+Collecting pkg7>=1.0
+  Downloading pkg7-1.0.7-py3-none-any.whl (12 kB)
+Collecting pkg8>=1.0
+  Downloading pkg8-1.0.8-py3-none-any.whl (12 kB)
+Collecting pkg9>=1.0
+  Downloading pkg9-1.0.9-py3-none-any.whl (12 kB)
+Collecting pkg10>=1.0
+  Downloading pkg10-1.0.10-py3-none-any.whl (12 kB)
+Collecting pkg11>=1.0
+  Downloading pkg11-1.0.11-py3-none-any.whl (12 kB)
+Collecting pkg12>=1.0
+  Downloading pkg12-1.0.12-py3-none-any.whl (12 kB)
+Collecting pkg13>=1.0
+  Downloading pkg13-1.0.13-py3-none-any.whl (12 kB)
+Collecting pkg14>=1.0
+  Downloading pkg14-1.0.14-py3-none-any.whl (12 kB)
+Collecting pkg15>=1.0
+  Downloading pkg15-1.0.15-py3-none-any.whl (12 kB)
+Collecting pkg16>=1.0
+  Downloading pkg16-1.0.16-py3-none-any.whl (12 kB)
+Collecting pkg17>=1.0
+  Downloading pkg17-1.0.17-py3-none-any.whl (12 kB)
+Collecting pkg18>=1.0
+  Downloading pkg18-1.0.18-py3-none-any.whl (12 kB)
+Collecting pkg19>=1.0
+  Downloading pkg19-1.0.19-py3-none-any.whl (12 kB)
+Collecting pkg20>=1.0
+  Downloading pkg20-1.0.20-py3-none-any.whl (12 kB)
+Collecting pkg21>=1.0
+  Downloading pkg21-1.0.21-py3-none-any.whl (12 kB)
+Collecting pkg22>=1.0
+  Downloading pkg22-1.0.22-py3-none-any.whl (12 kB)
+Collecting pkg23>=1.0
+  Downloading pkg23-1.0.23-py3-none-any.whl (12 kB)
+Collecting pkg24>=1.0
+  Downloading pkg24-1.0.24-py3-none-any.whl (12 kB)
+Collecting pkg25>=1.0
+  Downloading pkg25-1.0.25-py3-none-any.whl (12 kB)
+Collecting pkg26>=1.0
+  Downloading pkg26-1.0.26-py3-none-any.whl (12 kB)
+Collecting pkg27>=1.0
+  Downloading pkg27-1.0.27-py3-none-any.whl (12 kB)
+Collecting pkg28>=1.0
+  Downloading pkg28-1.0.28-py3-none-any.whl (12 kB)
+Collecting pkg29>=1.0
+  Downloading pkg29-1.0.29-py3-none-any.whl (12 kB)
+Requirement already satisfied: dep0 in ./venv/lib/python3.12/site-packages (from pkg1) (2.0)
+Requirement already satisfied: dep1 in ./venv/lib/python3.12/site-packages (from pkg1) (2.1)
+Requirement already satisfied: dep2 in ./venv/lib/python3.12/site-packages (from pkg1) (2.2)
+Requirement already satisfied: dep3 in ./venv/lib/python3.12/site-packages (from pkg1) (2.3)
+Requirement already satisfied: dep4 in ./venv/lib/python3.12/site-packages (from pkg1) (2.4)
+Requirement already satisfied: dep5 in ./venv/lib/python3.12/site-packages (from pkg1) (2.5)
+Requirement already satisfied: dep6 in ./venv/lib/python3.12/site-packages (from pkg1) (2.6)
+Requirement already satisfied: dep7 in ./venv/lib/python3.12/site-packages (from pkg1) (2.7)
+Requirement already satisfied: dep8 in ./venv/lib/python3.12/site-packages (from pkg1) (2.8)
+Requirement already satisfied: dep9 in ./venv/lib/python3.12/site-packages (from pkg1) (2.9)
+Requirement already satisfied: dep10 in ./venv/lib/python3.12/site-packages (from pkg1) (2.10)
+Requirement already satisfied: dep11 in ./venv/lib/python3.12/site-packages (from pkg1) (2.11)
+Requirement already satisfied: dep12 in ./venv/lib/python3.12/site-packages (from pkg1) (2.12)
+Requirement already satisfied: dep13 in ./venv/lib/python3.12/site-packages (from pkg1) (2.13)
+Requirement already satisfied: dep14 in ./venv/lib/python3.12/site-packages (from pkg1) (2.14)
+Requirement already satisfied: dep15 in ./venv/lib/python3.12/site-packages (from pkg1) (2.15)
+Requirement already satisfied: dep16 in ./venv/lib/python3.12/site-packages (from pkg1) (2.16)
+Requirement already satisfied: dep17 in ./venv/lib/python3.12/site-packages (from pkg1) (2.17)
+Requirement already satisfied: dep18 in ./venv/lib/python3.12/site-packages (from pkg1) (2.18)
+Requirement already satisfied: dep19 in ./venv/lib/python3.12/site-packages (from pkg1) (2.19)
+Requirement already satisfied: dep20 in ./venv/lib/python3.12/site-packages (from pkg1) (2.20)
+Requirement already satisfied: dep21 in ./venv/lib/python3.12/site-packages (from pkg1) (2.21)
+Requirement already satisfied: dep22 in ./venv/lib/python3.12/site-packages (from pkg1) (2.22)
+Requirement already satisfied: dep23 in ./venv/lib/python3.12/site-packages (from pkg1) (2.23)
+Requirement already satisfied: dep24 in ./venv/lib/python3.12/site-packages (from pkg1) (2.24)
+Requirement already satisfied: dep25 in ./venv/lib/python3.12/site-packages (from pkg1) (2.25)
+Requirement already satisfied: dep26 in ./venv/lib/python3.12/site-packages (from pkg1) (2.26)
+Requirement already satisfied: dep27 in ./venv/lib/python3.12/site-packages (from pkg1) (2.27)
+Requirement already satisfied: dep28 in ./venv/lib/python3.12/site-packages (from pkg1) (2.28)
+Requirement already satisfied: dep29 in ./venv/lib/python3.12/site-packages (from pkg1) (2.29)
+ERROR: Could not find a version that satisfies the requirement nonexistent-pkg==9.9 (from versions: none)
+ERROR: No matching distribution found for nonexistent-pkg==9.9

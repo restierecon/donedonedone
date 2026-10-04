@@ -1,0 +1,14 @@
+[ddd] stack-trace | art-ID | exit 1 | stack-trace/medium | ~180->178 tok est
+STACK TRACE  traces: 1  frames: 10 (3 application frames shown, library frames collapsed)
+Exception: TypeError: Cannot read properties of null (reading 'x')
+L1: /work/crash.js:2
+L2: function b(){ null.x; }
+L3:                    ^
+L5: TypeError: Cannot read properties of null (reading 'x')
+L6:     at b (/work/crash.js:2:20)
+L7:     at a (/work/crash.js:1:15)
+    ... 5 framework/library frames
+L13:     at TracingChannel.traceSync (node:diagnostics_channel:328:14)
+    ... 2 framework/library frames
+L17: Node.js v22.22.0
+[ddd] full output: ddd artifact art-ID [--section NAME | --lines A-B | --raw]

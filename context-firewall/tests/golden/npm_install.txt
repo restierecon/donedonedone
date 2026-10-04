@@ -1,0 +1,8 @@
+[ddd] package-manager | art-ID | exit 0 | package-manager/medium | ~714->135 tok est
+PACKAGE MANAGER OK (exit 0)
+Collapsed: 25 deprecations lines
+Deprecated packages (25): pkg0@1.0.0, pkg1@1.0.1, pkg2@1.0.2, pkg3@1.0.3, pkg4@1.0.4, pkg5@1.0.5, pkg6@1.0.6, pkg7@1.0.7, pkg8@1.0.8, pkg9@1.0.9, pkg10@1.0.10, pkg11@1.0.11, ... (+13)
+SUMMARY
+L47: added 1342 packages, and audited 1343 packages in 41s
+L49: 212 packages are looking for funding
+[ddd] full output: ddd artifact art-ID [--section NAME | --lines A-B | --raw]

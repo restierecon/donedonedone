@@ -1,0 +1,22 @@
+[ddd] test | art-ID | exit 1 | jest/high | ~618->225 tok est
+TEST RESULT
+Status: FAILED
+Passed: 1244  Failed: 2  Skipped: 12  Total: 1258
+Test Suites: 2 failed, 41 passed, 43 total
+Tests:       2 failed, 12 skipped, 1244 passed, 1258 total
+Snapshots:   0 total
+Time:        18.412 s
+FAILURES
+1. Session › refresh returns a new token
+   src/auth/session.test.ts:142
+   expect(received).toBe(expected) // Object.is equality
+   Expected: "abc-refreshed"
+   Received: "abc-r"
+   > 142 |     expect(t).toBe("abc-refreshed");
+   (raw L47-63; --failure 1)
+2. TokenProvider › refresh rejects expired tokens
+   src/auth/token.test.ts:87
+   TypeError: provider.get is not a function
+   > 87 |     await expect(p.refresh("old")).rejects.toThrow("expired");
+   (raw L64-77; --failure 2)
+[ddd] full output: ddd artifact art-ID [--section NAME | --lines A-B | --raw]

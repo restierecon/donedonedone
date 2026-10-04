@@ -1,0 +1,18 @@
+[ddd] test | art-ID | exit 101 | cargo test/high | ~743->177 tok est
+TEST RESULT
+Status: FAILED
+Passed: 1  Failed: 2  Skipped: 0
+test result: FAILED. 1 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.28s
+FAILURES
+1. tests::refresh_works
+   src/lib.rs:6
+   thread 'tests::refresh_works' (2457) panicked at src/lib.rs:6:34:
+   assertion `left == right` failed
+   left: "abc-r"
+   right: "abc-refreshed"
+   (raw L12-36; --failure 1)
+2. tests::token_panics
+   src/lib.rs:7
+   thread 'tests::token_panics' (2458) panicked at src/lib.rs:7:33:
+   (raw L37-56; --failure 2)
+[ddd] full output: ddd artifact art-ID [--section NAME | --lines A-B | --raw]

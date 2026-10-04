@@ -1,0 +1,9 @@
+[ddd] generic-command | art-ID | exit 2 | generic (no git-diff structure recognised)/low | ~360->161 tok est
+35 lines, 29 repeated lines collapsed
+ERR half line without newline
+garbage  bytes ][}{ garbage  bytes ][}{ garbage  bytes ][}{ garbage  bytes ][}{ garbage  bytes ][}{ garbage  bytes ][}{ garbage  bytes ][}{ garbage  bytes ][}{ garbage  bytes ][}{ garbage  bytes ][}{ garbage  bytes ][}{ garbage  bytes ][}{ garbage  bytes ][}{ garbage  bytes ][}{ garbag ...[+539 chars]
+===== 3 passed in
+@@ not a diff @@  [x30]
+diff --git a/x
++++ no header
+[ddd] full output: ddd artifact art-ID [--section NAME | --lines A-B | --raw]

@@ -1,0 +1,21 @@
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+  Auth -> /work/Auth/bin/Debug/net8.0/Auth.dll
+  Auth.Tests -> /work/Auth.Tests/bin/Debug/net8.0/Auth.Tests.dll
+Test run for /work/Auth.Tests/bin/Debug/net8.0/Auth.Tests.dll (.NETCoreApp,Version=v8.0)
+Microsoft (R) Test Execution Command Line Tool Version 17.9.0 (x64)
+Copyright (c) Microsoft Corporation.  All rights reserved.
+
+Starting test execution, please wait...
+A total of 1 test files matched the specified pattern.
+  Failed Auth.Tests.SessionTests.RefreshReturnsNewToken [12 ms]
+  Error Message:
+   Assert.Equal() Failure: Strings differ
+Expected: "abc-refreshed"
+Actual:   "abc-r"
+  Stack Trace:
+     at Auth.Tests.SessionTests.RefreshReturnsNewToken() in /work/Auth.Tests/SessionTests.cs:line 42
+   at System.RuntimeMethodHandle.InvokeMethod(Object target, Void** arguments, Signature sig, Boolean isConstructor)
+   at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+
+Failed!  - Failed:     1, Passed:   211, Skipped:     3, Total:   215, Duration: 1 s - Auth.Tests.dll (net8.0)
