@@ -24,7 +24,10 @@ and paths to vault/project.md and vault/stories.md.
    slice must be buildable without a human decision; one that isn't means the grill
    left a gap — report it as an open question, don't draft the slice.
 4. Write the slices as a JSON array (task-tree.json slice shape) to
-   vault/handoffs/plan-draft.json. That is the only file you write.
+   vault/handoffs/plan-draft.json. That is the only file you write. The Director
+   runs `check-plan.sh` on it (fields, "Actor can" title, a `verify` step, every
+   `depends_on` resolving, no cycles, no bare "skip" gate); a draft it rejects comes
+   back to you with the output.
 
 ## Termination
 One pass. If the spec is too ambiguous to slice without inventing behavior, stop and

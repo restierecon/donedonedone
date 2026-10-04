@@ -905,6 +905,52 @@ else
 fi
 rm -rf "$gen"
 
+echo "== check-plan.sh — plan draft validation =="
+CHECK_PLAN="$ROOT/scripts/check-plan.sh"
+PLANS=$(mktemp -d)
+cat > "$PLANS/good.json" <<'JSON'
+[
+  {"id": "S010", "title": "Shopper can save a cart", "so_that": "I don't lose my picks",
+   "status": "todo", "depends_on": [], "acceptance_criteria": ["cart persists across reload"],
+   "verify": "tests/cart_test.sh", "retry_count": 0,
+   "gates": {"self_review": null, "automated": "PASS", "reviewer": "APPROVED", "auditor": "skip: no auth, data access or external calls"}},
+  {"id": "S011", "title": "Shopper can share a saved cart", "so_that": "a friend can buy for me",
+   "status": "todo", "depends_on": ["S010", "S001", "S002"], "acceptance_criteria": ["share link opens the cart"],
+   "verify": "tests/share_test.sh", "retry_count": 0,
+   "gates": {"self_review": null, "automated": null, "reviewer": null, "auditor": null}}
+]
+JSON
+jq '.[0] |= del(.so_that)'              "$PLANS/good.json" > "$PLANS/missing-so-that.json"
+jq '.[0].title = "Cart persistence layer"' "$PLANS/good.json" > "$PLANS/bad-title.json"
+jq '.[1].depends_on = ["S010", "S999"]' "$PLANS/good.json" > "$PLANS/unresolved-dep.json"
+jq '.[0].depends_on = ["S011"]'         "$PLANS/good.json" > "$PLANS/cycle.json"
+jq '.[0].gates.auditor = "skip"'        "$PLANS/good.json" > "$PLANS/bare-skip.json"
+jq '.[0].gates.auditor = "skip:   "'    "$PLANS/good.json" > "$PLANS/blank-skip.json"
+jq '.[0] |= del(.verify)'               "$PLANS/good.json" > "$PLANS/missing-verify.json"
+proj=$(mktemp -d)
+mkdir -p "$proj/vault"
+printf '# Stories\n\n## S001 — User can sign in\nAs a user...\n' > "$proj/vault/stories.md"
+echo '{"slices": [{"id": "S002"}]}' > "$proj/vault/task-tree.json"
+expect_plan() {
+  local out status=0
+  out=$(cd "$proj" && "$CHECK_PLAN" "$PLANS/$2" 2>&1) || status=$?
+  if [ "$status" -ne "$3" ]; then bad "$1" "exit $status, expected $3: $out"; return; fi
+  if [ -n "$4" ] && ! grep -qF -- "$4" <<<"$out"; then bad "$1" "missing '$4' in: $out"; return; fi
+  if [ "$(wc -l <<<"$out")" -gt 20 ]; then bad "$1" "output over 20 lines"; return; fi
+  ok "$1"
+}
+expect_plan "good plan passes (deps via draft, stories.md, task-tree)" good.json 0 "OK"
+expect_plan "missing so_that fails"        missing-so-that.json 1 "S010: missing so_that"
+expect_plan "title without 'can' fails"    bad-title.json       1 "S010: title must read '<Actor> can <...>'"
+expect_plan "unresolved dependency fails"  unresolved-dep.json  1 "S011: depends_on 'S999' unresolved"
+expect_plan "dependency cycle fails"       cycle.json           1 "cycle among: S010, S011"
+expect_plan "bare 'skip' gate fails"       bare-skip.json       1 "S010: gate 'auditor'"
+expect_plan "whitespace-only skip reason fails" blank-skip.json 1 "S010: gate 'auditor'"
+expect_plan "missing verify step fails"    missing-verify.json  1 "S010: missing verify step"
+expect_plan "a missing draft fails"        nope.json            1 "no plan at"
+rm -rf "$proj" "$PLANS"
+if grep -q '^tools: Read, Grep, Glob, Write$' "$ROOT/agents/planner.md"; then ok "planner keeps no shell: the Director runs check-plan.sh"; else bad "planner keeps no shell: the Director runs check-plan.sh" "tools changed"; fi
+
 echo "== lint.sh =="
 fakebin=$(mktemp -d)
 # shellcheck disable=SC2016

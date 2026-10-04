@@ -74,8 +74,14 @@ Normally run by the `planner` agent, which writes the slices as a JSON array to
 vault/handoffs/plan-draft.json; the Director copies approved slices into
 vault/task-tree.json. Slice shape:
 { "id": "S00n", "title": "Actor can ...", "so_that": "...",
-  "status": "todo", "depends_on": [], "acceptance_criteria": ["..."], "retry_count": 0,
+  "status": "todo", "depends_on": [], "acceptance_criteria": ["..."],
+  "verify": "the command or demo that proves the criteria", "retry_count": 0,
   "gates": {"self_review": null, "automated": null, "reviewer": null, "auditor": null} }
+A gate value is null (not yet run), a verdict, or "skip: <reason>" (e.g. auditor on a
+slice with no trigger) — never omitted, never a bare "skip".
+`~/.claude/scripts/check-plan.sh` validates this shape mechanically (fields, title form,
+every `depends_on` resolving to the draft, task-tree.json or stories.md, no cycles);
+the Director runs it before copying a draft.
 A `depends_on` ID that names a slice absent from task-tree.json is satisfied — merged
 slices are harvested into vault/stories.md and pruned. Check stories.md before assuming
 a missing ID is a typo.

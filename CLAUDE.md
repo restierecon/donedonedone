@@ -39,8 +39,10 @@ is where every human decision gets made: UX calls, one-way doors, schema choices
 anything touching money or deleting user data. Decisions with a load-bearing rationale
 become ADRs in vault/decisions/. Then dispatch `planner` with the grilled spec; it
 writes vault/handoffs/plan-draft.json and returns a table. If it reports OPEN
-QUESTIONS, take them back to /grill — never plan around a gap. Present the table,
-then copy the approved slices into task-tree.json yourself and delete the draft. A
+QUESTIONS, take them back to /grill — never plan around a gap. Run
+`~/.claude/scripts/check-plan.sh` on the draft (it must exit 0; a FAIL goes back to the
+planner with its output), present the table, then copy the approved slices into
+task-tree.json yourself and delete the draft. A
 rejected or abandoned plan, or one sent back to /grill, gets its draft deleted too.
 Every slice is autonomous: named "Actor can [do something]", touches every layer that
 behavior needs, testable alone, never decomposed by layer, and needs no human decision
@@ -63,7 +65,9 @@ After each gate: record the verdict in task-tree.json, log it with
 `~/.claude/scripts/log-event.sh <ID> <gate> <verdict> --sha <sha> --patch-id <id> --evidence <rung>`
 (sha and patch_id from gate.sh's result line, the rung from the agent's EVIDENCE line:
 live-verified | unit-test-verified | type-check-only | verifier-blocked | verifier-failed),
-commit. Gate green is input to a verdict, not a verdict. You do this
+commit. A gate that doesn't apply (e.g. auditor, no trigger) is recorded as
+`"skip: <reason>"` in task-tree.json and as the log line's verdict — never omitted.
+Gate green is input to a verdict, not a verdict. You do this
 yourself — no scribe call per gate. On REJECTED/BLOCKED/CLEARED-WITH-FINDINGS, pass each
 CRITICAL line as `--signal` with its `--category`; log Tier 3 tiebreaks, escalations and
 every human correction of your work the same way. The scribe's compaction discards
