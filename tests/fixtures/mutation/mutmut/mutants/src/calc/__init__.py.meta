@@ -1,0 +1,26 @@
+{
+    "exit_code_by_key": {
+        "calc.x_add__mutmut_1": 1,
+        "calc.x_clamp__mutmut_1": 0,
+        "calc.x_clamp__mutmut_2": 0,
+        "calc.x\u01c1Meter\u01c1over__mutmut_1": 0
+    },
+    "hash_by_function_name": {
+        "x_add": "69377952c761",
+        "x_clamp": "2a80961dc336",
+        "x\u01c1Meter\u01c1over": "5d8689a5f7bc"
+    },
+    "type_check_error_by_key": {},
+    "durations_by_key": {
+        "calc.x_clamp__mutmut_1": 0.017498,
+        "calc.x_clamp__mutmut_2": 0.016596,
+        "calc.x_add__mutmut_1": 0.016484,
+        "calc.x\u01c1Meter\u01c1over__mutmut_1": 0.01107
+    },
+    "estimated_durations_by_key": {
+        "calc.x_clamp__mutmut_1": 3.908299549948424e-05,
+        "calc.x_clamp__mutmut_2": 3.908299549948424e-05,
+        "calc.x_add__mutmut_1": 6.833299994468689e-05,
+        "calc.x\u01c1Meter\u01c1over__mutmut_1": 6.166599632706493e-05
+    }
+}

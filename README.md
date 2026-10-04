@@ -1,6 +1,6 @@
 # Autonomous Engineering Setup for Claude Code
 
-A lean, hardened multi-agent setup: 5 agents, 29 skills, mechanical guardrails,
+A lean, hardened multi-agent setup: 5 agents, 32 skills, mechanical guardrails,
 git-backed resume (no memory files), a learning loop that turns repeated failures into fixes, and an autonomy dial you turn up only as trust is earned.
 Built for Claude Code; also works with GitHub Copilot in VS Code and with Cursor (see below).
 
@@ -41,9 +41,9 @@ builds. Nothing after the grill should need you unless a slice escalates.
 |---|---|
 | CLAUDE.md | Global protocol — the main session IS the Director |
 | agents/ | planner · builder · reviewer · auditor · retro (least-privilege tools, model-per-agent) |
-| skills/ | protocol-native: grill · slice-planning · parallel-dispatch · architecture-review · learning-loop · test-speed · crap-hotspots · blast-radius · brief-contract · `/init-codebase` · `/harvest` · `/create-verification-skill` · `/maintain-verification-skill` (opt-in, `/`-only: a project-local `verify-*` skill that lets the reviewer reach live-verified evidence) — plus a general engineering-practice library, a principles index (19 pstack principles, read on demand) and pstack's prose skills: unslop · technical-writing (docs/README/ADR work) (see Credits) |
+| skills/ | protocol-native: grill · slice-planning · parallel-dispatch · architecture-review · learning-loop · test-speed · crap-hotspots · mutation-survivors · clean-diff · harden-diff · blast-radius · brief-contract · `/init-codebase` · `/harvest` · `/create-verification-skill` · `/maintain-verification-skill` (opt-in, `/`-only: a project-local `verify-*` skill that lets the reviewer reach live-verified evidence) — plus a general engineering-practice library, a principles index (19 pstack principles, read on demand) and pstack's prose skills: unslop · technical-writing (docs/README/ADR work) (see Credits) |
 | settings.json | Permission deny/ask lists + hooks on 6 events + env that keeps Claude Code on Windows in Git Bash |
-| scripts/ | guard.sh (PreToolUse) · vault-guard.sh (Pre/PostToolUse, SubagentStop — restores Director-only files) · lint.sh (PostToolUse) · checkpoint.sh (Stop) · session-start.sh (SessionStart) · crap-score.py (lizard + coverage report → CRAP lines for `gate.crap`) · gate.sh (quiet lint/types/test/build runner + diff-scoped CRAP, TODO/FIXME and no-comments checks) · find-comments.sh (the comment detector behind that check) · log-event.sh (the Director's structured log.jsonl writer) · check-plan.sh (the Director's lint for a planner draft: fields, "Actor can" titles, resolvable acyclic `depends_on`, gates as a verdict or `skip: <reason>`) · generate-agents.sh (Copilot/Cursor agents, install-time) · agents-md.sh (protocol block in a project's AGENTS.md, for Cursor/Copilot) |
+| scripts/ | guard.sh (PreToolUse) · vault-guard.sh (Pre/PostToolUse, SubagentStop — restores Director-only files) · lint.sh (PostToolUse) · checkpoint.sh (Stop) · session-start.sh (SessionStart) · crap-score.py (lizard + coverage report → CRAP lines for `gate.crap`) · mutation-report.py (mutation tool report → mutant lines for `gate.mutation`) · gate.sh (quiet lint/types/test/build runner + diff-scoped CRAP, mutation, TODO/FIXME and no-comments checks) · find-comments.sh (the comment detector behind that check) · log-event.sh (the Director's structured log.jsonl writer) · check-plan.sh (the Director's lint for a planner draft: fields, "Actor can" titles, resolvable acyclic `depends_on`, `auditor_triggers` from a fixed list, gates as a verdict or `skip: <reason>`) · generate-agents.sh (Copilot/Cursor agents, install-time) · agents-md.sh (protocol block in a project's AGENTS.md, for Cursor/Copilot) |
 | tests/ | Test harness for the hook scripts — run after any script edit; CI runs it too |
 | evals/ | 15-task benchmark + scorecard — run before trusting, re-run after any manifest edit |
 
@@ -99,7 +99,7 @@ override) adds, outside `vault/`:
 - `markers` fails on an added TODO, FIXME or XXX.
 - `comments` fails on an added comment (see No comments below).
 
-Run `gate.sh test` for one step, no arguments for all seven (the six above plus `crap`, see CRAP); a misspelled step name is an
+Run `gate.sh test` for one step, no arguments for all eight (the six above plus `crap` and `mutation`, see CRAP and Mutation); a misspelled step name is an
 error, not a SKIP. Full logs land in `.gate/` (gitignored). The gate refuses to run on
 uncommitted changes outside `vault/` so `GATE: PASS @ sha=<sha> patch_id=<id>` always
 describes that SHA. The patch-id hashes the diff against the base outside `vault/`
@@ -198,6 +198,72 @@ commands are not run in CI.
 The step is plain gate.sh, so it behaves the same under Claude Code, Cursor and
 Copilot, including from PowerShell through Git Bash on Windows.
 
+## Mutation
+Coverage says a line ran. It doesn't say any test would notice if that line were wrong:
+a test that calls the code and asserts nothing covers it fully. Mutation testing closes
+that gap. The tool makes one small change at a time (`<` to `<=`, `+` to `-`, a return
+value to its default) and runs the tests. A failing test **kills** the mutant; a mutant
+every test **survives** is a bug the suite would ship. Two optional lines turn it on:
+
+```markdown
+- gate.mutation: rm -rf mutants && python3 -m mutmut run >/dev/null 2>&1 && python3 -m mutmut results --all true 2>/dev/null | python3 ~/.claude/scripts/mutation-report.py -
+- gate.mutation.min: 80
+```
+
+- **`gate.mutation`** is any command that prints one line per mutant:
+  `<path>:<line> <killed|survived|timeout|no-coverage> <description>`, path relative to
+  the repo root. `timeout` counts as killed and `no-coverage` as survived. A valid run
+  that made no mutants prints `no-mutants`. Other lines are ignored; output with no such
+  line at all fails the step, so a broken command can't pass on nothing. CRLF output and
+  backslash paths are accepted.
+- The score is killed ÷ all, over the mutants on lines the diff against `main` adds.
+  The step fails under **`gate.mutation.min`** (whole percent, default 80) and lists
+  every survivor on those lines either way, so the reviewer sees them on a pass too.
+  80 rather than 100 leaves room for equivalent mutants, changes no test can catch; the
+  slice explains each one with a test named for why. Survivors on lines the diff doesn't
+  touch don't block it; the `mutation-survivors` skill plans them as their own slices.
+- It runs after `test` and `crap`; after a failed `test` it reports SKIP. Before the
+  command runs, the gate writes the diff's files to `.gate/mutation.files` and exports
+  its path as `GATE_MUTATION_FILES`, and the base as `GATE_BASE`, so a tool that takes
+  a file list or a diff mutates only what the slice changed. The full output stays in
+  `.gate/mutation.log`.
+- Mutation runs are slow: every mutant is a test run. Scope the command to the diff
+  where the tool allows it, and clear the tool's cache first, since a cached verdict
+  from before the slice's new tests is wrong (mutmut keeps one in `mutants/`).
+- Any command that prints that format works. The setup ships one adapter:
+  **`mutation-report.py <report>`**, or `-` for `mutmut results` on stdin. It reads, by
+  detecting the file:
+  - the shared [mutation-testing-report-schema](https://github.com/stryker-mutator/mutation-testing-elements)
+    JSON (Stryker for JS/TS, .NET and Scala; Infection for PHP; Mull for C/C++), with
+    absolute paths made relative to `projectRoot`
+  - PIT's `mutations.xml` (Java, Kotlin), with each class's package and source file
+    matched to a file in the repo
+  - cargo-mutants' `mutants.out/outcomes.json` (Rust)
+  - Gremlins' `--output` JSON (Go)
+  - mutmut 3's `results --all true` (Python), with each mutant traced to the line it
+    changes through mutmut's `mutants/` copy
+  Compile errors, run errors, unviable, ignored and skipped mutants are dropped; no
+  test could have judged them. It needs Python 3 and nothing else.
+
+### Per-stack setup
+Every report or cache the command writes must be gitignored, or the next gate run
+refuses the dirty tree. CI runs the first row on every push, against a sample project
+in `tests/fixtures/mutation/python/`, through the real gate (`tests/mutation-stacks.sh`):
+it must fail tests that run the code without asserting, naming each survivor's line,
+and pass tests that pin the boundary. The adapter's parsing of every format is tested
+from fixtures (`tests/mutation-report.sh`); the other rows' commands are not run in CI.
+
+| Stack | `gate.mutation` | Gitignore |
+|---|---|---|
+| Python: mutmut 3 *(CI)* | `rm -rf mutants && python3 -m mutmut run >/dev/null 2>&1 && python3 -m mutmut results --all true 2>/dev/null \| python3 ~/.claude/scripts/mutation-report.py -`, with `[tool.mutmut] source_paths = ["src/"]` in pyproject.toml and pytest's `testpaths` set so it skips the copy in `mutants/` | `mutants/` |
+| JS/TS: StrykerJS | `npx stryker run --reporters json && python3 ~/.claude/scripts/mutation-report.py reports/mutation/mutation.json` | `reports/`, `.stryker-tmp/` |
+| Java: Maven + PIT | `mvn -q -B test-compile org.pitest:pitest-maven:mutationCoverage -DoutputFormats=XML -DtimestampedReports=false && python3 ~/.claude/scripts/mutation-report.py target/pit-reports/mutations.xml` | `target/` |
+| Rust: cargo-mutants | `git diff "$GATE_BASE...HEAD" > .gate/diff.patch; cargo mutants --in-diff .gate/diff.patch; case $? in 0\|2\|3) python3 ~/.claude/scripts/mutation-report.py mutants.out/outcomes.json ;; *) exit 1 ;; esac` (exit 2 and 3 mean survivors and timeouts, which the gate judges) | `mutants.out*/` |
+| Go: Gremlins | `gremlins unleash --diff "$GATE_BASE" --output .gate/gremlins.json && python3 ~/.claude/scripts/mutation-report.py .gate/gremlins.json` | |
+
+The step is plain gate.sh, so it behaves the same under Claude Code, Cursor and
+Copilot, including from PowerShell through Git Bash on Windows.
+
 ## No comments
 No codebase built with this setup carries comments: no line comments, block comments,
 docstrings or doc comments. Names, types and small functions say *what*. A *why* the
@@ -279,6 +345,9 @@ jq is missing, the payload isn't JSON, or a field has the wrong type).
 - A builder, reviewer or auditor spawn (Agent or Task tool) whose prompt lacks any of
   the brief-contract headers (GOAL, SCOPE, ACCEPTANCE, VERIFY, FORBIDDEN, REPORT,
   STANDING, each at the start of a line) is refused, naming the missing ones.
+- In a project with vault/task-tree.json, a builder spawn needs a `SLICE: <ID>` line
+  naming a slice there. When that slice's `auditor_triggers` is non-empty, the brief's
+  STANDING must name the harden-diff skill; a slice without the field fails closed.
 - The reviewer's Chrome tools (claude-in-chrome navigate and tabs_create) may only open
   http(s) on localhost, 127.0.0.1, [::1], *.local, *.localhost or *.test; userinfo,
   numeric-IP spellings, non-ASCII hosts and whitespace or control characters are refused.
@@ -339,7 +408,8 @@ In each existing project:
    builders rerun the whole suite on every red-green loop. If the suite is already
    over budget, run the `test-speed` skill to plan the fix.
 8. Optionally add `gate.crap` (see CRAP), then run the `crap-hotspots` skill once for
-   a baseline of the hotspots already there.
+   a baseline of the hotspots already there. Same for `gate.mutation` (see Mutation)
+   and the `mutation-survivors` skill.
 9. On Windows, install from a fresh clone and merge settings.json's new `env` block,
    which keeps Claude Code in Git Bash (see Windows).
 
@@ -463,12 +533,15 @@ vault projects, and every vault project carries AGENTS.md.
 ## Scripts
 Installed to `~/.claude/scripts/`. Each one's behavior is pinned by a named test in
 `tests/run-tests.sh`; crap-score.py's in `tests/crap-score.sh` (formats) and
-`tests/crap-stacks.sh` (Python, React and Java end to end).
+`tests/crap-stacks.sh` (Python, React and Java end to end); mutation-report.py's in
+`tests/mutation-report.sh` (formats) and `tests/mutation-stacks.sh` (Python with mutmut
+end to end).
 
 | Script | Usage | What it does |
 |---|---|---|
 | crap-score.py | `crap-score.py <coverage file> [-x <glob>]... [paths]` | Prints `<path>:<start>-<end> <score> <name>` per function for `gate.crap`: lizard complexity joined with LCOV, Cobertura, JaCoCo or coverage.py JSON line coverage. Unknown report format or missing lizard exits non-zero. |
-| gate.sh | `gate.sh [lint\|types\|test\|build\|crap\|markers\|comments ...]` or `gate.sh test -- <targets>` | Refuses a dirty tree (`GATE_ALLOW_DIRTY=1` overrides), an unknown step, or a missing `gate.test`. With `-- <targets>`, runs only those tests through `gate.test.focus` and ends `FOCUSED:`, never `GATE:`. Flags a passing test step slower than `gate.test.budget`. Fails a function the diff touches whose `gate.crap` score is over `gate.crap.max`. Runs the gate one line per step, a ≤ 30-line failure excerpt (`GATE_EXCERPT_LINES`), full log in `.gate/<step>.log`. Exit 0 all pass, 1 otherwise. From a worktree that predates project.md, it reads the main checkout's. |
+| mutation-report.py | `mutation-report.py <report \| ->` | Prints `<path>:<line> <killed\|survived\|timeout\|no-coverage> <description>` per mutant for `gate.mutation`, or `no-mutants`: reads mutation-testing-report-schema JSON, PIT XML, cargo-mutants outcomes.json, Gremlins JSON, or mutmut 3 results (`-` for stdin). Unknown format exits non-zero. |
+| gate.sh | `gate.sh [lint\|types\|test\|build\|crap\|mutation\|markers\|comments ...]` or `gate.sh test -- <targets>` | Refuses a dirty tree (`GATE_ALLOW_DIRTY=1` overrides), an unknown step, or a missing `gate.test`. With `-- <targets>`, runs only those tests through `gate.test.focus` and ends `FOCUSED:`, never `GATE:`. Flags a passing test step slower than `gate.test.budget`. Fails a function the diff touches whose `gate.crap` score is over `gate.crap.max`, and a diff whose added lines' mutants score under `gate.mutation.min`. Runs the gate one line per step, a ≤ 30-line failure excerpt (`GATE_EXCERPT_LINES`), full log in `.gate/<step>.log`. Exit 0 all pass, 1 otherwise. From a worktree that predates project.md, it reads the main checkout's. |
 | find-comments.sh | `find-comments.sh --base <ref>` or `find-comments.sh <file>...` | Prints `path:line: text` for every comment added since `<ref>`, or in the given files. Exit 1 when it finds one, 2 on bad usage. |
 | log-event.sh | `log-event.sh <ID\|-> <event> <verdict> [--sha S] [--patch-id P] [--evidence E] [--attempt N] [--category C]... [--signal TEXT]...` | Appends one JSON line to the main checkout's `vault/log.jsonl`. Up to 5 signals of 200 chars. Unknown events, categories or evidence rungs exit 1 and list the valid ones. Prints `RETRO DUE` when a category recurs across slices. |
 | guard.sh | PreToolUse hook (every tool) | Exit 2 blocks the call and feeds the reason back. Fails closed without jq or on a malformed payload. Understands Claude Code, VS Code Copilot (its own tool names; an unknown tool carrying a command is treated as a shell call) and Cursor (`beforeShellExecution` and `beforeReadFile`, answered with allow/deny JSON). See Safety model. |

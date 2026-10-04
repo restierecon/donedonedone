@@ -42,3 +42,23 @@ STANDING:
 
 Slice ID and prior critique still go in the brief as free text,
 around these headers.
+
+## Builder briefs: SLICE and harden-diff
+A builder brief in a project with vault/task-tree.json also starts with
+`SLICE: <ID>`, the slice's id exactly as task-tree.json has it. guard.sh reads that
+slice's `auditor_triggers`:
+- `[]` — nothing more to add.
+- non-empty — STANDING must name the harden-diff skill, as an order after the pasted
+  standing orders: `<n>. Load the harden-diff skill: this slice crosses <triggers>.`
+  (`STANDING: none` becomes `STANDING:` followed by that one order.)
+- no such slice, or no `auditor_triggers` field — the spawn is refused. Copy the
+  approved slice into task-tree.json, or add the field, then dispatch.
+
+```
+SLICE: S021
+GOAL: Shopper can share a saved cart
+...
+STANDING:
+1. <order 1 from vault/standing-orders.md, verbatim>
+2. Load the harden-diff skill: this slice crosses data-access, user-input.
+```

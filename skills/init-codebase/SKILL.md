@@ -50,7 +50,11 @@ only what is missing, and always run step 6.
    `- gate.crap: <cmd>` printing `<path>:<start>-<end> <score> <name>` per function,
    usually `~/.claude/scripts/crap-score.py <coverage report> <src dir>` reading the
    report `gate.test` writes (README → CRAP → Per-stack setup has Python, React and Java
-   lines; gitignore the report) · `- gate.crap.max: 30`; the
+   lines; gitignore the report) · `- gate.crap.max: 30` ·
+   `- gate.mutation: <cmd>` printing `<path>:<line> <killed|survived|timeout|no-coverage>
+   <description>` per mutant (or `no-mutants`), usually the stack's mutation tool piped
+   through `~/.claude/scripts/mutation-report.py` (README → Mutation → Per-stack setup;
+   clear the tool's cache first and gitignore its output) · `- gate.mutation.min: 80`; the
    built-in `markers` and `comments` steps need no line, but add
    `- gate.comments.skip: <path prefixes>` for generated code (migrations) and
    `- gate.comments.directives: <regex>` for a tool directive the gate doesn't know ·
@@ -68,7 +72,8 @@ only what is missing, and always run step 6.
 11. Commit: `git add -A && git commit -m "chore: init autonomous workflow vault"`
 12. Existing codebase with `gate.crap` set: run the crap-hotspots skill
     (~/.claude/skills/crap-hotspots/SKILL.md) once for a baseline card in
-    vault/flags/pending-review.md, then commit it.
+    vault/flags/pending-review.md, then commit it. Same with `gate.mutation` set: the
+    mutation-survivors skill (~/.claude/skills/mutation-survivors/SKILL.md).
 13. Optional, offer once: "Run /create-verification-skill to generate
     .claude/skills/verify-<project>/ so the reviewer can drive the real app?" Run it only
     on a yes (needs a runnable app — skip for an empty repo); never re-ask in later sessions.

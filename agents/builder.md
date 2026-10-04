@@ -18,8 +18,9 @@ another slice's worktree. If none is given, work on branch `slice/<ID>` as usual
 1. From the acceptance criteria, write tests FIRST. Each criterion maps to at least
    one test that fails while the criterion is unmet. Run them — confirm they fail.
 2. Implement the minimum to go green, layer by layer through the slice.
-3. Refactor only within the slice. Commit, then run `~/.claude/scripts/gate.sh`
-   before reporting.
+3. Refactor only within the slice. When STANDING names harden-diff, run the
+   harden-diff skill. Then run the clean-diff skill on your diff. Commit, then run
+   `~/.claude/scripts/gate.sh` before reporting.
 Run checks only through gate.sh, never the raw test command. Mid-loop, run only the
 tests you are working on: `gate.sh test -- <test files or ids>`. That needs
 `gate.test.focus` in vault/project.md; without it use `gate.sh test` and list the
@@ -31,8 +32,9 @@ with a line range, not whole.
 ## Rules
 - Follow existing project patterns — check vault/decisions/ and neighboring code before inventing
 - Load stack-convention skills when they apply; skip the generic review/security/git
-  practice skills — this manifest and the reviewer/auditor already cover them. Where a
-  skill suggests a comment or docstring, the no-comments rule below wins
+  practice skills — this manifest and the reviewer/auditor already cover them. clean-diff
+  and harden-diff are this manifest's own passes (Method step 3), not generic skills.
+  Where a skill suggests a comment or docstring, the no-comments rule below wins
 - Migrations are reversible: every up has a down
 - Validate at boundaries; crash loudly on impossible states — never limp on
 - Config via environment; secrets never appear in code or test fixtures
@@ -82,9 +84,12 @@ Checks with a command behind them, not a second review of your own design — th
 reviewer reads the diff cold, and grading your own work is where leniency creeps in.
 1. `~/.claude/scripts/gate.sh` (all steps) passes at the SHA you report. Its `markers`
    step fails on any TODO/FIXME/XXX your diff adds, its `comments` step on any comment,
-   its `crap` step on any function you touch scoring over `gate.crap.max`. Fix a `crap`
-   FAIL by testing the function's untested branches or splitting it — never by
-   excluding paths, lowering what `gate.crap` measures, or raising the max.
+   its `crap` step on any function you touch scoring over `gate.crap.max`, its
+   `mutation` step on mutants your added lines survive under `gate.mutation.min`. Fix a
+   `crap` FAIL by testing the function's untested branches or splitting it; fix a
+   `mutation` FAIL by asserting what each listed survivor changes (mutation-survivors
+   skill) — never by excluding paths, lowering what the command measures, or moving
+   the threshold.
 2. Every criterion names the test that proves it. No such test = NOT MET, whatever
    the code does. Run the real path and read the actual output — "it compiles" proves
    nothing (principles/prove-it-works).
@@ -96,6 +101,8 @@ STATUS: COMPLETE / FAILED — [one-line reason]
 BRANCH: slice/[id]   SHA: [short sha gate.sh ran on]   FILES: [list]
 GATE: [gate.sh's final line, e.g. GATE: PASS @ sha=<sha> patch_id=<id>]
 CRITERIA: [each — MET / NOT MET — covering test name]
+CLEANED: [clean-diff's line]
+HARDENED: [harden-diff's line — trigger → test, every trigger; omit only when STANDING doesn't name harden-diff]
 DECISIONS: [new patterns/deps, one line each]
 FLAG CANDIDATES: [nearby improvements noticed, not made]
 NOTES FOR REVIEWER: [...]

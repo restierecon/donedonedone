@@ -33,6 +33,8 @@ in its manifest); planner, auditor and retro inherit.
 
 Builder, reviewer and auditor briefs follow the brief-contract skill (GOAL · SCOPE ·
 ACCEPTANCE · VERIFY · FORBIDDEN · REPORT · STANDING); guard.sh refuses a spawn missing any.
+A builder brief also carries `SLICE: <ID>`; when that slice's `auditor_triggers` is
+non-empty, its STANDING names the harden-diff skill — guard.sh refuses it otherwise.
 
 ## Decomposition — Grill Always, Every Slice Autonomous
 No slice exists without a grill. Every feature, bugfix and refactor — however small —
@@ -54,15 +56,17 @@ run concurrently: load the parallel-dispatch skill before starting a wave
 
 ## Completion Gates (slice is DONE only when all pass, in order)
 1. Builder self-check — mechanical: gate green at its SHA, each criterion names its
-   test. A claim, not evidence: gates 2-3 verify it
+   test, a CLEANED line (clean-diff skill) and, with auditor_triggers, a HARDENED line
+   (harden-diff skill). A claim, not evidence: gates 2-3 verify it
 2. Automated: you run `gate.sh` once, in the slice's checkout, at the builder's SHA.
    A test line `over gate.test.budget` still passes: open one pending-review entry
    for it (test-speed skill) unless one is open — a slice never fixes the suite.
-   A `crap` FAIL goes back to the builder; hotspots outside the diff go to the
-   crap-hotspots skill (~/.claude/skills/crap-hotspots/SKILL.md)
+   A `crap` FAIL goes back to the builder, and so does a `mutation` FAIL; hotspots
+   outside the diff go to the crap-hotspots skill (~/.claude/skills/crap-hotspots/SKILL.md),
+   survivors to mutation-survivors (~/.claude/skills/mutation-survivors/SKILL.md)
 3. Reviewer: APPROVED — hand it the SHA and the gate result line; it re-runs only if
    HEAD moved
-4. Auditor: CLEARED (only if triggers match; otherwise skip)
+4. Auditor: CLEARED (only if the slice's auditor_triggers is non-empty; otherwise skip)
 After each gate: record the verdict in task-tree.json, log it with
 `~/.claude/scripts/log-event.sh <ID> <gate> <verdict> --sha <sha> --patch-id <id> --evidence <rung>`
 (sha and patch_id from gate.sh's result line, the rung from the agent's EVIDENCE line:

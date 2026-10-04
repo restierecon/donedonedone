@@ -1,0 +1,4 @@
+    calc.x_add__mutmut_1: killed
+    calc.x_clamp__mutmut_1: survived
+    calc.x_clamp__mutmut_2: survived
+    calc.xǁMeterǁover__mutmut_1: survived

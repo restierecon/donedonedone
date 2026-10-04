@@ -130,6 +130,36 @@ if [ -n "$agent_id" ]; then
   fi
 fi
 
+task_tree() {
+  local dir common
+  dir=$(field '.cwd')
+  [ -n "$dir" ] && [ -d "$dir" ] || dir=.
+  common=$(git -C "$dir" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || return 1
+  [ -f "$(dirname "$common")/vault/task-tree.json" ] || return 1
+  printf '%s\n' "$(dirname "$common")/vault/task-tree.json"
+}
+
+require_hardening() {
+  local tree slice triggers
+  tree=$(task_tree) || return 0
+  slice=$(printf '%s\n' "$1" | sed -n 's/^SLICE:[[:space:]]*\([^[:space:]]*\).*/\1/p' | head -1)
+  [ -n "$slice" ] \
+    || block "BLOCKED: builder brief has no SLICE: <ID> line. guard.sh reads the slice's auditor_triggers from task-tree.json to check the brief names harden-diff."
+  triggers=$(jq -r --arg id "$slice" '
+    [.slices[]? | select(.id == $id)] as $s
+    | if ($s | length) == 0 then "NOSLICE"
+      elif ($s[0].auditor_triggers | type) != "array" then "NOFIELD"
+      else $s[0].auditor_triggers | join(", ") end' "$tree" 2>/dev/null) \
+    || block "BLOCKED: vault/task-tree.json is not valid JSON, so the builder brief's hardening can't be checked. Failing closed."
+  case "$triggers" in
+    NOSLICE) block "BLOCKED: SLICE $slice is not in vault/task-tree.json. Copy the approved slice in before dispatching its builder." ;;
+    NOFIELD) block "BLOCKED: slice $slice in vault/task-tree.json has no auditor_triggers. Add the trust boundaries it crosses, [] for none (slice-planning skill)." ;;
+    "") return 0 ;;
+  esac
+  printf '%s\n' "$1" | awk '/^[A-Z]+:/ { on = ($0 ~ /^STANDING:/) } on' | grep -q 'harden-diff' \
+    || block "BLOCKED: slice $slice crosses trust boundaries ($triggers), so the builder brief's STANDING must name the harden-diff skill (brief-contract skill)."
+}
+
 if [ "$tool" = "Agent" ] || [ "$tool" = "Task" ]; then
   case "$(field '.tool_input.subagent_type')" in
     builder|reviewer|auditor)
@@ -140,6 +170,7 @@ if [ "$tool" = "Agent" ] || [ "$tool" = "Task" ]; then
       done
       [ ${#missing[@]} -gt 0 ] \
         && block "BLOCKED: brief is missing required header(s): ${missing[*]}. See the brief-contract skill; STANDING pastes vault/standing-orders.md verbatim."
+      [ "$(field '.tool_input.subagent_type')" = "builder" ] && require_hardening "$prompt"
       ;;
   esac
   allow

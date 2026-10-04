@@ -18,6 +18,7 @@ external=$(printf '%s\n' "${known[@]}" | jq -R . | jq -s 'map(select(length > 0)
 errors=$(jq -r --argjson external "$external" '
   def verdicts: ["PASS","FAIL","COMPLETE","FAILED","APPROVED","REJECTED","CLEARED","CLEARED-WITH-FINDINGS","BLOCKED"];
   def nonempty: type == "string" and test("\\S");
+  def triggers: ["auth","sessions","data-access","user-input","file-uploads","secrets","dependencies","external-calls","llm-tools"];
   def stuck:
     if length == 0 then []
     else (to_entries | map(select(.value | length == 0)) | map(.key)) as $free
@@ -37,6 +38,10 @@ errors=$(jq -r --argjson external "$external" '
             and all(.acceptance_criteria[]; nonempty) then empty
          else "\($s): needs >= 1 non-empty acceptance_criteria entry" end),
         (if (.verify | nonempty) then empty else "\($s): missing verify step" end),
+        (if (.auditor_triggers | type) != "array"
+         then "\($s): auditor_triggers must be an array of the trust boundaries it crosses, [] for none"
+         else .auditor_triggers[] | select(IN(triggers[]) | not)
+           | "\($s): auditor_trigger \(tojson) unknown (one of: \(triggers | join(", ")))" end),
         (if (.depends_on | type) != "array" then "\($s): depends_on must be an array"
          else .depends_on[] | select(IN($ids[], $external[]) | not)
            | "\($s): depends_on '\''\(.)'\'' unresolved (not in draft, task-tree.json or stories.md)" end),

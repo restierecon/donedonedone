@@ -1,0 +1,11 @@
+{
+  "outcomes": [
+    {"scenario": "Baseline", "summary": "Success", "log_path": "log/baseline.log", "diff_path": null, "phase_results": []},
+    {"scenario": {"Mutant": {"name": "src/lib.rs:3:5: replace add -> i32 with 0", "package": "calc", "file": "src/lib.rs", "function": {"function_name": "add", "return_type": "-> i32", "span": {"start": {"line": 2, "column": 1}, "end": {"line": 4, "column": 2}}}, "span": {"start": {"line": 3, "column": 5}, "end": {"line": 3, "column": 10}}, "replacement": "0", "genre": "FnValue"}}, "summary": "CaughtMutant", "log_path": "log/a.log", "diff_path": "diff/a.diff", "phase_results": []},
+    {"scenario": {"Mutant": {"name": "src/lib.rs:7:11: replace > with >= in over", "package": "calc", "file": "src/lib.rs", "function": null, "span": {"start": {"line": 7, "column": 11}, "end": {"line": 7, "column": 12}}, "replacement": ">=", "genre": "BinaryOperator"}}, "summary": "MissedMutant", "log_path": "log/b.log", "diff_path": "diff/b.diff", "phase_results": []},
+    {"scenario": {"Mutant": {"name": "src/lib.rs:9:5: replace spin with ()", "package": "calc", "file": "src/lib.rs", "function": null, "span": {"start": {"line": 9, "column": 5}, "end": {"line": 9, "column": 9}}, "replacement": "()", "genre": "FnValue"}}, "summary": "Timeout", "log_path": "log/c.log", "diff_path": "diff/c.diff", "phase_results": []},
+    {"scenario": {"Mutant": {"name": "src/lib.rs:11:5: replace make -> Box<T> with Default::default()", "package": "calc", "file": "src/lib.rs", "function": null, "span": {"start": {"line": 11, "column": 5}, "end": {"line": 11, "column": 9}}, "replacement": "Default::default()", "genre": "FnValue"}}, "summary": "Unviable", "log_path": "log/d.log", "diff_path": "diff/d.diff", "phase_results": []}
+  ],
+  "total_mutants": 4, "missed": 1, "caught": 1, "timeout": 1, "unviable": 1, "success": 0,
+  "cargo_mutants_version": "25.0.0"
+}

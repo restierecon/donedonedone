@@ -298,6 +298,52 @@ else
   bad "checkpoint falls back to 'gitleaks protect --staged' before v8.19" "committed or wrong exit"
 fi
 
+echo "== guard.sh — builder briefs on trust-boundary slices name harden-diff =="
+hrepo=$(make_repo)
+cat > "$hrepo/vault/task-tree.json" <<'JSON'
+{"slices": [
+  {"id": "S020", "title": "Shopper can sort a cart", "auditor_triggers": []},
+  {"id": "S021", "title": "Shopper can share a cart", "auditor_triggers": ["data-access", "user-input"]},
+  {"id": "S022", "title": "Shopper can print a cart"}
+]}
+JSON
+git -C "$hrepo" worktree add -q -b slice/S021 "$hrepo/.worktrees/S021" 2>/dev/null
+guard_builder_in() {
+  jq -n --arg cwd "$1" --arg p "$2" \
+    '{tool_name: "Agent", cwd: $cwd, tool_input: {subagent_type: "builder", prompt: $p}}' | "$GUARD" 2>/dev/null
+}
+HARD_BRIEF=$'SLICE: S021\nGOAL: x\nSCOPE: x\nACCEPTANCE: x\nVERIFY: x\nFORBIDDEN: x\nREPORT: x\nSTANDING:\n1. Load the harden-diff skill: this slice crosses data-access, user-input.'
+expect_allow "a trust-boundary slice's builder spawns when STANDING names harden-diff" guard_builder_in "$hrepo" "$HARD_BRIEF"
+expect_block "a trust-boundary slice's builder is blocked when STANDING omits harden-diff" \
+  guard_builder_in "$hrepo" "${HARD_BRIEF/harden-diff/a}"
+expect_block "harden-diff named outside STANDING does not count" \
+  guard_builder_in "$hrepo" $'SLICE: S021\nGOAL: harden-diff\nSCOPE: x\nACCEPTANCE: x\nVERIFY: x\nFORBIDDEN: x\nREPORT: x\nSTANDING: none'
+expect_allow "a slice with no auditor triggers needs no harden-diff" \
+  guard_builder_in "$hrepo" "${HARD_BRIEF/S021/S020}"
+expect_block "a slice without an auditor_triggers field fails closed" \
+  guard_builder_in "$hrepo" "${HARD_BRIEF/S021/S022}"
+expect_block "a slice missing from task-tree.json is blocked" \
+  guard_builder_in "$hrepo" "${HARD_BRIEF/S021/S099}"
+expect_block "a builder brief without a SLICE line is blocked in a vault project" \
+  guard_builder_in "$hrepo" "${HARD_BRIEF/SLICE: S021/}"
+expect_block "a builder dispatched into a worktree is checked against the main checkout's task-tree" \
+  guard_builder_in "$hrepo/.worktrees/S021" "${HARD_BRIEF/harden-diff/a}"
+msg=$(jq -n --arg cwd "$hrepo" --arg p "${HARD_BRIEF/harden-diff/a}" \
+  '{tool_name: "Agent", cwd: $cwd, tool_input: {subagent_type: "builder", prompt: $p}}' | "$GUARD" 2>&1 >/dev/null)
+if echo "$msg" | grep -q 'S021' && echo "$msg" | grep -q 'data-access, user-input' && echo "$msg" | grep -q 'harden-diff'; then
+  ok "the block names the slice, its triggers and the skill to add"
+else
+  bad "the block names the slice, its triggers and the skill to add" "got: $msg"
+fi
+reviewer_status=0
+jq -n --arg cwd "$hrepo" --arg p "${HARD_BRIEF/harden-diff/a}" \
+  '{tool_name: "Agent", cwd: $cwd, tool_input: {subagent_type: "reviewer", prompt: $p}}' | "$GUARD" >/dev/null 2>&1 || reviewer_status=$?
+if [ "$reviewer_status" -eq 0 ]; then ok "only builder briefs carry the harden-diff check"; else bad "only builder briefs carry the harden-diff check" "exit $reviewer_status"; fi
+printf 'not json' > "$hrepo/vault/task-tree.json"
+expect_block "an unreadable task-tree.json fails closed" guard_builder_in "$hrepo" "$HARD_BRIEF"
+git -C "$hrepo" worktree remove --force "$hrepo/.worktrees/S021" 2>/dev/null
+rm -rf "$hrepo"
+
 echo "== gate.sh — quiet gate runner =="
 make_gate_repo() {
   local d
@@ -600,6 +646,114 @@ if [ "$status" -eq 0 ] && echo "$out" | grep -q "^test PASS" && echo "$out" | gr
   ok "a full gate runs crap after test, so it reads fresh coverage"
 else
   bad "a full gate runs crap after test, so it reads fresh coverage" "exit $status: $out"
+fi
+rm -rf "$repo"
+
+echo "== gate.sh — mutation step =="
+repo=$(make_gate_repo '')
+mkdir -p "$repo/src"
+printf 'def a():\n    return 1\n\n\ndef b():\n    return 2\n' > "$repo/app.py"
+printf 'def m():\n    return 4\n' > "$repo/src/mod.py"
+git -C "$repo" add -A && git -C "$repo" commit -q -m "base code"
+git -C "$repo" checkout -q -b slice/S001
+printf 'def a():\n    return 10\n\n\ndef b():\n    return 2\n' > "$repo/app.py"
+printf 'def m():\n    return 40\n' > "$repo/src/mod.py"
+git -C "$repo" commit -q -am "feat: touch a and m"
+mutation_gate() {
+  printf '# Project\n## Gate\n- gate.test: echo ok\n- gate.mutation: cat vault/mut.txt\n%s\n' "$2" > "$repo/vault/project.md"
+  printf '%b' "$1" > "$repo/vault/mut.txt"
+  status=0
+  if [ "${3:-mutation}" = all ]; then
+    out=$(cd "$repo" && "$GATE" 2>&1) || status=$?
+  else
+    out=$(cd "$repo" && "$GATE" "${3:-mutation}" 2>&1) || status=$?
+  fi
+}
+mutation_gate 'app.py:2 killed 10 -> 11\napp.py:6 survived 2 -> 3\nsrc/mod.py:2 timeout 40 -> 0\n'
+if [ "$status" -eq 0 ] && echo "$out" | grep -q "^mutation PASS.*score 100% on 2 touched mutants (min 80%)"; then
+  ok "mutation ignores survivors on lines the diff does not touch"
+else
+  bad "mutation ignores survivors on lines the diff does not touch" "exit $status: $out"
+fi
+mutation_gate 'app.py:2 killed a\napp.py:2 survived b\n'
+if [ "$status" -eq 1 ] && echo "$out" | grep -q "^mutation FAIL.*score 50% on 2 touched mutants, under gate.mutation.min (80%)" \
+   && echo "$out" | grep -q "^  survived: app.py:2 survived b" && echo "$out" | grep -q "^GATE: FAIL (mutation)"; then
+  ok "mutation fails a touched score under the min and lists each survivor"
+else
+  bad "mutation fails a touched score under the min and lists each survivor" "exit $status: $out"
+fi
+mutation_gate 'app.py:2 killed a\napp.py:2 killed b\napp.py:2 killed c\napp.py:2 killed d\napp.py:2 no-coverage e\n'
+if [ "$status" -eq 0 ] && echo "$out" | grep -q "score 80%" && echo "$out" | grep -q "^  survived: app.py:2 no-coverage e"; then
+  ok "mutation passes a score equal to the min, still listing its survivors"
+else
+  bad "mutation passes a score equal to the min, still listing its survivors" "exit $status: $out"
+fi
+mutation_gate 'app.py:2 killed a\napp.py:2 survived b\n' '- gate.mutation.min: 50'
+if [ "$status" -eq 0 ]; then ok "mutation honors gate.mutation.min"; else bad "mutation honors gate.mutation.min" "exit $status: $out"; fi
+mutation_gate 'src\\mod.py:2 survived m\r\n'
+if [ "$status" -eq 1 ] && echo "$out" | grep -q "score 0% on 1 touched"; then
+  ok "mutation reads CRLF output with backslash paths, as Windows tools print them"
+else
+  bad "mutation reads CRLF output with backslash paths, as Windows tools print them" "exit $status: $out"
+fi
+for bad_min in lots 101 -5; do
+  rm -f "$repo/.gate/mutation.log"
+  mutation_gate 'app.py:2 killed a\n' "- gate.mutation.min: $bad_min"
+  if [ "$status" -eq 1 ] && echo "$out" | grep -q "gate.mutation.min must be a whole percent" && [ ! -f "$repo/.gate/mutation.log" ]; then
+    ok "gate.mutation.min '$bad_min' fails before the command runs"
+  else
+    bad "gate.mutation.min '$bad_min' fails before the command runs" "exit $status: $out"
+  fi
+done
+mutation_gate 'all good\n'
+if [ "$status" -eq 1 ] && echo "$out" | grep -q "^mutation FAIL.*printed no"; then
+  ok "mutation fails output it can't parse instead of passing on nothing"
+else
+  bad "mutation fails output it can't parse instead of passing on nothing" "exit $status: $out"
+fi
+mutation_gate 'no-mutants\n'
+if [ "$status" -eq 0 ] && echo "$out" | grep -q "^mutation PASS.*touches no mutated line"; then
+  ok "mutation passes a report that says it generated no mutants"
+else
+  bad "mutation passes a report that says it generated no mutants" "exit $status: $out"
+fi
+mutation_gate 'lib.py:1 survived x\n'
+if [ "$status" -eq 0 ] && echo "$out" | grep -q "touches no mutated line"; then
+  ok "mutation passes when no mutant sits on a touched line"
+else
+  bad "mutation passes when no mutant sits on a touched line" "exit $status: $out"
+fi
+# shellcheck disable=SC2016
+printf '# Project\n## Gate\n- gate.test: echo ok\n- gate.mutation: cat "$GATE_MUTATION_FILES" > vault/seen.txt; echo no-mutants\n' > "$repo/vault/project.md"
+status=0; out=$(cd "$repo" && "$GATE" mutation 2>&1) || status=$?
+if [ "$status" -eq 0 ] && [ "$(cat "$repo/vault/seen.txt")" = "$(printf 'app.py\nsrc/mod.py')" ]; then
+  ok "mutation hands its command the touched files, so the tool mutates only those"
+else
+  bad "mutation hands its command the touched files, so the tool mutates only those" "exit $status: $out / $(cat "$repo/vault/seen.txt" 2>/dev/null)"
+fi
+printf '# Project\n## Gate\n- gate.test: echo ok\n- gate.mutation: exit 3\n' > "$repo/vault/project.md"
+status=0; out=$(cd "$repo" && "$GATE" mutation 2>&1) || status=$?
+if [ "$status" -eq 1 ] && echo "$out" | grep -q "^mutation FAIL (exit 3"; then ok "mutation fails when its command fails"; else bad "mutation fails when its command fails" "exit $status: $out"; fi
+printf '# Project\n## Gate\n- gate.test: false\n- gate.mutation: cat vault/mut.txt\n' > "$repo/vault/project.md"
+printf 'app.py:2 survived a\n' > "$repo/vault/mut.txt"
+status=0; out=$(cd "$repo" && "$GATE" test mutation 2>&1) || status=$?
+if echo "$out" | grep -q "^mutation SKIP (test failed" && echo "$out" | grep -q "^GATE: FAIL (test) @"; then
+  ok "mutation skips after a failed test step"
+else
+  bad "mutation skips after a failed test step" "exit $status: $out"
+fi
+printf '# Project\n## Gate\n- gate.test: echo ok\n' > "$repo/vault/project.md"
+out=$(cd "$repo" && "$GATE" mutation 2>&1)
+if echo "$out" | grep -q "^mutation SKIP (no gate.mutation"; then ok "mutation skips without a gate.mutation line"; else bad "mutation skips without a gate.mutation line" "$out"; fi
+mutation_gate 'app.py:2 killed a\n'
+out=$(cd "$repo" && GATE_BASE=trunk "$GATE" mutation 2>&1)
+if echo "$out" | grep -q "^mutation SKIP (no trunk branch"; then ok "mutation skips when the base branch is missing"; else bad "mutation skips when the base branch is missing" "$out"; fi
+mutation_gate 'app.py:2 killed a\n' '' all
+if [ "$status" -eq 0 ] && echo "$out" | grep -q "^mutation PASS" \
+   && [ "$(echo "$out" | grep -n '^mutation' | cut -d: -f1)" -gt "$(echo "$out" | grep -n '^test' | cut -d: -f1)" ]; then
+  ok "a full gate runs mutation after test"
+else
+  bad "a full gate runs mutation after test" "exit $status: $out"
 fi
 rm -rf "$repo"
 
@@ -950,7 +1104,8 @@ if grep -qF '& "$env:ProgramFiles\Git\bin\bash.exe" -c' "$proj/AGENTS.md"; then
 else
   bad "AGENTS.md tells Cursor and Copilot how to reach the bash scripts from PowerShell" "$(sed -n '2,6p' "$proj/AGENTS.md")"
 fi
-if grep -q "A \`crap\` FAIL goes back to the builder" "$proj/AGENTS.md" && grep -qF "$skill_path" "$proj/AGENTS.md"; then
+if grep -q "A \`crap\` FAIL goes back to the builder, and so does a \`mutation\` FAIL" "$proj/AGENTS.md" && grep -qF "$skill_path" "$proj/AGENTS.md" \
+   && grep -qF "~/.claude/skills/mutation-survivors/SKILL.md" "$proj/AGENTS.md"; then
   ok "AGENTS.md gives Cursor and Copilot the CRAP gate rule and the skill's path"
 else
   bad "AGENTS.md gives Cursor and Copilot the CRAP gate rule and the skill's path" "$(grep -n crap "$proj/AGENTS.md")"
@@ -978,11 +1133,11 @@ PLANS=$(mktemp -d)
 cat > "$PLANS/good.json" <<'JSON'
 [
   {"id": "S010", "title": "Shopper can save a cart", "so_that": "I don't lose my picks",
-   "status": "todo", "depends_on": [], "acceptance_criteria": ["cart persists across reload"],
+   "status": "todo", "depends_on": [], "auditor_triggers": [], "acceptance_criteria": ["cart persists across reload"],
    "verify": "tests/cart_test.sh", "retry_count": 0,
    "gates": {"self_review": null, "automated": "PASS", "reviewer": "APPROVED", "auditor": "skip: no auth, data access or external calls"}},
   {"id": "S011", "title": "Shopper can share a saved cart", "so_that": "a friend can buy for me",
-   "status": "todo", "depends_on": ["S010", "S001", "S002"], "acceptance_criteria": ["share link opens the cart"],
+   "status": "todo", "depends_on": ["S010", "S001", "S002"], "auditor_triggers": ["data-access", "user-input"], "acceptance_criteria": ["share link opens the cart"],
    "verify": "tests/share_test.sh", "retry_count": 0,
    "gates": {"self_review": null, "automated": null, "reviewer": null, "auditor": null}}
 ]
@@ -994,6 +1149,8 @@ jq '.[0].depends_on = ["S011"]'         "$PLANS/good.json" > "$PLANS/cycle.json"
 jq '.[0].gates.auditor = "skip"'        "$PLANS/good.json" > "$PLANS/bare-skip.json"
 jq '.[0].gates.auditor = "skip:   "'    "$PLANS/good.json" > "$PLANS/blank-skip.json"
 jq '.[0] |= del(.verify)'               "$PLANS/good.json" > "$PLANS/missing-verify.json"
+jq '.[0] |= del(.auditor_triggers)'     "$PLANS/good.json" > "$PLANS/missing-triggers.json"
+jq '.[1].auditor_triggers = ["database"]' "$PLANS/good.json" > "$PLANS/unknown-trigger.json"
 proj=$(mktemp -d)
 mkdir -p "$proj/vault"
 printf '# Stories\n\n## S001 — User can sign in\nAs a user...\n' > "$proj/vault/stories.md"
@@ -1014,9 +1171,25 @@ expect_plan "dependency cycle fails"       cycle.json           1 "cycle among: 
 expect_plan "bare 'skip' gate fails"       bare-skip.json       1 "S010: gate 'auditor'"
 expect_plan "whitespace-only skip reason fails" blank-skip.json 1 "S010: gate 'auditor'"
 expect_plan "missing verify step fails"    missing-verify.json  1 "S010: missing verify step"
+expect_plan "missing auditor_triggers fails, so no slice skips the hardening decision" missing-triggers.json 1 "S010: auditor_triggers must be an array"
+expect_plan "an auditor trigger outside the vocabulary fails" unknown-trigger.json 1 'S011: auditor_trigger "database" unknown'
 expect_plan "a missing draft fails"        nope.json            1 "no plan at"
 rm -rf "$proj" "$PLANS"
 if grep -q '^tools: Read, Grep, Glob, Write$' "$ROOT/agents/planner.md"; then ok "planner keeps no shell: the Director runs check-plan.sh"; else bad "planner keeps no shell: the Director runs check-plan.sh" "tools changed"; fi
+for s in clean-diff harden-diff mutation-survivors; do
+  if grep -q "^name: $s$" "$ROOT/skills/$s/SKILL.md" 2>/dev/null; then ok "skill $s exists under its own name"; else bad "skill $s exists under its own name" "missing or misnamed"; fi
+done
+if grep -q 'run the clean-diff skill' "$ROOT/agents/builder.md" && grep -q 'STANDING names harden-diff, run the' "$ROOT/agents/builder.md" \
+   && grep -q '^CLEANED:' "$ROOT/agents/builder.md" && grep -q '^HARDENED:' "$ROOT/agents/builder.md"; then
+  ok "builder runs clean-diff, and harden-diff when STANDING names it, and reports both"
+else
+  bad "builder runs clean-diff, and harden-diff when STANDING names it, and reports both" "builder.md changed"
+fi
+if grep -q 'HARDENED line maps every one' "$ROOT/agents/reviewer.md" && grep -q "gate's \`mutation\` step owns the score" "$ROOT/agents/reviewer.md"; then
+  ok "reviewer checks the HARDENED line and criterion-line mutation survivors"
+else
+  bad "reviewer checks the HARDENED line and criterion-line mutation survivors" "reviewer.md changed"
+fi
 
 echo "== lint.sh =="
 fakebin=$(mktemp -d)

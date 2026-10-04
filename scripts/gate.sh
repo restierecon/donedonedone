@@ -18,7 +18,7 @@ setting() {
   printf '%s\n' "${value%\`}"
 }
 
-known="lint types test build crap markers comments"
+known="lint types test build crap mutation markers comments"
 steps=() targets=() focused=0
 while [ $# -gt 0 ]; do
   if [ "$1" = "--" ]; then
@@ -55,6 +55,16 @@ if [ "$focused" -eq 0 ]; then
   case "$crap_max" in
     *[!0-9.]*|*.*.*|.*|*.) echo "gate.sh: gate.crap.max must be a number, not '$crap_max'" >&2; exit 1 ;;
   esac
+fi
+
+mutation_min=80
+if [ "$focused" -eq 0 ]; then
+  mutation_min=$(setting 'mutation\.min')
+  [ -z "$mutation_min" ] && mutation_min=80
+  case "$mutation_min" in
+    *[!0-9]*) echo "gate.sh: gate.mutation.min must be a whole percent 0-100, not '$mutation_min'" >&2; exit 1 ;;
+  esac
+  [ "$mutation_min" -le 100 ] || { echo "gate.sh: gate.mutation.min must be a whole percent 0-100, not '$mutation_min'" >&2; exit 1; }
 fi
 
 dirty=""
@@ -129,6 +139,30 @@ crap_touched() {
       print "PARSED " parsed + 0
       if (seen) print "TOP " best_name " " best
     }' "$2" "$3"
+}
+
+mutation_touched() {
+  awk '
+    FILENAME == ARGV[1] { touched[$0] = 1; next }
+    {
+      sub(/\r$/, "")
+      if ($1 == "no-mutants") { parsed++; next }
+      if (NF < 2 || $2 !~ /^(killed|survived|timeout|no-coverage)$/) next
+      loc = $1
+      gsub(/\\/, "/", loc)
+      sub(/^\.\//, "", loc)
+      if (loc !~ /:[0-9]+$/) next
+      parsed++
+      if (!(loc in touched)) next
+      total++
+      if ($2 == "killed" || $2 == "timeout") killed++
+      else print "SURVIVED " $0
+    }
+    END {
+      print "PARSED " parsed + 0
+      print "TOTAL " total + 0
+      print "KILLED " killed + 0
+    }' "$1" "$2"
 }
 
 with_targets() {
@@ -223,6 +257,60 @@ for step in "${steps[@]}"; do
     else
       echo "crap PASS (${secs}s) — the diff touches no scored function"
     fi
+    continue
+  fi
+  if [ "$step" = "mutation" ]; then
+    cmd=$(setting mutation)
+    if [ -z "$cmd" ]; then
+      echo "mutation SKIP (no gate.mutation in vault/project.md)"
+      continue
+    fi
+    if [ "$cmd" = "none" ]; then
+      echo "mutation SKIP (gate.mutation: none)"
+      continue
+    fi
+    base="${GATE_BASE:-main}"
+    if ! git -C "$top" rev-parse -q --verify "$base^{commit}" >/dev/null; then
+      echo "mutation SKIP (no $base branch to diff against; set GATE_BASE)"
+      continue
+    fi
+    case " ${failed[*]} " in
+      *" test "*) echo "mutation SKIP (test failed — mutants would be judged against a red suite)"; continue ;;
+    esac
+    added_lines "$base" > "$logdir/mutation.touched"
+    sed 's/:[0-9]*$//' "$logdir/mutation.touched" | sort -u > "$logdir/mutation.files"
+    log="$logdir/mutation.log"
+    start=$(date +%s)
+    (cd "$top" && GATE_BASE="$base" GATE_MUTATION_FILES="$logdir/mutation.files" bash -c "$cmd") >"$log" 2>&1
+    status=$?
+    secs=$(( $(date +%s) - start ))
+    if [ "$status" -ne 0 ]; then
+      failed+=("mutation")
+      echo "mutation FAIL (exit $status, ${secs}s) — full log: .gate/mutation.log"
+      tail -"$EXCERPT_LINES" "$log" | while IFS= read -r line; do echo "  $line"; done
+      continue
+    fi
+    result=$(mutation_touched "$logdir/mutation.touched" "$log")
+    if [ "$(echo "$result" | sed -n 's/^PARSED //p')" = "0" ]; then
+      failed+=("mutation")
+      echo "mutation FAIL (${secs}s) — gate.mutation printed no '<path>:<line> <killed|survived|timeout|no-coverage> <description>' lines (or 'no-mutants'); full log: .gate/mutation.log"
+      continue
+    fi
+    total=$(echo "$result" | sed -n 's/^TOTAL //p')
+    killed=$(echo "$result" | sed -n 's/^KILLED //p')
+    survivors=$(echo "$result" | sed -n 's/^SURVIVED //p')
+    if [ "$total" -eq 0 ]; then
+      echo "mutation PASS (${secs}s) — the diff touches no mutated line"
+      continue
+    fi
+    score=$(( killed * 100 / total ))
+    if [ $(( killed * 100 )) -lt $(( mutation_min * total )) ]; then
+      failed+=("mutation")
+      echo "mutation FAIL (${secs}s) — score ${score}% on $total touched mutants, under gate.mutation.min (${mutation_min}%); add the assertion each survivor shows is missing:"
+    else
+      echo "mutation PASS (${secs}s) — score ${score}% on $total touched mutants (min ${mutation_min}%)"
+    fi
+    [ -n "$survivors" ] && echo "$survivors" | head -"$EXCERPT_LINES" | while IFS= read -r line; do echo "  survived: $line"; done
     continue
   fi
   if [ "$focused" -eq 1 ]; then

@@ -67,9 +67,17 @@ the slice branch elsewhere, since sibling worktrees share the same repo.
 - [ ] Risk stays low on touched code: the gate's `crap` step owns the CRITICAL. When
       `.gate/crap.log` exists, any function the diff touches that scores over half of
       `gate.crap.max` (default 30) is a NIT naming which branch to test or where to split
+- [ ] Tests kill the mutants that matter: the gate's `mutation` step owns the score. A
+      survivor it lists on a line that implements an acceptance criterion is CRITICAL
+      unless a test named for why shows it is equivalent; other survivors are NITs
+      naming the assertion that would kill them
 - [ ] No scope creep — diff contains only this slice ("also improved X" = REJECT)
 - [ ] Frontend calls match backend routes; schema matches models (contract check)
 - [ ] No new dependency without justification; lockfile committed if deps changed
+- [ ] Builder's CLEANED line present. When the brief's STANDING names harden-diff, its
+      HARDENED line maps every one of the slice's auditor_triggers to a test that exists
+      in the diff and would fail without the fix, or to "not crossed" with a reason the
+      diff confirms — missing line, missing trigger or missing test = CRITICAL
 
 ## Termination
 One pass, one verdict. If the diff is too large to review confidently, REJECT

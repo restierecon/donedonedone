@@ -1,0 +1,16 @@
+{
+  "go_module": "example.com/calc",
+  "files": [
+    {"file_name": "calc.go", "mutations": [
+      {"line": 4, "column": 11, "type": "ARITHMETIC_BASE", "status": "KILLED"},
+      {"line": 8, "column": 7, "type": "CONDITIONALS_BOUNDARY", "status": "LIVED"},
+      {"line": 8, "column": 7, "type": "CONDITIONALS_NEGATION", "status": "NOT_VIABLE"}
+    ]},
+    {"file_name": "pkg/io.go", "mutations": [
+      {"line": 12, "column": 3, "type": "INCREMENT_DECREMENT", "status": "NOT_COVERED"},
+      {"line": 15, "column": 9, "type": "INVERT_LOOPCTRL", "status": "TIMED_OUT"}
+    ]}
+  ],
+  "test_efficacy": 50, "mutations_coverage": 75, "mutants_total": 5, "mutants_killed": 1, "mutants_lived": 1,
+  "mutants_not_viable": 1, "mutants_not_covered": 1, "elapsed_time": 1.2
+}
