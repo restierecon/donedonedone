@@ -2370,11 +2370,11 @@ rm -rf "$repo"
 home=$(mktemp -d)
 HOME="$home" "$INSTALL" >/dev/null 2>&1
 hooks="$home/.copilot/hooks/donedonedone.json"
-missing=$(jq -r '.hooks[][].command' "$hooks" 2>/dev/null | while IFS= read -r c; do [ -x "$c" ] || echo "$c"; done)
+missing=$(jq -r '.hooks[][].command' "$hooks" 2>/dev/null | tr -d '\r' | while IFS= read -r c; do [ -x "$c" ] || echo "$c"; done)
 if jq -e '(has("version") | not)
       and (.hooks | keys == ["PostToolUse","PreToolUse","SessionStart","Stop","SubagentStop"])
       and ([.hooks[][] | .type == "command" and .timeout == 60] | all)' "$hooks" >/dev/null 2>&1 \
-   && [ -z "$missing" ] && jq -r '.hooks.PreToolUse[].command' "$hooks" | grep -q 'guard.sh$'; then
+   && [ -z "$missing" ] && jq -r '.hooks.PreToolUse[].command' "$hooks" | tr -d '\r' | grep -q 'guard.sh$'; then
   ok "install writes VS Code's native hooks file with absolute paths to the installed scripts"
 else
   bad "install writes VS Code's native hooks file with absolute paths to the installed scripts" "missing: $missing $(cat "$hooks" 2>/dev/null)"
@@ -2473,7 +2473,7 @@ home=$(mktemp -d)
 mkdir -p "$home/.cursor"
 HOME="$home" "$INSTALL" >/dev/null 2>&1
 ch="$home/.cursor/hooks.json"
-missing=$(jq -r '.hooks[][].command' "$ch" 2>/dev/null | while IFS= read -r c; do [ -x "$c" ] || echo "$c"; done)
+missing=$(jq -r '.hooks[][].command' "$ch" 2>/dev/null | tr -d '\r' | while IFS= read -r c; do [ -x "$c" ] || echo "$c"; done)
 if [ -z "$missing" ] && jq -e '.version == 1
      and ([.hooks.preToolUse[], .hooks.beforeShellExecution[], .hooks.beforeReadFile[]] | map(select(.command | endswith("/guard.sh"))) | length == 3 and all(.failClosed == true))
      and ([.hooks.preToolUse[], .hooks.postToolUse[], .hooks.postToolUseFailure[], .hooks.subagentStop[]] | map(select(.command | endswith("/vault-guard.sh"))) | length == 4)
