@@ -919,7 +919,18 @@ if [ "$got" = 'S001\n' ]; then ok "with a CRLF jq, the helper strips the CR from
 status=0; PATH="$crlf_bin:$PATH" bash -c '. "$1"; jq -en false >/dev/null' _ "$ROOT/scripts/jq-text.sh" || status=$?
 if [ "$status" -eq 1 ]; then ok "the helper keeps jq's exit status (jq -e false still exits 1)"; else bad "the helper keeps jq's exit status (jq -e false still exits 1)" "exit $status"; fi
 got=$(bash -c '. "$1"; type -t jq' _ "$ROOT/scripts/jq-text.sh")
-if [ "$got" = "file" ]; then ok "with a jq that writes plain LF, the helper leaves jq alone"; else bad "with a jq that writes plain LF, the helper leaves jq alone" "jq is a $got"; fi
+want="file"
+[ "$(command jq -rn '"x"' | tr '\r' '!')" = "x!" ] && want=function
+if [ "$got" = "$want" ]; then ok "the helper wraps jq exactly when this machine's jq writes CR"; else bad "the helper wraps jq exactly when this machine's jq writes CR" "jq is a $got, wanted $want"; fi
+binary_bin=$(mktemp -d)
+# shellcheck disable=SC2016
+printf '#!/bin/bash\nfor a in "$@"; do [ "$a" = -b ] && { args=(); for b in "$@"; do [ "$b" = -b ] || args+=("$b"); done; exec "%s" "${args[@]}"; }; done\n"%s" "$@" | sed "s/$/\\r/"\nexit "${PIPESTATUS[0]}"\n' "$real_jq" "$real_jq" > "$binary_bin/jq"
+chmod +x "$binary_bin/jq"
+got=$(PATH="$binary_bin:$PATH" bash -c '. "$1"; printf "%s:" "$(declare -f jq | grep -c "command jq -b")"; jq -rn "\"S001\"" | od -An -c | tr -d " \n"' _ "$ROOT/scripts/jq-text.sh")
+if [ "$got" = '1:S001\n' ]; then ok "a jq that honours --binary is called with -b, with no tr in the pipe"; else bad "a jq that honours --binary is called with -b, with no tr in the pipe" "got: $got"; fi
+status=0; PATH="$binary_bin:$PATH" bash -c '. "$1"; jq -en false >/dev/null' _ "$ROOT/scripts/jq-text.sh" || status=$?
+if [ "$status" -eq 1 ]; then ok "jq -b keeps jq's exit status"; else bad "jq -b keeps jq's exit status" "exit $status"; fi
+rm -rf "$binary_bin"
 repo=$(make_repo)
 (cd "$repo" && PATH="$crlf_bin:$PATH" "$LOG_EVENT" S001 gate PASS --patch-id abc >/dev/null 2>&1)
 if [ -s "$repo/vault/log.jsonl" ] && ! grep -q $'\r' "$repo/vault/log.jsonl" && [ "$(tail -1 "$repo/vault/log.jsonl" | jq -r .patch_id)" = "abc" ]; then
