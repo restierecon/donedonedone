@@ -9,7 +9,7 @@ input=""
 [ "$mode" = "hook" ] && input=$(cat)
 event="" agent_id="" agent_type="" tool="" cmd="" file_path="" cwd=""
 if [ -n "$input" ]; then
-  eval "$(echo "$input" | jq -r '@sh "event=\(.hook_event_name // "") agent_id=\(.agent_id // "") agent_type=\(.agent_type // "") tool=\(.tool_name // "") cmd=\(.tool_input.command // ([.tool_input.task.command // empty] + (.tool_input.task.args // []) | map(tostring) | join(" "))) file_path=\([.tool_input.file_path, .tool_input.filePath, .tool_input.notebook_path, .tool_input.path, .tool_input.replacements[]?.filePath?, (.tool_input.input | strings | scan("(?m)^\\*\\*\\* (?:Add|Update|Delete) File: (.+)$") | .[0])] | map(strings) | unique | join("\n")) cwd=\(.cwd // "")"' 2>/dev/null)"
+  eval "$(echo "$input" | jq -r '@sh "event=\(.hook_event_name // "") agent_id=\(.agent_id // "") agent_type=\(.agent_type // "") tool=\(.tool_name // "") cmd=\(.tool_input.command // ([.tool_input.task.command // empty] + (.tool_input.task.args // []) | map(tostring) | join(" "))) file_path=\([.tool_input.file_path, .tool_input.filePath, .tool_input.notebook_path, .tool_input.path, .tool_input.replacements[]?.filePath?, (.tool_input.input | strings | scan("(?m)^\\*\\*\\* (?:(?:Add|Update|Delete) File|Move to): (.+)$") | .[0])] | map(strings) | unique | join("\n")) cwd=\(.cwd // "")"' 2>/dev/null)"
 fi
 case "$event" in
   preToolUse|postToolUse|postToolUseFailure|subagentStop)
@@ -104,7 +104,7 @@ restore_human() {
 
 director_may_touch_vault() {
   case "$tool" in
-    Bash|runTerminalCommand|run_in_terminal|send_to_terminal|create_and_run_task)
+    Bash|Shell|runTerminalCommand|run_in_terminal|send_to_terminal|create_and_run_task)
       echo "$cmd" | grep -qiE 'vault|task-tree|log\.jsonl|log-event|(^|[^[:alnum:]_-])git[[:space:]]' ;;
     *)
       [ -n "$file_path" ] && echo "$file_path" | grep -qi 'vault' ;;

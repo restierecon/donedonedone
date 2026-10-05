@@ -2290,6 +2290,12 @@ expect_block "guard blocks a risk-policy edit sent as VS Code's apply_patch" \
   copilot_call apply_patch "$(patch_input vault/risk-policy.json)"
 expect_allow "guard allows an ordinary apply_patch" \
   copilot_call apply_patch "$(patch_input src/app.ts)"
+expect_block "guard blocks an apply_patch that edits .env alongside .env.example" \
+  copilot_call apply_patch "$(jq -n '{input: "*** Begin Patch\n*** Update File: .env.example\n@@\n-a\n+b\n*** Update File: .env\n@@\n-a\n+b\n*** End Patch"}')"
+expect_block "guard blocks an apply_patch that moves a file onto the risk policy" \
+  copilot_call apply_patch "$(jq -n '{input: "*** Begin Patch\n*** Update File: notes.txt\n*** Move to: vault/risk-policy.json\n@@\n-a\n+b\n*** End Patch"}')"
+expect_block "guard blocks an apply_patch that moves a file onto .env" \
+  copilot_call apply_patch "$(jq -n '{input: "*** Begin Patch\n*** Update File: notes.txt\n*** Move to: .env\n@@\n-a\n+b\n*** End Patch"}')"
 expect_block "guard blocks a builder brief missing headers sent as VS Code's runSubagent" \
   copilot_call runSubagent "$(jq -n --arg p "${FULL_BRIEF/VERIFY: x/}" '{agentName: "builder", prompt: $p}')"
 expect_allow "guard allows a full reviewer brief sent as VS Code's runSubagent" \
@@ -2429,6 +2435,17 @@ if [ "$(echo "$out" | jq -r .permission)" = "allow" ] && [ "$status" -eq 0 ] \
   ok "vault-guard answers Cursor's preToolUse with allow JSON and reports vault drift as postToolUse additional_context"
 else
   bad "vault-guard answers Cursor's preToolUse with allow JSON and reports vault drift as postToolUse additional_context" "exit $status: $out / $out2"
+fi
+rm -rf "$repo"
+
+repo=$(make_vault_repo)
+vg "$repo" PreToolUse "" Shell 'jq . vault/task-tree.json > t && mv t vault/task-tree.json' >/dev/null
+echo '{"slices":[]}' > "$repo/vault/task-tree.json"
+status=0; out=$(vg "$repo" PostToolUse "" Shell 'jq . vault/task-tree.json > t && mv t vault/task-tree.json') || status=$?
+if [ "$status" -eq 0 ] && ! echo "$out" | grep -q "VAULT CHANGED"; then
+  ok "the Director's vault write through Cursor's Shell tool raises no VAULT CHANGED"
+else
+  bad "the Director's vault write through Cursor's Shell tool raises no VAULT CHANGED" "exit $status: $out"
 fi
 rm -rf "$repo"
 
