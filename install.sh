@@ -63,7 +63,8 @@ vscode_status="hooks SKIPPED (install jq, re-run)"
 if command -v jq >/dev/null 2>&1; then
   mkdir -p "$HOME/.copilot/hooks"
   scripts="$DEST/scripts" win_bash="" scripts_ps=""
-  if command -v cygpath >/dev/null 2>&1 && [ -x "$(cygpath -u "$(cygpath -w /)")/bin/bash.exe" ]; then
+  git_root=$(cygpath -u "$(cygpath -w / 2>/dev/null)" 2>/dev/null || true)
+  if command -v cygpath >/dev/null 2>&1 && [ -x "${git_root%/}/bin/bash.exe" ]; then
     scripts=$(cygpath -m "$DEST/scripts")
     win_bash="$(cygpath -w /)\\bin\\bash.exe"
     win_bash=${win_bash//\'/\'\'}

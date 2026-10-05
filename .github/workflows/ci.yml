@@ -134,6 +134,7 @@ jobs:
           MSYS2_ARG_CONV_EXCL: '*'
         run: |
           cmd=$(jq -r '.hooks.PreToolUse[] | select(.command | endswith("/guard.sh")) | .windows' < ~/.copilot/hooks/donedonedone.json | tr -d '\r')
+          if [ -z "$cmd" ] || [ "$cmd" = null ]; then echo "no windows command for guard.sh in the hooks file"; cat ~/.copilot/hooks/donedonedone.json; exit 1; fi
           ps="$SYSTEMROOT/System32/WindowsPowerShell/v1.0/powershell.exe"
           status=0
           out=$(printf '%s' '{"hook_event_name":"PreToolUse","tool_name":"run_in_terminal","tool_input":{"command":"git push --force origin main"}}' \
