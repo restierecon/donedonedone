@@ -9,8 +9,19 @@ input=""
 [ "$mode" = "hook" ] && input=$(cat)
 event="" agent_id="" agent_type="" tool="" cmd="" file_path="" cwd=""
 if [ -n "$input" ]; then
-  eval "$(echo "$input" | jq -r '@sh "event=\(.hook_event_name // "") agent_id=\(.agent_id // "") agent_type=\(.agent_type // "") tool=\(.tool_name // "") cmd=\(.tool_input.command // "") file_path=\(.tool_input.file_path // .tool_input.filePath // .tool_input.notebook_path // .tool_input.path // "") cwd=\(.cwd // "")"' 2>/dev/null)"
+  eval "$(echo "$input" | jq -r '@sh "event=\(.hook_event_name // "") agent_id=\(.agent_id // "") agent_type=\(.agent_type // "") tool=\(.tool_name // "") cmd=\(.tool_input.command // ([.tool_input.task.command // empty] + (.tool_input.task.args // []) | map(tostring) | join(" "))) file_path=\([.tool_input.file_path, .tool_input.filePath, .tool_input.notebook_path, .tool_input.path, .tool_input.replacements[]?.filePath?, (.tool_input.input | strings | scan("(?m)^\\*\\*\\* (?:Add|Update|Delete) File: (.+)$") | .[0])] | map(strings) | unique | join("\n")) cwd=\(.cwd // "")"' 2>/dev/null)"
 fi
+case "$event" in
+  preToolUse|postToolUse|postToolUseFailure|subagentStop)
+    status=0
+    msg=$(printf '%s' "$input" | jq -c '.hook_event_name |= (.[:1] | ascii_upcase) + .[1:]' | "$0" 2>&1 >/dev/null) || status=$?
+    case "$event" in
+      preToolUse) echo '{"permission":"allow"}' ;;
+      postToolUse|postToolUseFailure)
+        if [ "$status" -ne 0 ] && [ -n "$msg" ]; then jq -cn --arg m "$msg" '{additional_context: $m}'; fi ;;
+    esac
+    exit 0 ;;
+esac
 if [ -n "$cwd" ] && [ -d "$cwd" ]; then cd "$cwd" || exit 0; fi
 
 common=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || exit 0
@@ -93,7 +104,7 @@ restore_human() {
 
 director_may_touch_vault() {
   case "$tool" in
-    Bash|runTerminalCommand|run_in_terminal)
+    Bash|runTerminalCommand|run_in_terminal|send_to_terminal|create_and_run_task)
       echo "$cmd" | grep -qiE 'vault|task-tree|log\.jsonl|log-event|(^|[^[:alnum:]_-])git[[:space:]]' ;;
     *)
       [ -n "$file_path" ] && echo "$file_path" | grep -qi 'vault' ;;

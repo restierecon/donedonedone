@@ -2282,6 +2282,208 @@ rm -rf "$cg"
 if grep -q '/create-verification-skill' "$ROOT/skills/init-codebase/SKILL.md"; then ok "init-codebase offers /create-verification-skill"; else bad "init-codebase offers /create-verification-skill" "missing"; fi
 if grep -q '/maintain-verification-skill' "$ROOT/skills/architecture-review/SKILL.md"; then ok "architecture-review suggests /maintain-verification-skill"; else bad "architecture-review suggests /maintain-verification-skill" "missing"; fi
 
+echo "== VS Code Local harness — native hooks file, its payloads and its edit tools =="
+patch_input() { jq -n --arg p "$1" '{input: ("*** Begin Patch\n*** Update File: " + $p + "\n@@\n-a\n+b\n*** End Patch")}'; }
+expect_block "guard blocks a .env edit inside VS Code's multi_replace_string_in_file" \
+  copilot_call multi_replace_string_in_file '{"replacements":[{"filePath":"src/a.ts"},{"filePath":"config/.env"}]}'
+expect_block "guard blocks a risk-policy edit sent as VS Code's apply_patch" \
+  copilot_call apply_patch "$(patch_input vault/risk-policy.json)"
+expect_allow "guard allows an ordinary apply_patch" \
+  copilot_call apply_patch "$(patch_input src/app.ts)"
+expect_block "guard blocks a builder brief missing headers sent as VS Code's runSubagent" \
+  copilot_call runSubagent "$(jq -n --arg p "${FULL_BRIEF/VERIFY: x/}" '{agentName: "builder", prompt: $p}')"
+expect_allow "guard allows a full reviewer brief sent as VS Code's runSubagent" \
+  copilot_call runSubagent "$(jq -n --arg p "$FULL_BRIEF" '{agentName: "reviewer", prompt: $p}')"
+
+expect_block "guard blocks a force push sent as VS Code's create_and_run_task (command plus args)" \
+  copilot_call create_and_run_task '{"workspaceFolder":"/w","task":{"label":"x","type":"shell","command":"git","args":["push","--force","origin","main"]}}'
+expect_block "guard blocks a force push typed into a terminal with VS Code's send_to_terminal" \
+  copilot_call send_to_terminal '{"id":"t1","command":"git push -f"}'
+expect_allow "guard allows an ordinary VS Code task" \
+  copilot_call create_and_run_task '{"workspaceFolder":"/w","task":{"label":"t","type":"shell","command":"npm","args":["test"]}}'
+
+home=$(mktemp -d)
+fake=$(mktemp -d)
+mkdir -p "$fake/root/bin" "$fake/bin"
+touch "$fake/root/bin/bash.exe" && chmod +x "$fake/root/bin/bash.exe"
+cat > "$fake/bin/cygpath" <<EOF
+#!/bin/bash
+case "\$1" in
+  -w) echo 'C:\\Program Files\\Git' ;;
+  -u) echo "$fake/root" ;;
+  -m) echo "C:/Users/o'neil/.claude/scripts" ;;
+esac
+EOF
+chmod +x "$fake/bin/cygpath"
+HOME="$home" PATH="$fake/bin:$PATH" "$INSTALL" >/dev/null 2>&1
+win=$(jq -r '.hooks.PreToolUse[] | select(.command | endswith("/guard.sh")) | .windows' "$home/.copilot/hooks/donedonedone.json" 2>/dev/null)
+# shellcheck disable=SC2016
+want='& '"'"'C:\Program Files\Git\bin\bash.exe'"'"' '"'"'C:/Users/o'"''"'neil/.claude/scripts/guard.sh'"'"'; exit $LASTEXITCODE'
+if [ "$win" = "$want" ]; then
+  ok "install gives VS Code a Windows command PowerShell 5.1 can run: & 'bash.exe' 'script'; exit \$LASTEXITCODE"
+else
+  bad "install gives VS Code a Windows command PowerShell 5.1 can run: & 'bash.exe' 'script'; exit \$LASTEXITCODE" "$win"
+fi
+rm -rf "$home" "$fake"
+
+fakebin=$(mktemp -d)
+# shellcheck disable=SC2016
+printf '#!/bin/bash\n[ "$1" = check ] && { echo "E999 fake lint error"; exit 1; }\nexit 0\n' > "$fakebin/ruff"
+chmod +x "$fakebin/ruff"
+tmpdir=$(mktemp -d)
+touch "$tmpdir/a.txt" "$tmpdir/b.py"
+status=0
+jq -n --arg a "$tmpdir/a.txt" --arg b "$tmpdir/b.py" '{tool_input: {replacements: [{filePath: $a}, {filePath: $b}]}}' \
+  | PATH="$fakebin:$PATH" "$LINT" >/dev/null 2>&1 || status=$?
+if [ "$status" -eq 2 ]; then ok "lint checks every file in VS Code's multi_replace_string_in_file"; else bad "lint checks every file in VS Code's multi_replace_string_in_file" "exit $status"; fi
+status=0
+patch_input "$tmpdir/b.py" | jq '{tool_input: .}' | PATH="$fakebin:$PATH" "$LINT" >/dev/null 2>&1 || status=$?
+if [ "$status" -eq 2 ]; then ok "lint checks a file VS Code's apply_patch updates"; else bad "lint checks a file VS Code's apply_patch updates" "exit $status"; fi
+rm -rf "$fakebin" "$tmpdir"
+
+repo=$(make_repo)
+echo '{"slices":[{"id":"S004","title":"User can sync","status":"todo","depends_on":[]}]}' > "$repo/vault/task-tree.json"
+out=$(cd /tmp && jq -n --arg r "$repo" '{hook_event_name: "SessionStart", source: "new", cwd: $r}' | "$SESSION_START" 2>/dev/null)
+if [ "$(echo "$out" | jq -r '.hookSpecificOutput.hookEventName' 2>/dev/null)" = "SessionStart" ] \
+   && echo "$out" | jq -r '.hookSpecificOutput.additionalContext' | grep -q "S004 · todo"; then
+  ok "session-start answers a SessionStart payload with hookSpecificOutput JSON, which VS Code and Claude Code both read"
+else
+  bad "session-start answers a SessionStart payload with hookSpecificOutput JSON, which VS Code and Claude Code both read" "$out"
+fi
+rm -rf "$repo"
+
+repo=$(make_vault_repo)
+vs_edit() {
+  jq -n --arg cwd "$repo" --arg e "$1" '{hook_event_name: $e, cwd: $cwd, tool_name: "multi_replace_string_in_file",
+    tool_input: {replacements: [{filePath: "src/a.ts"}, {filePath: "vault/task-tree.json"}]}}' | "$VAULT_GUARD" 2>&1
+}
+vs_edit PreToolUse >/dev/null
+echo '{"slices":[]}' > "$repo/vault/task-tree.json"
+status=0; out=$(vs_edit PostToolUse) || status=$?
+if [ "$status" -eq 0 ] && grep -q '"slices":\[\]' "$repo/vault/task-tree.json"; then
+  ok "vault-guard keeps the Director's task-tree.json edit made through VS Code's multi_replace_string_in_file"
+else
+  bad "vault-guard keeps the Director's task-tree.json edit made through VS Code's multi_replace_string_in_file" "exit $status: $out"
+fi
+rm -rf "$repo"
+
+home=$(mktemp -d)
+HOME="$home" "$INSTALL" >/dev/null 2>&1
+hooks="$home/.copilot/hooks/donedonedone.json"
+missing=$(jq -r '.hooks[][].command' "$hooks" 2>/dev/null | tr -d '\r' | while IFS= read -r c; do [ -x "$c" ] || echo "$c"; done)
+if jq -e '(has("version") | not)
+      and (.hooks | keys == ["PostToolUse","PreToolUse","SessionStart","Stop","SubagentStop"])
+      and ([.hooks[][] | .type == "command" and .timeout == 60] | all)' "$hooks" >/dev/null 2>&1 \
+   && [ -z "$missing" ] && jq -r '.hooks.PreToolUse[].command' "$hooks" | tr -d '\r' | grep -q 'guard.sh$'; then
+  ok "install writes VS Code's native hooks file with absolute paths to the installed scripts"
+else
+  bad "install writes VS Code's native hooks file with absolute paths to the installed scripts" "missing: $missing $(cat "$hooks" 2>/dev/null)"
+fi
+echo '{"mine": true}' > "$hooks"
+HOME="$home" "$INSTALL" >/dev/null 2>&1
+if [ "$(jq -r .mine "$hooks")" = "true" ] && ls "$home"/.copilot/hooks/donedonedone.json.new-* >/dev/null 2>&1; then
+  ok "install keeps an existing VS Code hooks file and drops the new one beside it, outside *.json"
+else
+  bad "install keeps an existing VS Code hooks file and drops the new one beside it, outside *.json" "$(ls "$home/.copilot/hooks")"
+fi
+rm -rf "$home"
+
+echo "== Cursor generic tool hooks — preToolUse, postToolUse, failClosed =="
+cursor_tool() {
+  local extra="${3:-}"
+  [ -n "$extra" ] || extra='{}'
+  jq -n --arg tool "$1" --argjson input "$2" --argjson x "$extra" \
+    '{hook_event_name: "preToolUse", tool_name: $tool, tool_input: $input, workspace_roots: ["/tmp"]} + $x' | "$GUARD" 2>/dev/null
+}
+status=0; out=$(cursor_tool Write '{"file_path":"vault/risk-policy.json","content":"{}"}') || status=$?
+if [ "$status" -eq 2 ] && [ "$(echo "$out" | jq -r .permission)" = "deny" ]; then
+  ok "guard denies a Cursor preToolUse Write to a human-only file with deny JSON + exit 2"
+else
+  bad "guard denies a Cursor preToolUse Write to a human-only file with deny JSON + exit 2" "exit $status: $out"
+fi
+status=0; out=$(cursor_tool Shell '{"command":"git push --force origin main"}') || status=$?
+if [ "$status" -eq 2 ] && [ "$(echo "$out" | jq -r .permission)" = "deny" ]; then
+  ok "guard denies a force push sent as Cursor's preToolUse Shell"
+else
+  bad "guard denies a force push sent as Cursor's preToolUse Shell" "exit $status: $out"
+fi
+status=0; out=$(cursor_tool Task "$(jq -n --arg p "${FULL_BRIEF/VERIFY: x/}" '{subagent_type: "builder", prompt: $p}')") || status=$?
+if [ "$status" -eq 2 ] && echo "$out" | jq -r .agent_message | grep -q VERIFY; then
+  ok "guard denies a Cursor Task spawn whose builder brief is missing a header"
+else
+  bad "guard denies a Cursor Task spawn whose builder brief is missing a header" "exit $status: $out"
+fi
+status=0; out=$(cursor_tool Read '{"file_path":"src/app.ts"}') || status=$?
+if [ "$status" -eq 0 ] && [ "$(echo "$out" | jq -r .permission)" = "allow" ]; then
+  ok "guard answers an ordinary Cursor preToolUse with allow JSON"
+else
+  bad "guard answers an ordinary Cursor preToolUse with allow JSON" "exit $status: $out"
+fi
+
+repo=$(make_vault_repo)
+out=$(jq -n --arg cwd "$repo" '{hook_event_name: "preToolUse", cwd: $cwd, tool_name: "Shell", tool_input: {command: "npm test"}}' | "$VAULT_GUARD" 2>/dev/null)
+echo '{"slices":[]}' > "$repo/vault/task-tree.json"
+status=0; out2=$(jq -n --arg cwd "$repo" '{hook_event_name: "postToolUse", cwd: $cwd, tool_name: "Shell", tool_input: {command: "npm test"}}' | "$VAULT_GUARD" 2>/dev/null) || status=$?
+if [ "$(echo "$out" | jq -r .permission)" = "allow" ] && [ "$status" -eq 0 ] \
+   && echo "$out2" | jq -r .additional_context | grep -q "VAULT CHANGED"; then
+  ok "vault-guard answers Cursor's preToolUse with allow JSON and reports vault drift as postToolUse additional_context"
+else
+  bad "vault-guard answers Cursor's preToolUse with allow JSON and reports vault drift as postToolUse additional_context" "exit $status: $out / $out2"
+fi
+rm -rf "$repo"
+
+repo=$(make_vault_repo)
+echo '{"slices":[{"id":"S001","status":"done"}]}' > "$repo/vault/task-tree.json"
+out=$(jq -n --arg cwd "$repo" '{hook_event_name: "subagentStop", cwd: $cwd, agent_id: "a1", agent_type: "builder"}' | "$VAULT_GUARD" 2>/dev/null)
+if [ -z "$out" ] && grep -q building "$repo/vault/task-tree.json"; then
+  ok "vault-guard restores task-tree.json on Cursor's subagentStop"
+else
+  bad "vault-guard restores task-tree.json on Cursor's subagentStop" "$out $(cat "$repo/vault/task-tree.json")"
+fi
+rm -rf "$repo"
+
+fakebin=$(mktemp -d)
+tmpdir=$(mktemp -d)
+# shellcheck disable=SC2016
+printf '#!/bin/bash\n[ "$1" = format ] && touch "%s/formatted"\n[ "$1" = check ] && { echo "E999 fake lint error"; exit 1; }\nexit 0\n' "$tmpdir" > "$fakebin/ruff"
+chmod +x "$fakebin/ruff"
+touch "$tmpdir/b.py"
+status=0
+out=$(jq -n --arg f "$tmpdir/b.py" '{hook_event_name: "postToolUse", tool_name: "Write", tool_input: {file_path: $f}}' \
+  | PATH="$fakebin:$PATH" "$LINT" 2>/dev/null) || status=$?
+if [ "$status" -eq 0 ] && echo "$out" | jq -r .additional_context | grep -q "E999"; then
+  ok "lint hands Cursor's postToolUse its errors as additional_context, the field Cursor shows the agent"
+else
+  bad "lint hands Cursor's postToolUse its errors as additional_context, the field Cursor shows the agent" "exit $status: $out"
+fi
+rm -f "$tmpdir/formatted"
+status=0
+for t in Read read_file; do
+  jq -n --arg t "$t" --arg f "$tmpdir/b.py" '{tool_name: $t, tool_input: {file_path: $f, filePath: $f}}' \
+    | PATH="$fakebin:$PATH" "$LINT" >/dev/null 2>&1 || status=$?
+done
+if [ "$status" -eq 0 ] && [ ! -e "$tmpdir/formatted" ]; then
+  ok "lint never formats a file a Cursor or VS Code tool only read (neither runs matchers)"
+else
+  bad "lint never formats a file a Cursor or VS Code tool only read (neither runs matchers)" "exit $status"
+fi
+rm -rf "$fakebin" "$tmpdir"
+
+home=$(mktemp -d)
+mkdir -p "$home/.cursor"
+HOME="$home" "$INSTALL" >/dev/null 2>&1
+ch="$home/.cursor/hooks.json"
+missing=$(jq -r '.hooks[][].command' "$ch" 2>/dev/null | tr -d '\r' | while IFS= read -r c; do [ -x "$c" ] || echo "$c"; done)
+if [ -z "$missing" ] && jq -e '.version == 1
+     and ([.hooks.preToolUse[], .hooks.beforeShellExecution[], .hooks.beforeReadFile[]] | map(select(.command | endswith("/guard.sh"))) | length == 3 and all(.failClosed == true))
+     and ([.hooks.preToolUse[], .hooks.postToolUse[], .hooks.postToolUseFailure[], .hooks.subagentStop[]] | map(select(.command | endswith("/vault-guard.sh"))) | length == 4)
+     and ([.hooks.postToolUse[] | select(.command | endswith("/lint.sh"))] | length == 1)' "$ch" >/dev/null 2>&1; then
+  ok "install wires guard (fail-closed), vault-guard and lint onto Cursor's generic tool events"
+else
+  bad "install wires guard (fail-closed), vault-guard and lint onto Cursor's generic tool events" "missing: $missing $(cat "$ch" 2>/dev/null)"
+fi
+rm -rf "$home"
+
 echo "== codebase map wiring =="
 if grep -q 'codebase-graph.py impact --base main' "$ROOT/skills/blast-radius/SKILL.md"; then ok "blast-radius starts from the impact block"; else bad "blast-radius starts from the impact block" "missing"; fi
 if grep -q 'codebase-graph.py build' "$ROOT/skills/architecture-review/SKILL.md"; then ok "architecture-review builds the map first"; else bad "architecture-review builds the map first" "missing"; fi

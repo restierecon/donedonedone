@@ -44,6 +44,8 @@ context() {
 
 if [ "$event" = "sessionStart" ]; then
   context | jq -Rs '{additional_context: .}'
+elif [ "$event" = "SessionStart" ]; then
+  context | jq -Rs '{hookSpecificOutput: {hookEventName: "SessionStart", additionalContext: .}}'
 else
   context
 fi

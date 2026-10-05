@@ -59,6 +59,40 @@ rm -f "$DEST/scripts/generate-copilot-agents.sh"
 
 "$DEST/scripts/generate-agents.sh" copilot >/dev/null
 
+vscode_status="hooks SKIPPED (install jq, re-run)"
+if command -v jq >/dev/null 2>&1; then
+  mkdir -p "$HOME/.copilot/hooks"
+  scripts="$DEST/scripts" win_bash="" scripts_ps=""
+  git_root=$(cygpath -u "$(cygpath -w / 2>/dev/null)" 2>/dev/null || true)
+  if command -v cygpath >/dev/null 2>&1 && [ -x "${git_root%/}/bin/bash.exe" ]; then
+    scripts=$(cygpath -m "$DEST/scripts")
+    win_bash="$(cygpath -w /)\\bin\\bash.exe"
+    win_bash=${win_bash//\'/\'\'}
+    scripts_ps=${scripts//\'/\'\'}
+  fi
+  hooks_tmp=$(mktemp)
+  jq -n --arg s "$scripts" --arg b "$win_bash" --arg p "$scripts_ps" --arg q "'" '
+    def hook($name): {type: "command", command: ($s + "/" + $name), timeout: 60}
+      + (if $b == "" then {} else {windows: ("& " + $q + $b + $q + " " + $q + $p + "/" + $name + $q + "; exit $LASTEXITCODE")} end);
+    {
+      hooks: {
+        SessionStart: [hook("session-start.sh")],
+        PreToolUse:   [hook("guard.sh"), hook("vault-guard.sh")],
+        PostToolUse:  [hook("lint.sh"), hook("vault-guard.sh")],
+        SubagentStop: [hook("vault-guard.sh")],
+        Stop:         [hook("checkpoint.sh")]
+      }
+    }' > "$hooks_tmp"
+  vscode_hooks="$HOME/.copilot/hooks/donedonedone.json"
+  if [ -f "$vscode_hooks" ] && ! cmp -s "$hooks_tmp" "$vscode_hooks"; then
+    mv "$hooks_tmp" "$vscode_hooks.new-$TS"
+    echo "  !! existing ~/.copilot/hooks/donedonedone.json kept. Merge hooks from donedonedone.json.new-$TS manually."
+  else
+    mv "$hooks_tmp" "$vscode_hooks"
+  fi
+  vscode_status="hooks → ~/.copilot/hooks/donedonedone.json (leave chat.useClaudeHooks off, or every hook runs twice)"
+fi
+
 cursor_status="not detected (re-run with CURSOR=1 to set it up anyway)"
 if [ -d "$HOME/.cursor" ] || command -v cursor >/dev/null 2>&1 || [ "${CURSOR:-}" = "1" ]; then
   "$DEST/scripts/generate-agents.sh" cursor >/dev/null
@@ -68,9 +102,13 @@ if [ -d "$HOME/.cursor" ] || command -v cursor >/dev/null 2>&1 || [ "${CURSOR:-}
       version: 1,
       hooks: {
         sessionStart:         [{command: ($s + "/session-start.sh")}],
-        beforeShellExecution: [{command: ($s + "/guard.sh")}],
-        beforeReadFile:       [{command: ($s + "/guard.sh")}],
+        preToolUse:           [{command: ($s + "/guard.sh"), failClosed: true}, {command: ($s + "/vault-guard.sh")}],
+        beforeShellExecution: [{command: ($s + "/guard.sh"), failClosed: true}],
+        beforeReadFile:       [{command: ($s + "/guard.sh"), failClosed: true}],
         afterFileEdit:        [{command: ($s + "/lint.sh")}],
+        postToolUse:          [{command: ($s + "/lint.sh")}, {command: ($s + "/vault-guard.sh")}],
+        postToolUseFailure:   [{command: ($s + "/vault-guard.sh")}],
+        subagentStop:         [{command: ($s + "/vault-guard.sh")}],
         stop:                 [{command: ($s + "/checkpoint.sh")}]
       }
     }' > "$hooks_tmp"
@@ -91,7 +129,7 @@ n_agents=$(find "$SRC/agents" -name '*.md' | wc -l | tr -d ' ')
 n_skills=$(find "$SRC/skills" -name SKILL.md | wc -l | tr -d ' ')
 n_scripts=$(find "$SRC/scripts" -name '*.sh' | wc -l | tr -d ' ')
 echo "Installed: $n_agents agents · $n_skills skills (incl. /init-codebase, /harvest) · $n_scripts scripts · global CLAUDE.md"
-echo "GitHub Copilot: $((n_agents + 1)) custom agents → ~/.copilot/agents/"
+echo "GitHub Copilot: $((n_agents + 1)) custom agents → ~/.copilot/agents/, $vscode_status"
 echo "Cursor: $cursor_status"
 echo ""
 if "$DEST/scripts/ddd" config >/dev/null 2>&1; then
