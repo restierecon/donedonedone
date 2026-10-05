@@ -1,0 +1,52 @@
+name: bundle
+on:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: bundle
+  cancel-in-progress: true
+
+jobs:
+  bundle:
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: skip if main has moved past the green commit
+        id: fresh
+        run: |
+          if [ "$(git rev-parse HEAD)" = "$SHA" ]; then echo "build=1" >> "$GITHUB_OUTPUT"; else echo "main is at $(git rev-parse HEAD), not $SHA; a later run will bundle it"; fi
+      - name: build and verify the bundle
+        if: steps.fresh.outputs.build == '1'
+        run: |
+          git checkout -q -B main "$SHA"
+          git bundle create donedonedone.bundle HEAD main
+          git bundle verify donedonedone.bundle
+          git clone -q donedonedone.bundle "$RUNNER_TEMP/check"
+          test "$(git -C "$RUNNER_TEMP/check" rev-parse HEAD)" = "$SHA"
+          git -C "$RUNNER_TEMP/check" fsck --no-progress
+      - name: publish to the bundle-latest release
+        if: steps.fresh.outputs.build == '1'
+        run: |
+          notes="Full-history git bundle of main at $SHA. Restore with: git clone donedonedone.bundle donedonedone"
+          git tag -f bundle-latest "$SHA"
+          git push -f origin refs/tags/bundle-latest
+          if gh release view bundle-latest >/dev/null 2>&1; then
+            gh release edit bundle-latest --notes "$notes"
+          else
+            gh release create bundle-latest --title "Repository bundle (latest main)" --notes "$notes" --latest=false
+          fi
+          gh release upload bundle-latest donedonedone.bundle --clobber
