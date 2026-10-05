@@ -104,6 +104,22 @@ jobs:
           echo touched > "$demo/demo.txt"
           git -C "$demo" add -A
           git -C "$demo" commit -q -m "feat: touch demo.txt"
+      - name: VS Code's hooks file runs guard.sh through Windows PowerShell, the way VS Code spawns it
+        if: runner.os == 'Windows'
+        env:
+          MSYS_NO_PATHCONV: '1'
+          MSYS2_ARG_CONV_EXCL: '*'
+        run: |
+          cmd=$(jq -r '.hooks.PreToolUse[] | select(.command | endswith("/guard.sh")) | .windows' ~/.copilot/hooks/donedonedone.json)
+          ps="$SYSTEMROOT/System32/WindowsPowerShell/v1.0/powershell.exe"
+          status=0
+          out=$(printf '%s' '{"hook_event_name":"PreToolUse","tool_name":"run_in_terminal","tool_input":{"command":"git push --force origin main"}}' \
+            | "$ps" -ExecutionPolicy Bypass -NoProfile -NoLogo -Command "$cmd" 2>&1) || status=$?
+          if [ "$status" -ne 2 ] || ! printf '%s' "$out" | grep -q BLOCKED; then echo "force push: exit $status: $out"; exit 1; fi
+          status=0
+          out=$(printf '%s' '{"hook_event_name":"PreToolUse","tool_name":"run_in_terminal","tool_input":{"command":"ls"}}' \
+            | "$ps" -ExecutionPolicy Bypass -NoProfile -NoLogo -Command "$cmd" 2>&1) || status=$?
+          if [ "$status" -ne 0 ]; then echo "ls: exit $status: $out"; exit 1; fi
       - name: gate.sh from PowerShell 7 through Git Bash, as AGENTS.md tells Cursor and Copilot
         if: runner.os == 'Windows'
         shell: pwsh

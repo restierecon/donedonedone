@@ -550,21 +550,26 @@ this setup works with zero conversion once `./install.sh` has run:
   which the **Local** session target loads with no setting to flip. Leave
   `chat.useClaudeHooks` off: with it on, VS Code also runs the `~/.claude/settings.json`
   hooks and every script fires twice. The scripts read VS Code's own tool names and
-  payloads: `run_in_terminal`, camelCase `filePath`, every file in
+  payloads: `run_in_terminal`, `send_to_terminal` and `create_and_run_task` (its
+  `task.command` plus `task.args`), camelCase `filePath`, every file in
   `multi_replace_string_in_file` and `apply_patch`, and `runSubagent`'s `agentName`
-  for the brief and risk checks. VS Code has no matchers, so `lint.sh` skips read-only
+  and `model` for the brief and risk checks. VS Code has no matchers, so `lint.sh` skips read-only
   tools itself and never reformats a file the agent only read. `session-start.sh` answers with `hookSpecificOutput` JSON,
   the only SessionStart form VS Code reads. The named tests in `tests/run-tests.sh` pin
   each mapping.
 
-  Limits under VS Code: only the **Local** session target uses these hooks; the Copilot,
-  Claude and Codex targets on Agent Host follow their own hook docs. VS Code has no
-  `PostToolUseFailure`, so vault-guard.sh only restores human-only files after a tool call
-  that succeeded (guard.sh still refuses the commands up front). VS Code's documented
-  `PreToolUse` payload carries no `agent_id`, so the subagent-only blocks in guard.sh can't
+  Limits under VS Code (checked against VS Code's source, not just its docs): only the
+  **Local** session target uses these hooks; the Copilot, Claude and Codex targets on Agent
+  Host follow their own hook docs. VS Code has no `PostToolUseFailure`, so vault-guard.sh
+  only restores human-only files after a tool call that succeeded (guard.sh still refuses
+  the commands up front). Subagents run the same hooks, but VS Code's `PreToolUse` and
+  `PostToolUse` payloads carry no `agent_id`, so the subagent-only blocks in guard.sh can't
   tell a subagent's call from the Director's; vault-guard.sh still reports any vault change
-  the Director didn't make. On Windows the hooks file calls the scripts through Git Bash's
-  `bin\bash.exe`. Workspace Trust and `chat.useHooks` (on by default) must allow hooks.
+  the Director didn't make. Hooks start in the hook file's workspace folder (the first one
+  for a user-level file) and in your home directory when no folder is open. On Windows
+  VS Code runs hook commands through Windows PowerShell, so the hooks file calls Git Bash
+  as `& '…\bin\bash.exe' '…/guard.sh'; exit $LASTEXITCODE`; CI runs it exactly that way.
+  Workspace Trust and `chat.useHooks` (on by default) must allow hooks.
 
 What doesn't carry over as-is: VS Code reads user-level agents from both
 `~/.claude/agents` and `~/.copilot/agents`, so you may see each agent listed twice.

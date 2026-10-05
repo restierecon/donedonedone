@@ -14,7 +14,7 @@ fi
 
 field() { echo "$input" | jq -r "$1 // empty"; }
 event="" tool="" agent_id="" cmd="" file_path=""
-if ! parsed=$(echo "$input" | jq -r '@sh "event=\(.hook_event_name // "") tool=\(.tool_name // "") agent_id=\(.agent_id // "") cmd=\(.tool_input.command // "") file_path=\([.tool_input.file_path, .tool_input.filePath, .tool_input.notebook_path, .tool_input.path, .tool_input.replacements[]?.filePath?, (.tool_input.input | strings | scan("(?m)^\\*\\*\\* (?:Add|Update|Delete) File: (.+)$") | .[0])] | map(strings) | unique | join("\n"))"' 2>/dev/null); then
+if ! parsed=$(echo "$input" | jq -r '@sh "event=\(.hook_event_name // "") tool=\(.tool_name // "") agent_id=\(.agent_id // "") cmd=\(.tool_input.command // ([.tool_input.task.command // empty] + (.tool_input.task.args // []) | map(tostring) | join(" "))) file_path=\([.tool_input.file_path, .tool_input.filePath, .tool_input.notebook_path, .tool_input.path, .tool_input.replacements[]?.filePath?, (.tool_input.input | strings | scan("(?m)^\\*\\*\\* (?:Add|Update|Delete) File: (.+)$") | .[0])] | map(strings) | unique | join("\n"))"' 2>/dev/null); then
   echo "BLOCKED: guard.sh could not read the hook payload's fields. Failing closed." >&2
   exit 2
 fi
@@ -38,7 +38,7 @@ allow() {
 }
 
 case "$tool" in
-  Bash|Shell|runTerminalCommand|run_in_terminal) tool="Bash" ;;
+  Bash|Shell|runTerminalCommand|run_in_terminal|send_to_terminal|create_and_run_task) tool="Bash" ;;
   Agent|Task|runSubagent) tool="Agent" ;;
   Read|Grep|Glob|LS|NotebookRead|read_file|readFile|list_dir|listDirectory|file_search|grep_search) tool="Read" ;;
   *)

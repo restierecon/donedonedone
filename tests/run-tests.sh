@@ -2177,6 +2177,37 @@ expect_block "guard blocks a builder brief missing headers sent as VS Code's run
 expect_allow "guard allows a full reviewer brief sent as VS Code's runSubagent" \
   copilot_call runSubagent "$(jq -n --arg p "$FULL_BRIEF" '{agentName: "reviewer", prompt: $p}')"
 
+expect_block "guard blocks a force push sent as VS Code's create_and_run_task (command plus args)" \
+  copilot_call create_and_run_task '{"workspaceFolder":"/w","task":{"label":"x","type":"shell","command":"git","args":["push","--force","origin","main"]}}'
+expect_block "guard blocks a force push typed into a terminal with VS Code's send_to_terminal" \
+  copilot_call send_to_terminal '{"id":"t1","command":"git push -f"}'
+expect_allow "guard allows an ordinary VS Code task" \
+  copilot_call create_and_run_task '{"workspaceFolder":"/w","task":{"label":"t","type":"shell","command":"npm","args":["test"]}}'
+
+home=$(mktemp -d)
+fake=$(mktemp -d)
+mkdir -p "$fake/root/bin" "$fake/bin"
+touch "$fake/root/bin/bash.exe" && chmod +x "$fake/root/bin/bash.exe"
+cat > "$fake/bin/cygpath" <<EOF
+#!/bin/bash
+case "\$1" in
+  -w) echo 'C:\\Program Files\\Git' ;;
+  -u) echo "$fake/root" ;;
+  -m) echo "C:/Users/o'neil/.claude/scripts" ;;
+esac
+EOF
+chmod +x "$fake/bin/cygpath"
+HOME="$home" PATH="$fake/bin:$PATH" "$INSTALL" >/dev/null 2>&1
+win=$(jq -r '.hooks.PreToolUse[] | select(.command | endswith("/guard.sh")) | .windows' "$home/.copilot/hooks/donedonedone.json" 2>/dev/null)
+# shellcheck disable=SC2016
+want='& '"'"'C:\Program Files\Git\bin\bash.exe'"'"' '"'"'C:/Users/o'"''"'neil/.claude/scripts/guard.sh'"'"'; exit $LASTEXITCODE'
+if [ "$win" = "$want" ]; then
+  ok "install gives VS Code a Windows command PowerShell 5.1 can run: & 'bash.exe' 'script'; exit \$LASTEXITCODE"
+else
+  bad "install gives VS Code a Windows command PowerShell 5.1 can run: & 'bash.exe' 'script'; exit \$LASTEXITCODE" "$win"
+fi
+rm -rf "$home" "$fake"
+
 fakebin=$(mktemp -d)
 # shellcheck disable=SC2016
 printf '#!/bin/bash\n[ "$1" = check ] && { echo "E999 fake lint error"; exit 1; }\nexit 0\n' > "$fakebin/ruff"

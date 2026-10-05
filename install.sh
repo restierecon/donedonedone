@@ -53,15 +53,17 @@ rm -f "$DEST/scripts/generate-copilot-agents.sh"
 vscode_status="hooks SKIPPED (install jq, re-run)"
 if command -v jq >/dev/null 2>&1; then
   mkdir -p "$HOME/.copilot/hooks"
-  scripts="$DEST/scripts" win_bash=""
+  scripts="$DEST/scripts" win_bash="" scripts_ps=""
   if command -v cygpath >/dev/null 2>&1 && [ -x "$(cygpath -u "$(cygpath -w /)")/bin/bash.exe" ]; then
     scripts=$(cygpath -m "$DEST/scripts")
     win_bash="$(cygpath -w /)\\bin\\bash.exe"
+    win_bash=${win_bash//\'/\'\'}
+    scripts_ps=${scripts//\'/\'\'}
   fi
   hooks_tmp=$(mktemp)
-  jq -n --arg s "$scripts" --arg b "$win_bash" '
+  jq -n --arg s "$scripts" --arg b "$win_bash" --arg p "$scripts_ps" --arg q "'" '
     def hook($name): {type: "command", command: ($s + "/" + $name), timeout: 60}
-      + (if $b == "" then {} else {windows: ("\"" + $b + "\" \"" + $s + "/" + $name + "\"")} end);
+      + (if $b == "" then {} else {windows: ("& " + $q + $b + $q + " " + $q + $p + "/" + $name + $q + "; exit $LASTEXITCODE")} end);
     {
       hooks: {
         SessionStart: [hook("session-start.sh")],
