@@ -12,7 +12,7 @@ if [ "$event" = "postToolUse" ]; then
     || jq -cn --arg m "$msg" '{additional_context: $m}'
   exit 0
 fi
-files=$(echo "$input" | jq -r '[.tool_input.file_path, .tool_input.filePath, .tool_input.path, .file_path, .tool_input.replacements[]?.filePath?, (.tool_input.input | strings | scan("(?m)^\\*\\*\\* (?:Add|Update) File: (.+)$") | .[0])] | map(strings) | unique | .[]' 2>/dev/null)
+files=$(echo "$input" | jq -r '[.tool_input.file_path, .tool_input.filePath, .tool_input.path, .file_path, .tool_input.replacements[]?.filePath?, (.tool_input.input | strings | scan("(?m)^\\*\\*\\* (?:(?:Add|Update) File|Move to): (.+)$") | .[0])] | map(strings) | unique | .[]' 2>/dev/null)
 
 lint_file() {
   local file="$1" errors=""

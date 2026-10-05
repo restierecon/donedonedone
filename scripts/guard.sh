@@ -16,7 +16,7 @@ fi
 
 field() { echo "$input" | jq -r "$1 // empty"; }
 event="" tool="" agent_id="" cmd="" file_path=""
-if ! parsed=$(echo "$input" | jq -r '@sh "event=\(.hook_event_name // "") tool=\(.tool_name // "") agent_id=\(.agent_id // "") cmd=\(.tool_input.command // ([.tool_input.task.command // empty] + (.tool_input.task.args // []) | map(tostring) | join(" "))) file_path=\([.tool_input.file_path, .tool_input.filePath, .tool_input.notebook_path, .tool_input.path, .tool_input.replacements[]?.filePath?, (.tool_input.input | strings | scan("(?m)^\\*\\*\\* (?:Add|Update|Delete) File: (.+)$") | .[0])] | map(strings) | unique | join("\n"))"' 2>/dev/null); then
+if ! parsed=$(echo "$input" | jq -r '@sh "event=\(.hook_event_name // "") tool=\(.tool_name // "") agent_id=\(.agent_id // "") cmd=\(.tool_input.command // ([.tool_input.task.command // empty] + (.tool_input.task.args // []) | map(tostring) | join(" "))) file_path=\([.tool_input.file_path, .tool_input.filePath, .tool_input.notebook_path, .tool_input.path, .tool_input.replacements[]?.filePath?, (.tool_input.input | strings | scan("(?m)^\\*\\*\\* (?:(?:Add|Update|Delete) File|Move to): (.+)$") | .[0])] | map(strings) | unique | join("\n"))"' 2>/dev/null); then
   echo "BLOCKED: guard.sh could not read the hook payload's fields. Failing closed." >&2
   exit 2
 fi
@@ -85,8 +85,8 @@ read_only_shell() {
 }
 
 secret_path() {
-  echo "$1" | lower | grep -qE '(^|/)\.env(\.[a-z0-9_.-]+)?$|(^|/)secrets/|\.pem$|\.key$|(^|/)id_(rsa|dsa|ecdsa|ed25519)$|_rsa$|(^|/)\.ssh/' \
-    && ! echo "$1" | lower | grep -qE '\.env\.(example|sample|template|dist)$'
+  printf '%s\n' "$1" | lower | grep -vE '\.env\.(example|sample|template|dist)$' \
+    | grep -qE '(^|/)\.env(\.[a-z0-9_.-]+)?$|(^|/)secrets/|\.pem$|\.key$|(^|/)id_(rsa|dsa|ecdsa|ed25519)$|_rsa$|(^|/)\.ssh/'
 }
 
 secret_in_shell() {
