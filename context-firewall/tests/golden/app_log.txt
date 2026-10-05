@@ -1,0 +1,27 @@
+[ddd] generic-log | art-ID | exit 0 | generic/low | ~10k->466 tok est
+600 lines (showing head, tail and error/warning lines)
+ERRORS / WARNINGS
+L8: 2026-10-04T10:00:07.467Z WARN  cache miss rate 31% above threshold  [x11 similar]
+L14: 2026-10-04T10:00:13.596Z ERROR worker-1 job 1013 failed: connection refused (db:5432)  [x7 similar]
+MOST REPEATED LINES
+L1: 2026-10-04T10:00:00.500Z INFO  worker-0 processed job 1000 in 68ms  [x582 similar]
+L8: 2026-10-04T10:00:07.467Z WARN  cache miss rate 31% above threshold  [x11 similar]
+L14: 2026-10-04T10:00:13.596Z ERROR worker-1 job 1013 failed: connection refused (db:5432)  [x7 similar]
+HEAD
+L1: 2026-10-04T10:00:00.500Z INFO  worker-0 processed job 1000 in 68ms
+L2: 2026-10-04T10:00:01.182Z INFO  worker-1 processed job 1001 in 26ms
+L3: 2026-10-04T10:00:02.559Z INFO  worker-2 processed job 1002 in 56ms
+L4: 2026-10-04T10:00:03.662Z INFO  worker-3 processed job 1003 in 40ms
+L5: 2026-10-04T10:00:04.240Z INFO  worker-0 processed job 1004 in 60ms
+TAIL
+L591: 2026-10-04T10:09:50.638Z INFO  worker-2 processed job 1590 in 34ms
+L592: 2026-10-04T10:09:51.765Z INFO  worker-3 processed job 1591 in 17ms
+L593: 2026-10-04T10:09:52.769Z INFO  worker-0 processed job 1592 in 64ms
+L594: 2026-10-04T10:09:53.137Z INFO  worker-1 processed job 1593 in 18ms
+L595: 2026-10-04T10:09:54.104Z INFO  worker-2 processed job 1594 in 65ms
+L596: 2026-10-04T10:09:55.938Z ERROR worker-3 job 1595 failed: connection refused (db:5432)
+L597: 2026-10-04T10:09:56.336Z INFO  worker-0 processed job 1596 in 62ms
+L598: 2026-10-04T10:09:57.482Z INFO  worker-1 processed job 1597 in 10ms
+L599: 2026-10-04T10:09:58.997Z INFO  worker-2 processed job 1598 in 42ms
+L600: 2026-10-04T10:09:59.338Z INFO  worker-3 processed job 1599 in 20ms
+[ddd] full output: ddd artifact art-ID [--section NAME | --lines A-B | --raw]

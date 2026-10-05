@@ -1,4 +1,6 @@
 #!/bin/bash
+# shellcheck source=/dev/null
+[ -f "$(dirname "$0")/jq-text.sh" ] && . "$(dirname "$0")/jq-text.sh"
 
 usage() {
   echo "usage: approve-ui.sh vault/ui/<feature-slug>/contract.md" >&2

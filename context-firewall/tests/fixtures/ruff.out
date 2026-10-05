@@ -1,0 +1,8 @@
+m.py:1:8: F401 [*] `os` imported but unused
+m.py:2:8: F401 [*] `sys` imported but unused
+m.py:5:12: F821 Undefined name `undefined_name`
+n.py:1:8: F401 [*] `os` imported but unused
+n.py:2:8: F401 [*] `sys` imported but unused
+n.py:5:12: F821 Undefined name `undefined_name`
+Found 6 errors.
+[*] 4 fixable with the `--fix` option.

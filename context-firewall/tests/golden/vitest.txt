@@ -1,0 +1,18 @@
+[ddd] test | art-ID | exit 1 | vitest/high | ~211->168 tok est
+TEST RESULT
+Status: FAILED
+Passed: 45  Failed: 1
+Test Files  1 failed | 2 passed (3)
+Tests  1 failed | 45 passed (46)
+Start at  10:41:02
+Duration  1.32s (transform 210ms, setup 0ms, collect 400ms, tests 61ms)
+FAILURES
+1. src/auth/session.test.ts > Session > refresh returns a new token
+   src/auth/session.test.ts:142
+   AssertionError: expected 'abc-r' to be 'abc-refreshed' // Object.is equality
+   - Expected
+   + Received
+   - abc-refreshed
+   + abc-r
+   (raw L10-27; --failure 1)
+[ddd] full output: ddd artifact art-ID [--section NAME | --lines A-B | --raw]

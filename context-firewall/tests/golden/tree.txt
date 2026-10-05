@@ -1,0 +1,16 @@
+[ddd] directory-listing | art-ID | exit 0 | listing:tree/high | ~2.4k->121 tok est
+LISTING  entries: 481  files: 410  dirs: 71  (depth 2 shown; heavy dirs collapsed)
+node_modules/ (360 files)
+src/
+  api/ (6 files)
+  auth/ (6 files)
+  services/ (6 files)
+  util/ (6 files)
+tests/
+  api/ (6 files)
+  auth/ (6 files)
+  services/ (6 files)
+  util/ (6 files)
+package.json
+tsconfig.json
+[ddd] full output: ddd artifact art-ID [--section NAME | --lines A-B | --raw]

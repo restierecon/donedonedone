@@ -1,0 +1,12 @@
+[ddd] git-status | art-ID | exit 0 | git-status/high | ~309->126 tok est
+GIT STATUS
+Branch: On branch main
+You have unmerged paths.
+no changes added to commit (use "git add" and/or "git commit -a")
+Counts: conflicts 1, untracked 46
+Conflicts (1):
+- both modified: src/auth/token.ts
+Untracked (46):
+- notes.txt
+- src/api/ (45 entries: gen_1.ts, gen_10.ts, gen_11.ts, ...; --section untracked)
+[ddd] full output: ddd artifact art-ID [--section NAME | --lines A-B | --raw]

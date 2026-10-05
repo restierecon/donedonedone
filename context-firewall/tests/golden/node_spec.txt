@@ -1,0 +1,22 @@
+[ddd] test | art-ID | exit 1 | node:test spec/high | ~499->167 tok est
+TEST RESULT
+Status: FAILED
+Passed: 25  Failed: 2  Skipped: 0  Todo: 0  Total: 27
+ℹ tests 27
+ℹ pass 25
+ℹ fail 2
+FAILURES
+1. refresh works
+   nt/auth.test.mjs:3
+   AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+   + actual - expected
+   + 'abc-r'
+   - 'abc-refreshed'
+   actual: 'abc-r',
+   expected: 'abc-refreshed',
+   (raw L39-60; --failure 1)
+2. token provider
+   nt/auth.test.mjs:5
+   TypeError: provider.get is not a function
+   (raw L61-71; --failure 2)
+[ddd] full output: ddd artifact art-ID [--section NAME | --lines A-B | --raw]

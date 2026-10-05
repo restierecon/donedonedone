@@ -2,6 +2,8 @@
 set -e
 
 SRC="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=/dev/null
+[ -f "$SRC/scripts/jq-text.sh" ] && . "$SRC/scripts/jq-text.sh"
 DEST="$HOME/.claude"
 TS=$(date +%Y%m%d-%H%M%S)
 
@@ -42,8 +44,15 @@ for old in \
     echo "  retired ${old%%:*} (vault memory layer dropped) → ${old#*:}.bak-$TS"
   fi
 done
-cp "$SRC"/scripts/*.sh "$SRC"/scripts/*.py "$DEST/scripts/"
-chmod +x "$DEST"/scripts/*.sh "$DEST"/scripts/*.py
+cp "$SRC"/scripts/*.sh "$SRC"/scripts/*.py "$SRC"/scripts/*.html "$SRC"/scripts/ddd "$DEST/scripts/"
+rm -rf "$DEST/scripts/codemap"
+cp -R "$SRC/scripts/codemap" "$DEST/scripts/codemap"
+rm -rf "$DEST/scripts/codemap/__pycache__"
+chmod +x "$DEST"/scripts/*.sh "$DEST"/scripts/*.py "$DEST"/scripts/ddd
+mkdir -p "$DEST/context-firewall"
+rm -rf "$DEST/context-firewall/firewall"
+cp -R "$SRC/context-firewall/firewall" "$SRC/context-firewall/ddd.py" "$SRC/context-firewall/ddd.ps1" "$SRC/context-firewall/README.md" "$DEST/context-firewall/"
+rm -rf "$DEST/context-firewall/firewall/__pycache__" "$DEST/context-firewall/firewall/adapters/__pycache__"
 cp -R "$SRC"/skills/* "$DEST/skills/"
 
 rm -f "$DEST/scripts/generate-copilot-agents.sh"
@@ -121,6 +130,12 @@ n_scripts=$(find "$SRC/scripts" -name '*.sh' | wc -l | tr -d ' ')
 echo "Installed: $n_agents agents · $n_skills skills (incl. /init-codebase, /harvest) · $n_scripts scripts · global CLAUDE.md"
 echo "GitHub Copilot: $((n_agents + 1)) custom agents → ~/.copilot/agents/, $vscode_status"
 echo "Cursor: $cursor_status"
+echo ""
+if "$DEST/scripts/ddd" config >/dev/null 2>&1; then
+  echo "Context firewall: PreToolUse/PostToolUse hooks compact noisy shell output; ~/.claude/scripts/ddd retrieves it (see ~/.claude/context-firewall/README.md)"
+else
+  echo "Context firewall: installed but inactive — needs Python 3.8+ on PATH (python3, python or py -3). Shell output passes through unchanged."
+fi
 echo ""
 echo "Recommended (optional) tools for full guardrails:"
 command -v jq >/dev/null 2>&1       || echo "  jq (required by hook scripts): brew install jq · winget install jqlang.jq · apt install jq"

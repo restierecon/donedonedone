@@ -7,7 +7,7 @@ if [ "${1:-}" = "--check-installed" ]; then
   drift=0
   diff -uB "$ROOT/CLAUDE.md" <(grep -v '^@' "$dest/CLAUDE.md") || drift=1
   for d in agents scripts; do
-    for f in "$ROOT/$d"/*; do diff -u "$f" "$dest/$d/$(basename "$f")" || drift=1; done
+    for f in "$ROOT/$d"/*; do diff -ru -x __pycache__ "$f" "$dest/$d/$(basename "$f")" || drift=1; done
   done
   for s in "$ROOT"/skills/*/; do diff -ru "$s" "$dest/skills/$(basename "$s")" || drift=1; done
   if [ "$drift" -eq 0 ]; then echo "installed copy matches repo"; else echo "DRIFT: repo and $dest differ (see diffs above)" >&2; fi
@@ -424,6 +424,32 @@ else
 fi
 rm -rf "$repo"
 
+repo=$(make_gate_repo '- gate.test: cat fixture.txt; exit 1')
+cp "$ROOT/context-firewall/tests/fixtures/pytest_fail.out" "$repo/fixture.txt"
+git -C "$repo" add fixture.txt && git -C "$repo" commit -qm fixture
+out=$(cd "$repo" && "$GATE" test 2>&1)
+lines=$(echo "$out" | wc -l)
+if echo "$out" | grep -q "^  \[ddd\] test | art-" && echo "$out" | grep -q "1. test_session_refresh" \
+   && echo "$out" | grep -q "Passed: 60  Failed: 3  Skipped: 1" && [ "$lines" -le 33 ] && [ -d "$repo/.ddd" ] \
+   && ! git -C "$repo" status --porcelain --untracked-files=all | grep -q '\.ddd'; then
+  ok "failing test step excerpt goes through the context firewall, store stays out of git"
+else
+  bad "failing test step excerpt goes through the context firewall, store stays out of git" "$lines lines: $out"
+fi
+out=$(cd "$repo" && GATE_FIREWALL=0 "$GATE" test 2>&1)
+if ! echo "$out" | grep -q "\[ddd\]" && echo "$out" | grep -q "AssertionError"; then
+  ok "GATE_FIREWALL=0 keeps the plain grep excerpt"
+else
+  bad "GATE_FIREWALL=0 keeps the plain grep excerpt" "$out"
+fi
+out=$(cd "$repo" && GATE_EXCERPT_LINES=8 "$GATE" test 2>&1)
+if [ "$(echo "$out" | grep -c '^  ')" -le 8 ] && echo "$out" | grep -q "^  \[ddd\] \(full output\|omitted\)"; then
+  ok "firewall excerpt respects GATE_EXCERPT_LINES and keeps the retrieval line"
+else
+  bad "firewall excerpt respects GATE_EXCERPT_LINES and keeps the retrieval line" "$out"
+fi
+rm -rf "$repo"
+
 repo=$(make_gate_repo '- gate.test: seq 1 100; exit 1')
 out=$(cd "$repo" && "$GATE" test 2>&1)
 if echo "$out" | grep -q "  100$" && ! echo "$out" | grep -q "  1$"; then
@@ -627,6 +653,65 @@ out=$(cd "$repo" && GATE_BASE=trunk "$GATE" markers 2>&1)
 if echo "$out" | grep -q "^markers SKIP"; then ok "markers skips when the base branch is missing"; else bad "markers skips when the base branch is missing" "$out"; fi
 rm -rf "$repo"
 
+echo "== gate.sh — arch step (fitness rules from main) =="
+arch_repo() {
+  local d
+  d=$(make_gate_repo '- gate.test: true')
+  mkdir -p "$d/app/domain" "$d/app/web"
+  printf 'def total(x):\n    return x\n' > "$d/app/domain/order.py"
+  printf 'from app.domain.order import total\n' > "$d/app/web/routes.py"
+  touch "$d/app/__init__.py" "$d/app/domain/__init__.py" "$d/app/web/__init__.py"
+  echo "$d"
+}
+repo=$(arch_repo)
+git -C "$repo" add -A && git -C "$repo" commit -q -m app
+status=0; out=$(cd "$repo" && "$GATE" arch 2>&1) || status=$?
+if [ "$status" -eq 0 ] && echo "$out" | grep -q "^arch SKIP (no vault/architecture.json on main)"; then
+  ok "arch skips without a rules file on main"
+else
+  bad "arch skips without a rules file on main" "exit $status: $out"
+fi
+printf '{"forbid": [{"from": "app/domain/**", "to": "app/web/**", "why": "domain stays free of delivery"}]}\n' > "$repo/vault/architecture.json"
+git -C "$repo" add -A && git -C "$repo" commit -q -m rules
+git -C "$repo" checkout -q -b slice/S900
+printf 'from app.web import routes\n' >> "$repo/app/domain/order.py"
+git -C "$repo" commit -q -am "feat: reach into web"
+status=0; out=$(cd "$repo" && "$GATE" arch 2>&1) || status=$?
+if [ "$status" -eq 1 ] && echo "$out" | grep -q "^arch FAIL" && echo "$out" | grep -q "app/domain/order.py depends on app/web/routes.py" \
+   && echo "$out" | grep -q "new module cycle edge app/domain → app/web" && echo "$out" | grep -q "^GATE: FAIL (arch)"; then
+  ok "arch fails a forbidden import and the cycle it creates"
+else
+  bad "arch fails a forbidden import and the cycle it creates" "exit $status: $out"
+fi
+printf '{"forbid": []}\n' > "$repo/vault/architecture.json"
+git -C "$repo" commit -q -am "chore: relax rules on the branch"
+status=0; out=$(cd "$repo" && "$GATE" arch 2>&1) || status=$?
+if [ "$status" -eq 1 ] && echo "$out" | grep -q "must not depend on app/web"; then
+  ok "arch reads rules from main, so a slice can't relax them on its branch"
+else
+  bad "arch reads rules from main, so a slice can't relax them on its branch" "exit $status: $out"
+fi
+tools="$repo-tools"
+cp -R "$ROOT/scripts" "$tools"
+status=0; out=$(cd "$repo/app" && "../../$(basename "$tools")/gate.sh" arch 2>&1) || status=$?
+rm -rf "$tools"
+if [ "$status" -eq 1 ] && echo "$out" | grep -q "must not depend on app/web" && ! echo "$out" | grep -qi "can't open file"; then
+  ok "arch works when gate.sh is called by a relative path from a subdirectory"
+else
+  bad "arch works when gate.sh is called by a relative path from a subdirectory" "exit $status: $out"
+fi
+git -C "$repo" checkout -q main
+git -C "$repo" checkout -q -b slice/S901
+printf 'from app.domain.order import total as t\n' > "$repo/app/web/views.py"
+git -C "$repo" add -A && git -C "$repo" commit -q -m "feat: allowed direction"
+status=0; out=$(cd "$repo" && "$GATE" arch 2>&1) || status=$?
+if [ "$status" -eq 0 ] && echo "$out" | grep -q "^arch PASS — 1 forbid rule(s), no new cycles"; then
+  ok "arch passes imports in the allowed direction"
+else
+  bad "arch passes imports in the allowed direction" "exit $status: $out"
+fi
+rm -rf "$repo"
+
 echo "== gate.sh — crap step =="
 repo=$(make_gate_repo '')
 mkdir -p "$repo/src"
@@ -822,6 +907,31 @@ else
   bad "a full gate runs mutation after test" "exit $status: $out"
 fi
 rm -rf "$repo"
+
+echo "== jq-text.sh — native Windows jq writes CRLF; the scripts must not see the CR =="
+crlf_bin=$(mktemp -d)
+real_jq=$(command -v jq)
+# shellcheck disable=SC2016
+printf '#!/bin/bash\n"%s" "$@" | sed "s/$/\\r/"\nexit "${PIPESTATUS[0]}"\n' "$real_jq" > "$crlf_bin/jq"
+chmod +x "$crlf_bin/jq"
+got=$(PATH="$crlf_bin:$PATH" bash -c '. "$1"; jq -rn "\"S001\"" | od -An -c | tr -d " \n"' _ "$ROOT/scripts/jq-text.sh")
+if [ "$got" = 'S001\n' ]; then ok "with a CRLF jq, the helper strips the CR from jq's output"; else bad "with a CRLF jq, the helper strips the CR from jq's output" "got: $got"; fi
+status=0; PATH="$crlf_bin:$PATH" bash -c '. "$1"; jq -en false >/dev/null' _ "$ROOT/scripts/jq-text.sh" || status=$?
+if [ "$status" -eq 1 ]; then ok "the helper keeps jq's exit status (jq -e false still exits 1)"; else bad "the helper keeps jq's exit status (jq -e false still exits 1)" "exit $status"; fi
+lf_bin=$(mktemp -d)
+# shellcheck disable=SC2016
+printf '#!/bin/bash\n"%s" "$@" | tr -d "\\r"\nexit "${PIPESTATUS[0]}"\n' "$real_jq" > "$lf_bin/jq"
+chmod +x "$lf_bin/jq"
+got=$(PATH="$lf_bin:$PATH" bash -c '. "$1"; type -t jq' _ "$ROOT/scripts/jq-text.sh")
+if [ "$got" = "file" ]; then ok "with a jq that writes plain LF, the helper leaves jq alone"; else bad "with a jq that writes plain LF, the helper leaves jq alone" "jq is a $got"; fi
+repo=$(make_repo)
+(cd "$repo" && PATH="$crlf_bin:$PATH" "$LOG_EVENT" S001 gate PASS --patch-id abc >/dev/null 2>&1)
+if [ -s "$repo/vault/log.jsonl" ] && ! grep -q $'\r' "$repo/vault/log.jsonl" && [ "$(tail -1 "$repo/vault/log.jsonl" | jq -r .patch_id)" = "abc" ]; then
+  ok "log-event.sh writes a clean LF line even when jq writes CRLF"
+else
+  bad "log-event.sh writes a clean LF line even when jq writes CRLF" "$(od -c "$repo/vault/log.jsonl" | tail -3)"
+fi
+rm -rf "$repo" "$crlf_bin" "$lf_bin"
 
 echo "== log-event.sh — structured, append-only log =="
 repo=$(make_repo)
@@ -1374,6 +1484,14 @@ if [ "$(jq -r .mine "$home/.claude/settings.json")" = "true" ] && ls "$home"/.cl
 else
   bad "install keeps an existing settings.json and drops the new one beside it" "$(ls "$home/.claude")"
 fi
+mapped=$(mktemp -d)
+git -C "$mapped" init -q -b main && printf 'echo hi\n' > "$mapped/a.sh" && git -C "$mapped" add -A && git -C "$mapped" -c user.email=t@t -c user.name=t commit -q -m i
+if (cd "$mapped" && "$home/.claude/scripts/codebase-graph.py" build >/dev/null 2>&1) && [ -f "$mapped/.gate/graph.html" ] && [ ! -d "$home/.claude/scripts/codemap/__pycache__" ]; then
+  ok "the installed codebase-graph.py runs with its codemap package and leaves no bytecode behind"
+else
+  bad "the installed codebase-graph.py runs with its codemap package and leaves no bytecode behind" "$(ls "$home/.claude/scripts")"
+fi
+rm -rf "$mapped"
 if grep -q "my own global rules" "$home"/.claude/CLAUDE.md.bak-* 2>/dev/null && cmp -s "$ROOT/CLAUDE.md" "$home/.claude/CLAUDE.md"; then
   ok "install backs up a differing CLAUDE.md before replacing it"
 else
@@ -2365,6 +2483,13 @@ else
   bad "install wires guard (fail-closed), vault-guard and lint onto Cursor's generic tool events" "missing: $missing $(cat "$ch" 2>/dev/null)"
 fi
 rm -rf "$home"
+
+echo "== codebase map wiring =="
+if grep -q 'codebase-graph.py impact --base main' "$ROOT/skills/blast-radius/SKILL.md"; then ok "blast-radius starts from the impact block"; else bad "blast-radius starts from the impact block" "missing"; fi
+if grep -q 'codebase-graph.py build' "$ROOT/skills/architecture-review/SKILL.md"; then ok "architecture-review builds the map first"; else bad "architecture-review builds the map first" "missing"; fi
+if grep -q '^DESIGN: complexity' "$ROOT/agents/reviewer.md"; then ok "reviewer reports a DESIGN line"; else bad "reviewer reports a DESIGN line" "missing"; fi
+if grep -q 'vault/architecture.json' "$ROOT/skills/grill/SKILL.md" && grep -q 'architecture.json' "$ROOT/CLAUDE.md"; then ok "grill and protocol name the fitness rules file"; else bad "grill and protocol name the fitness rules file" "missing"; fi
+if grep -q 'scripts/\*.html' "$INSTALL"; then ok "install.sh ships the graph viewer template"; else bad "install.sh ships the graph viewer template" "missing"; fi
 
 echo ""
 echo "$pass passed, $fail failed"

@@ -1,0 +1,35 @@
+[31mERR[0m half line without newline
+garbage  bytes ][}{ garbage  bytes ][}{ garbage  bytes ][}{ garbage  bytes ][}{ garbage  bytes ][}{ garbage  bytes ][}{ garbage  bytes ][}{ garbage  bytes ][}{ garbage  bytes ][}{ garbage  bytes ][}{ garbage  bytes ][}{ garbage  bytes ][}{ garbage  bytes ][}{ garbage  bytes ][}{ garbage  bytes ][}{ garbage  bytes ][}{ garbage  bytes ][}{ garbage  bytes ][}{ garbage  bytes ][}{ garbage  bytes ][}{ garbage  bytes ][}{ garbage  bytes ][}{ garbage  bytes ][}{ garbage  bytes ][}{ garbage  bytes ][}{ garbage  bytes ][}{ garbage  bytes ][}{ garbage  bytes ][}{ garbage  bytes ][}{ garbage  bytes ][}{ garbage  bytes ][}{ garbage  bytes ][}{ garbage  bytes ][}{ garbage  bytes ][}{ garbage  bytes ][}{ garbage  bytes ][}{ garbage  bytes ][}{ garbage  bytes ][}{ garbage  bytes ][}{ garbage  bytes ][}{ 
+===== 3 passed in
+@@ not a diff @@
+@@ not a diff @@
+@@ not a diff @@
+@@ not a diff @@
+@@ not a diff @@
+@@ not a diff @@
+@@ not a diff @@
+@@ not a diff @@
+@@ not a diff @@
+@@ not a diff @@
+@@ not a diff @@
+@@ not a diff @@
+@@ not a diff @@
+@@ not a diff @@
+@@ not a diff @@
+@@ not a diff @@
+@@ not a diff @@
+@@ not a diff @@
+@@ not a diff @@
+@@ not a diff @@
+@@ not a diff @@
+@@ not a diff @@
+@@ not a diff @@
+@@ not a diff @@
+@@ not a diff @@
+@@ not a diff @@
+@@ not a diff @@
+@@ not a diff @@
+@@ not a diff @@
+@@ not a diff @@
+diff --git a/x
++++ no header

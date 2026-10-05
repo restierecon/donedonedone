@@ -1,0 +1,71 @@
+=== RUN   TestRefresh
+    auth_test.go:9: Refresh() = "abc-r", want "abc-refreshed"
+--- FAIL: TestRefresh (0.00s)
+=== RUN   TestMany
+=== RUN   TestMany/case
+=== RUN   TestMany/case#01
+=== RUN   TestMany/case#02
+=== RUN   TestMany/case#03
+=== RUN   TestMany/case#04
+=== RUN   TestMany/case#05
+=== RUN   TestMany/case#06
+=== RUN   TestMany/case#07
+=== RUN   TestMany/case#08
+=== RUN   TestMany/case#09
+=== RUN   TestMany/case#10
+=== RUN   TestMany/case#11
+=== RUN   TestMany/case#12
+=== RUN   TestMany/case#13
+=== RUN   TestMany/case#14
+=== RUN   TestMany/case#15
+=== RUN   TestMany/case#16
+=== RUN   TestMany/case#17
+=== RUN   TestMany/case#18
+=== RUN   TestMany/case#19
+=== RUN   TestMany/case#20
+=== RUN   TestMany/case#21
+=== RUN   TestMany/case#22
+=== RUN   TestMany/case#23
+=== RUN   TestMany/case#24
+=== RUN   TestMany/case#25
+=== RUN   TestMany/case#26
+=== RUN   TestMany/case#27
+=== RUN   TestMany/case#28
+=== RUN   TestMany/case#29
+--- PASS: TestMany (0.00s)
+    --- PASS: TestMany/case (0.00s)
+    --- PASS: TestMany/case#01 (0.00s)
+    --- PASS: TestMany/case#02 (0.00s)
+    --- PASS: TestMany/case#03 (0.00s)
+    --- PASS: TestMany/case#04 (0.00s)
+    --- PASS: TestMany/case#05 (0.00s)
+    --- PASS: TestMany/case#06 (0.00s)
+    --- PASS: TestMany/case#07 (0.00s)
+    --- PASS: TestMany/case#08 (0.00s)
+    --- PASS: TestMany/case#09 (0.00s)
+    --- PASS: TestMany/case#10 (0.00s)
+    --- PASS: TestMany/case#11 (0.00s)
+    --- PASS: TestMany/case#12 (0.00s)
+    --- PASS: TestMany/case#13 (0.00s)
+    --- PASS: TestMany/case#14 (0.00s)
+    --- PASS: TestMany/case#15 (0.00s)
+    --- PASS: TestMany/case#16 (0.00s)
+    --- PASS: TestMany/case#17 (0.00s)
+    --- PASS: TestMany/case#18 (0.00s)
+    --- PASS: TestMany/case#19 (0.00s)
+    --- PASS: TestMany/case#20 (0.00s)
+    --- PASS: TestMany/case#21 (0.00s)
+    --- PASS: TestMany/case#22 (0.00s)
+    --- PASS: TestMany/case#23 (0.00s)
+    --- PASS: TestMany/case#24 (0.00s)
+    --- PASS: TestMany/case#25 (0.00s)
+    --- PASS: TestMany/case#26 (0.00s)
+    --- PASS: TestMany/case#27 (0.00s)
+    --- PASS: TestMany/case#28 (0.00s)
+    --- PASS: TestMany/case#29 (0.00s)
+=== RUN   TestToken
+    auth_test.go:20: token provider: unexpected nil
+--- FAIL: TestToken (0.00s)
+FAIL
+FAIL	example.com/auth	0.003s
+FAIL

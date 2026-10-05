@@ -1,0 +1,59 @@
+On branch main
+You have unmerged paths.
+  (fix conflicts and run "git commit")
+  (use "git merge --abort" to abort the merge)
+
+Unmerged paths:
+  (use "git add <file>..." to mark resolution)
+	both modified:   src/auth/token.ts
+
+Untracked files:
+  (use "git add <file>..." to include in what will be committed)
+	notes.txt
+	src/api/gen_1.ts
+	src/api/gen_10.ts
+	src/api/gen_11.ts
+	src/api/gen_12.ts
+	src/api/gen_13.ts
+	src/api/gen_14.ts
+	src/api/gen_15.ts
+	src/api/gen_16.ts
+	src/api/gen_17.ts
+	src/api/gen_18.ts
+	src/api/gen_19.ts
+	src/api/gen_2.ts
+	src/api/gen_20.ts
+	src/api/gen_21.ts
+	src/api/gen_22.ts
+	src/api/gen_23.ts
+	src/api/gen_24.ts
+	src/api/gen_25.ts
+	src/api/gen_26.ts
+	src/api/gen_27.ts
+	src/api/gen_28.ts
+	src/api/gen_29.ts
+	src/api/gen_3.ts
+	src/api/gen_30.ts
+	src/api/gen_31.ts
+	src/api/gen_32.ts
+	src/api/gen_33.ts
+	src/api/gen_34.ts
+	src/api/gen_35.ts
+	src/api/gen_36.ts
+	src/api/gen_37.ts
+	src/api/gen_38.ts
+	src/api/gen_39.ts
+	src/api/gen_4.ts
+	src/api/gen_40.ts
+	src/api/gen_41.ts
+	src/api/gen_42.ts
+	src/api/gen_43.ts
+	src/api/gen_44.ts
+	src/api/gen_45.ts
+	src/api/gen_5.ts
+	src/api/gen_6.ts
+	src/api/gen_7.ts
+	src/api/gen_8.ts
+	src/api/gen_9.ts
+
+no changes added to commit (use "git add" and/or "git commit -a")

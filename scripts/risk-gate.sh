@@ -1,5 +1,7 @@
 #!/bin/bash
 # shellcheck disable=SC2016
+# shellcheck source=/dev/null
+[ -f "$(dirname "$0")/jq-text.sh" ] && . "$(dirname "$0")/jq-text.sh"
 
 DEFAULT_POLICY='{"thresholds":{"moderate":21,"elevated":41,"high":61,"critical":81},"weights":{"blast_radius":25,"reversibility":25,"security":25,"complexity":10,"uncertainty":15}}'
 

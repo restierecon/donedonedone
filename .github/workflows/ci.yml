@@ -11,7 +11,7 @@ jobs:
       - name: shellcheck
         run: |
           sudo apt-get update -q && sudo apt-get install -y -q shellcheck jq
-          shellcheck scripts/*.sh tests/*.sh install.sh
+          shellcheck scripts/*.sh scripts/ddd tests/*.sh install.sh
       - name: no comments in this repo's code
         run: scripts/find-comments.sh $(git ls-files '*.sh' '*.py' '*.yml' '*.yaml' install.sh | grep -v '^tests/fixtures/')
       - name: hook script tests
@@ -23,13 +23,17 @@ jobs:
         run: |
           python -m pip install -q lizard
           PYTHON=python tests/crap-score.sh
+      - name: codebase graph tests
+        run: PYTHON=python tests/codebase-graph.sh
       - name: mutation adapter tests
         run: PYTHON=python tests/mutation-report.sh
+      - name: context firewall tests
+        run: python -m unittest discover -s context-firewall/tests -p 'test_*.py'
       - name: manifest validation
         run: scripts/validate-manifests.sh
       - name: scripts are executable in the repo
         run: |
-          bad=$(git ls-files -s scripts/ ':(glob)tests/*.sh' install.sh | grep -v ^100755 || true)
+          bad=$(git ls-files -s ':(glob)scripts/*.sh' ':(glob)scripts/*.py' ':(glob)tests/*.sh' install.sh | grep -v ^100755 || true)
           if [ -n "$bad" ]; then echo "not executable: $bad"; exit 1; fi
       - name: settings.json is valid JSON
         run: jq empty settings.json
@@ -80,6 +84,7 @@ jobs:
       - name: hook script tests
         run: tests/run-tests.sh
       - uses: actions/setup-python@v6
+        if: ${{ !cancelled() }}
         with:
           python-version: '3.12'
       - name: CRAP scorer tests
@@ -88,6 +93,24 @@ jobs:
           PYTHON=python tests/crap-score.sh
       - name: mutation adapter tests
         run: PYTHON=python tests/mutation-report.sh
+      - name: context firewall tests
+        if: ${{ !cancelled() }}
+        run: python -m unittest discover -s context-firewall/tests -p 'test_*.py'
+      - name: ddd.ps1 from PowerShell 7 and Windows PowerShell 5.1
+        if: ${{ !cancelled() && runner.os == 'Windows' }}
+        shell: pwsh
+        run: |
+          $env:DDD_HOME = Join-Path $env:RUNNER_TEMP 'ddd-store'
+          $noisy = Join-Path $env:RUNNER_TEMP 'noisy.py'
+          Set-Content -Path $noisy -Value @('import sys', 'for i in range(400): print("2026-10-04T10:00:00Z INFO step", i, "ok")', 'print("FATAL: disk full")', 'sys.exit(4)')
+          $out = (& ./context-firewall/ddd.ps1 run -- python $noisy) -join "`n"
+          if ($LASTEXITCODE -ne 4) { Write-Error "pwsh exit was $LASTEXITCODE`n$out"; exit 1 }
+          if (-not ($out -match '(?m)^\[ddd\] generic-log') -or -not ($out -match 'L401: FATAL: disk full')) { Write-Error $out; exit 1 }
+          $out = (powershell -NoProfile -ExecutionPolicy Bypass -File ./context-firewall/ddd.ps1 run -- python $noisy) -join "`n"
+          if ($LASTEXITCODE -ne 4) { Write-Error "5.1 exit was $LASTEXITCODE`n$out"; exit 1 }
+          if (-not ($out -match 'L401: FATAL: disk full')) { Write-Error $out; exit 1 }
+          $stats = (& ./context-firewall/ddd.ps1 stats) -join "`n"
+          if (-not ($stats -match 'Commands intercepted  2')) { Write-Error $stats; exit 1 }
       - name: install from Git Bash and make a demo project
         if: runner.os == 'Windows'
         run: |
@@ -110,7 +133,7 @@ jobs:
           MSYS_NO_PATHCONV: '1'
           MSYS2_ARG_CONV_EXCL: '*'
         run: |
-          cmd=$(jq -r '.hooks.PreToolUse[] | select(.command | endswith("/guard.sh")) | .windows' ~/.copilot/hooks/donedonedone.json)
+          cmd=$(jq -r '.hooks.PreToolUse[] | select(.command | endswith("/guard.sh")) | .windows' ~/.copilot/hooks/donedonedone.json | tr -d '\r')
           ps="$SYSTEMROOT/System32/WindowsPowerShell/v1.0/powershell.exe"
           status=0
           out=$(printf '%s' '{"hook_event_name":"PreToolUse","tool_name":"run_in_terminal","tool_input":{"command":"git push --force origin main"}}' \

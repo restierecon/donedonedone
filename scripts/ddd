@@ -1,0 +1,32 @@
+#!/bin/bash
+
+here="$(cd "$(dirname "$0")" && pwd)"
+entry=""
+for candidate in "$here/../context-firewall/ddd.py" "$HOME/.claude/context-firewall/ddd.py"; do
+  if [ -f "$candidate" ]; then entry="$candidate"; break; fi
+done
+
+python=""
+for candidate in "${PYTHON:-}" python3 python py; do
+  [ -n "$candidate" ] || continue
+  command -v "$candidate" >/dev/null 2>&1 || continue
+  if [ "$candidate" = "py" ]; then
+    py -3 -c "" >/dev/null 2>&1 && python="py -3" && break
+  elif "$candidate" -c "import sys; sys.exit(sys.version_info < (3, 8))" >/dev/null 2>&1; then
+    python="$candidate"
+    break
+  fi
+done
+
+if [ -z "$entry" ] || [ -z "$python" ]; then
+  if [ "${1:-}" = "hook" ]; then
+    cat >/dev/null
+    exit 0
+  fi
+  echo "ddd: needs Python 3.8+ and context-firewall/ddd.py (looked next to $here and in ~/.claude)" >&2
+  exit 127
+fi
+
+export DDD_SELF="$here/ddd"
+# shellcheck disable=SC2086
+exec $python "$entry" "$@"

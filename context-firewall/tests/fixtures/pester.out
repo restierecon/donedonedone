@@ -1,0 +1,41 @@
+
+Starting discovery in 2 files.
+Discovery found 34 tests in 61ms.
+Running tests.
+  [+] Get-Session returns case 0 4ms (2ms|2ms)
+  [+] Get-Session returns case 1 4ms (2ms|2ms)
+  [+] Get-Session returns case 2 4ms (2ms|2ms)
+  [+] Get-Session returns case 3 4ms (2ms|2ms)
+  [+] Get-Session returns case 4 4ms (2ms|2ms)
+  [+] Get-Session returns case 5 4ms (2ms|2ms)
+  [+] Get-Session returns case 6 4ms (2ms|2ms)
+  [+] Get-Session returns case 7 4ms (2ms|2ms)
+  [+] Get-Session returns case 8 4ms (2ms|2ms)
+  [+] Get-Session returns case 9 4ms (2ms|2ms)
+  [+] Get-Session returns case 10 4ms (2ms|2ms)
+  [+] Get-Session returns case 11 4ms (2ms|2ms)
+  [+] Get-Session returns case 12 4ms (2ms|2ms)
+  [+] Get-Session returns case 13 4ms (2ms|2ms)
+  [+] Get-Session returns case 14 4ms (2ms|2ms)
+  [+] Get-Session returns case 15 4ms (2ms|2ms)
+  [+] Get-Session returns case 16 4ms (2ms|2ms)
+  [+] Get-Session returns case 17 4ms (2ms|2ms)
+  [+] Get-Session returns case 18 4ms (2ms|2ms)
+  [+] Get-Session returns case 19 4ms (2ms|2ms)
+  [+] Get-Session returns case 20 4ms (2ms|2ms)
+  [+] Get-Session returns case 21 4ms (2ms|2ms)
+  [+] Get-Session returns case 22 4ms (2ms|2ms)
+  [+] Get-Session returns case 23 4ms (2ms|2ms)
+  [+] Get-Session returns case 24 4ms (2ms|2ms)
+  [+] Get-Session returns case 25 4ms (2ms|2ms)
+  [+] Get-Session returns case 26 4ms (2ms|2ms)
+  [+] Get-Session returns case 27 4ms (2ms|2ms)
+  [+] Get-Session returns case 28 4ms (2ms|2ms)
+  [+] Get-Session returns case 29 4ms (2ms|2ms)
+  [-] Update-Token refreshes the token 18ms (16ms|2ms)
+   Expected 'abc-refreshed', but got 'abc-r'.
+   at $t | Should -Be 'abc-refreshed', C:\work\tests\Token.Tests.ps1:14
+   at <ScriptBlock>, C:\work\tests\Token.Tests.ps1:14
+  [!] Remove-Session is skipped 2ms (0ms|2ms)
+Tests completed in 912ms
+Tests Passed: 32, Failed: 1, Skipped: 1 NotRun: 0

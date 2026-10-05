@@ -1,4 +1,6 @@
 #!/bin/bash
+# shellcheck source=/dev/null
+[ -f "$(dirname "$0")/jq-text.sh" ] && . "$(dirname "$0")/jq-text.sh"
 
 input=$(cat)
 event=$(echo "$input" | jq -r '.hook_event_name // empty' 2>/dev/null)

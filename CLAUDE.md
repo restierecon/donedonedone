@@ -15,6 +15,9 @@ heavy reads go to agents; you consume structured verdicts (≤ 20 lines) only.
 - Output > 20 lines you won't use? Route it to a subagent.
 - Hand agents file paths, not file contents — they read what they need.
 - Lint/types/tests/build run only through `~/.claude/scripts/gate.sh`, never raw.
+- Shell output starting `[ddd]` was compacted by the context firewall; the full output is kept.
+  Need an omitted part? `~/.claude/scripts/ddd artifact <id>` with `--failure N`, `--file`,
+  `--section`, `--lines A-B` or `--raw` — never re-run the command to see it.
 - About to restate what the user said? Delete it.
 
 ## Agents
@@ -135,8 +138,9 @@ merged, and never prune to make a failure disappear. `/harvest` backfills in bul
 - Slice start: `git checkout -b slice/<ID>` (parallel wave: a worktree — see the
   parallel-dispatch skill). Slice abandoned: delete branch and worktree.
 - Commits: Conventional Commits, imperative, slice ID — `feat(auth): add login endpoint (S002)`
-- No session links in commits or PRs: omit `Claude-Session:` trailers and claude.ai
-  session URLs from commit messages and PR bodies; keep `Co-Authored-By`.
+- No session links or Claude Code footers in commits, PRs or PR comments: omit
+  `Claude-Session:` trailers, claude.ai URLs and "Generated with/by Claude Code" lines,
+  and strip any footer a tool appends after posting; keep `Co-Authored-By`.
 
 ## Resolution Protocol (exhaust before flagging a human)
 - **Tier 1** — Builder retries on its own failing self-check. Max 3 attempts.
@@ -185,7 +189,8 @@ dial yourself.
 
 ## State (per project, in vault/)
 project.md (purpose, stack, gate commands, domain language, autonomy dial,
-max_parallel_slices) · task-tree.json (LIVE slices only) · stories.md (append-only,
+max_parallel_slices) · architecture.json (optional fitness rules the gate's `arch` step
+holds; read from main, changed only by a human decision in /grill) · task-tree.json (LIVE slices only) · stories.md (append-only,
 every shipped slice) · log.jsonl (append-only via log-event.sh) · standing-orders.md ·
 decisions/ (ADRs) · findings/ · flags/. Deterministic state and audit only — no memory
 files; git and task-tree.json are the resume state.

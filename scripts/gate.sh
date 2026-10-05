@@ -1,6 +1,21 @@
 #!/bin/bash
 
 EXCERPT_LINES="${GATE_EXCERPT_LINES:-30}"
+GATE_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+firewall_excerpt() {
+  local step="$1" cmd="$2" log="$3" status="$4" out footer
+  [ "${GATE_FIREWALL:-1}" = "0" ] && return 0
+  [ -x "$GATE_DIR/ddd" ] || return 0
+  out=$(cd "$top" && "$GATE_DIR/ddd" ingest --command "$cmd" --stdout "$log" --exit "$status" --budget 450 --quiet-passthrough --no-dedup --session "gate-$step" 2>/dev/null) || return 0
+  footer=$(printf '%s\n' "$out" | grep -E '^\[ddd\] (full output|omitted)' | tail -1)
+  if [ "$(printf '%s\n' "$out" | wc -l)" -gt "$EXCERPT_LINES" ]; then
+    printf '%s\n' "$out" | head -"$((EXCERPT_LINES - 1))"
+    printf '%s\n' "$footer"
+  else
+    printf '%s\n' "$out"
+  fi
+}
 
 top=$(git rev-parse --show-toplevel 2>/dev/null) || { echo "gate.sh: not inside a git repo" >&2; exit 1; }
 
@@ -18,7 +33,7 @@ setting() {
   printf '%s\n' "${value%\`}"
 }
 
-known="lint types test build a11y crap mutation markers comments scope"
+known="lint types test build a11y crap mutation markers comments scope arch"
 steps=() targets=() focused=0
 while [ $# -gt 0 ]; do
   if [ "$1" = "--" ]; then
@@ -221,6 +236,30 @@ for step in "${steps[@]}"; do
     esac
     continue
   fi
+  if [ "$step" = "arch" ]; then
+    base="${GATE_BASE:-main}"
+    if ! git -C "$top" rev-parse -q --verify "$base^{commit}" >/dev/null; then
+      echo "arch SKIP (no $base branch to diff against; set GATE_BASE)"
+      continue
+    fi
+    if ! git -C "$top" cat-file -e "$base:vault/architecture.json" 2>/dev/null; then
+      echo "arch SKIP (no vault/architecture.json on $base)"
+      continue
+    fi
+    py=python3
+    command -v "$py" >/dev/null 2>&1 && "$py" -c pass >/dev/null 2>&1 || py=python
+    git -C "$top" show "$base:vault/architecture.json" > "$logdir/architecture.json"
+    result=$("$py" "$(dirname "$0")/codebase-graph.py" check --rules "$logdir/architecture.json" --base "$base" 2>&1)
+    status=$?
+    if [ "$status" -eq 0 ]; then
+      echo "arch PASS — ${result#PASS }"
+    else
+      failed+=("arch")
+      echo "arch FAIL — $(echo "$result" | head -1 | sed 's/^FAIL //')"
+      echo "$result" | sed 1d | head -"$EXCERPT_LINES" | while IFS= read -r line; do echo "$line"; done
+    fi
+    continue
+  fi
   if [ "$step" = "crap" ]; then
     cmd=$(setting crap)
     if [ -z "$cmd" ]; then
@@ -356,7 +395,8 @@ for step in "${steps[@]}"; do
   else
     failed+=("$step")
     echo "$step FAIL (exit $status, ${secs}s) — full log: .gate/$step.log"
-    excerpt=$(grep -nE -i 'error|fail|assert|exception|traceback|✗|✕' "$log" | head -"$EXCERPT_LINES")
+    excerpt=$(firewall_excerpt "$step" "$cmd" "$log" "$status")
+    [ -z "$excerpt" ] && excerpt=$(grep -nE -i 'error|fail|assert|exception|traceback|✗|✕' "$log" | head -"$EXCERPT_LINES")
     [ -z "$excerpt" ] && excerpt=$(tail -"$EXCERPT_LINES" "$log")
     while IFS= read -r line; do echo "  $line"; done <<< "$excerpt"
   fi

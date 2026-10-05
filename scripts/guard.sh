@@ -1,4 +1,6 @@
 #!/bin/bash
+# shellcheck source=/dev/null
+[ -f "$(dirname "$0")/jq-text.sh" ] && . "$(dirname "$0")/jq-text.sh"
 
 if ! command -v jq >/dev/null 2>&1; then
   echo "BLOCKED: guard.sh requires jq and it is not installed (brew install jq · winget install jqlang.jq · apt install jq). Failing closed." >&2

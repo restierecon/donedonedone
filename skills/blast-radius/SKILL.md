@@ -27,7 +27,10 @@ labelled unproven. Never invent a caller or an API; a search that finds nothing 
 1. **Read the change.** `git diff main...slice/<ID>` — list every symbol, config key,
    env var, schema/column, route, CLI flag or file format it adds, changes or deletes,
    including behavior the diff doesn't spell out (new default, reordered side effect).
-2. **Find consumers outside the diff.** For each item, Grep the repo for references in
+2. **Find consumers outside the diff.** Start with
+   `python3 ~/.claude/scripts/codebase-graph.py impact --base main` (codebase-map
+   skill): direct and indirect importers, tests in reach, cycles the change touches.
+   It sees static imports only, so then, for each item, Grep the repo for references in
    files the diff does NOT touch: imports, call sites, string keys, docs, scripts, CI,
    tests. `git log -S'<symbol>'` and `git blame` show why a shape exists before you
    call a change to it safe.
@@ -43,7 +46,8 @@ labelled unproven. Never invent a caller or an API; a search that finds nothing 
    Paste the command and its decisive output line.
 
 ## Hand back (≤ 5 lines, into the reviewer's BLAST RADIUS section)
-- Consumers checked: what outside the diff depends on the change (count + key paths).
+- Consumers checked: what outside the diff depends on the change (count + key paths;
+  the impact block's direct/indirect counts and its risk estimate, labelled an estimate).
 - Safety fact: stated, with its rung.
 - Each breakage: `file:line` — how it breaks — rung. Rung 4+ → CRITICAL in CRITIQUE;
   below → FYI, unproven.

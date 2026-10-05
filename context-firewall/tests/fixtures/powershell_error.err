@@ -1,0 +1,42 @@
+Get-Item : Cannot find path 'C:\work\app\missing0.txt' because it does not exist.
+At C:\work\scripts\deploy.ps1:12 char:5
++     Get-Item "C:\work\app\missing0.txt"
++     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (C:\work\app\missing0.txt:String) [Get-Item], ItemNotFoundException
+    + FullyQualifiedErrorId : PathNotFound,Microsoft.PowerShell.Commands.GetItemCommand
+
+Get-Item : Cannot find path 'C:\work\app\missing1.txt' because it does not exist.
+At C:\work\scripts\deploy.ps1:13 char:5
++     Get-Item "C:\work\app\missing1.txt"
++     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (C:\work\app\missing1.txt:String) [Get-Item], ItemNotFoundException
+    + FullyQualifiedErrorId : PathNotFound,Microsoft.PowerShell.Commands.GetItemCommand
+
+Get-Item : Cannot find path 'C:\work\app\missing2.txt' because it does not exist.
+At C:\work\scripts\deploy.ps1:14 char:5
++     Get-Item "C:\work\app\missing2.txt"
++     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (C:\work\app\missing2.txt:String) [Get-Item], ItemNotFoundException
+    + FullyQualifiedErrorId : PathNotFound,Microsoft.PowerShell.Commands.GetItemCommand
+
+Get-Item : Cannot find path 'C:\work\app\missing3.txt' because it does not exist.
+At C:\work\scripts\deploy.ps1:15 char:5
++     Get-Item "C:\work\app\missing3.txt"
++     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (C:\work\app\missing3.txt:String) [Get-Item], ItemNotFoundException
+    + FullyQualifiedErrorId : PathNotFound,Microsoft.PowerShell.Commands.GetItemCommand
+
+Get-Item : Cannot find path 'C:\work\app\missing4.txt' because it does not exist.
+At C:\work\scripts\deploy.ps1:16 char:5
++     Get-Item "C:\work\app\missing4.txt"
++     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (C:\work\app\missing4.txt:String) [Get-Item], ItemNotFoundException
+    + FullyQualifiedErrorId : PathNotFound,Microsoft.PowerShell.Commands.GetItemCommand
+
+Get-Item : Cannot find path 'C:\work\app\missing5.txt' because it does not exist.
+At C:\work\scripts\deploy.ps1:17 char:5
++     Get-Item "C:\work\app\missing5.txt"
++     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (C:\work\app\missing5.txt:String) [Get-Item], ItemNotFoundException
+    + FullyQualifiedErrorId : PathNotFound,Microsoft.PowerShell.Commands.GetItemCommand
+
