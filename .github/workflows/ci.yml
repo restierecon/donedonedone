@@ -133,7 +133,7 @@ jobs:
           MSYS_NO_PATHCONV: '1'
           MSYS2_ARG_CONV_EXCL: '*'
         run: |
-          cmd=$(jq -r '.hooks.PreToolUse[] | select(.command | endswith("/guard.sh")) | .windows' ~/.copilot/hooks/donedonedone.json | tr -d '\r')
+          cmd=$(jq -r '.hooks.PreToolUse[] | select(.command | endswith("/guard.sh")) | .windows' < ~/.copilot/hooks/donedonedone.json | tr -d '\r')
           ps="$SYSTEMROOT/System32/WindowsPowerShell/v1.0/powershell.exe"
           status=0
           out=$(printf '%s' '{"hook_event_name":"PreToolUse","tool_name":"run_in_terminal","tool_input":{"command":"git push --force origin main"}}' \
