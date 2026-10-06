@@ -525,13 +525,14 @@ cmd_calibrate() {
            blocked: ([$ev[] | select(.event == "auditor" and .verdict == "BLOCKED")] | length),
            expanded: ([$ev[] | select(.event == "scope")] | length),
            rolled_back: ([$ev[] | select(.event == "rollback")] | length),
-           escalated: ([$ev[] | select(.event == "escalation")] | length)} ] as $s
+           escalated: ([$ev[] | select(.event == "escalation")] | length),
+           defects: ([$ev[] | select(.event == "defect")] | length)} ] as $s
     | "CALIBRATION: \($s | length) assessed slices (read-only — thresholds change only when a human edits vault/risk-policy.json)",
       (classes[] as $c | [$s[] | select(.first == $c)] as $g | select(($g | length) > 0)
-        | "\($c): \($g | length) slices · \([$g[].rejected] | add) reviewer rejections · \([$g[].blocked] | add) auditor blocks · \([$g[] | select(.expanded > 0)] | length) scope expansions · \([$g[] | select(.rolled_back > 0)] | length) rollbacks · \([$g[] | select(.escalated > 0)] | length) escalations"),
+        | "\($c): \($g | length) slices · \([$g[].rejected] | add) reviewer rejections · \([$g[].blocked] | add) auditor blocks · \([$g[] | select(.expanded > 0)] | length) scope expansions · \([$g[] | select(.rolled_back > 0)] | length) rollbacks · \([$g[] | select(.escalated > 0)] | length) escalations · \([$g[].defects] | add) post-merge defects"),
       ($s[] | select((.last | rank) > (.first | rank)
-                     or ((.first | rank) <= 2 and (.rolled_back > 0 or .blocked > 0 or .escalated > 0 or .expanded > 0 or .rejected >= 2)))
-        | "UNDERESTIMATE?: \(.slice) assessed \(.first)\(if .last != .first then ", reassessed \(.last)" else "" end) — \(.expanded) scope expansions, \(.rolled_back) rollbacks, \(.blocked) auditor blocks, \(.escalated) escalations, \(.rejected) rejections")
+                     or ((.first | rank) <= 2 and (.rolled_back > 0 or .blocked > 0 or .escalated > 0 or .expanded > 0 or .defects > 0 or .rejected >= 2)))
+        | "UNDERESTIMATE?: \(.slice) assessed \(.first)\(if .last != .first then ", reassessed \(.last)" else "" end) — \(.expanded) scope expansions, \(.rolled_back) rollbacks, \(.blocked) auditor blocks, \(.escalated) escalations, \(.rejected) rejections, \(.defects) post-merge defects")
   ' "$log" | head -20
 }
 

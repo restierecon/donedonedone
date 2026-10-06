@@ -40,6 +40,16 @@ is approved, and item 8 finds nothing.
 Typically 5-10 questions. Grilling is mandatory for all work, but scale it: a one-slice
 bugfix gets one confirming question (expected behavior + what must not change).
 
+## A bug in shipped behavior is a defect
+Once the human confirms it's a bug (not a new feature request), find the slice that
+shipped the faulty line: `git log -L <start>,<end>:<file> --format='%h %s' -s main` lists
+newest first; the culprit is the first squash commit, subject ending `(<ID>)`, whose
+change introduced the faulty behavior. Then log it before planning the fix:
+`log-event.sh <ID> defect found --category <kind> --signal "<file:line> <what broke>"`.
+It breaks the dial's clean streak, counts in `risk-gate.sh calibrate`, and prints RETRO
+DUE — run the retro before the fix's builder. Code that predates every slice, or a
+behavior the grill never decided, is no defect: say which in one line and don't log one.
+
 ## Starting from an onboarding brief
 After /init-codebase, its numbered `[ASK USER]` questions come first: what the docs
 claim against what the code shows, env vars read but undocumented, paths docs name

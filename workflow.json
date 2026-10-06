@@ -6,7 +6,7 @@
       "id": "grill",
       "label": "Grill",
       "description": "Settle every human decision before any slice exists: UX calls (with an approved UI contract and prototype), one-way doors, risks. Decisions become ADRs; boundaries become fitness rules.",
-      "uses": ["skill:grill", "skill:ui-prototype", "script:approve-ui.sh", "skill:codebase-map"],
+      "uses": ["skill:grill", "skill:ui-prototype", "script:approve-ui.sh", "skill:codebase-map", "script:log-event.sh"],
       "next": ["plan"]
     },
     {
@@ -76,8 +76,8 @@
     {
       "id": "review-cycle",
       "label": "Every 5 slices",
-      "description": "Architecture review (code lens) and learning loop (process lens), dispatched together; candidates go to pending review.",
-      "uses": ["skill:architecture-review", "skill:learning-loop", "agent:retro", "skill:codebase-map"],
+      "description": "Architecture review (code lens) and learning loop (process lens, fed by the log, defects and agent usage), dispatched together; candidates go to pending review.",
+      "uses": ["skill:architecture-review", "skill:learning-loop", "agent:retro", "skill:codebase-map", "script:usage-report.sh"],
       "next": [{"to": "grill", "label": "accepted candidates"}]
     }
   ],

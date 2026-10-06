@@ -129,6 +129,15 @@
             "command": "~/.claude/scripts/vault-guard.sh"
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/scripts/usage-log.sh",
+            "timeout": 15
+          }
+        ]
       }
     ]
   }

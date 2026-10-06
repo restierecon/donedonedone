@@ -14,13 +14,14 @@ changes to the setup.
 ## When
 - With every architecture review — dispatch `retro` in the same message as that
   review's explore subagent. Code and process are separate lenses; don't merge them.
-- When log-event.sh prints `RETRO DUE` — the same failure category hit two slices.
-  Run it before dispatching the next builder, so a third slice doesn't repeat it.
+- When log-event.sh prints `RETRO DUE` — the same failure category hit two slices, or
+  a shipped slice turned out to have a defect. Run it before dispatching the next
+  builder, so a third slice doesn't repeat it.
 - On request.
 
 ## Steps
-1. Run `~/.claude/scripts/risk-gate.sh calibrate` (≤ 20 lines, read-only) and paste
-   its output into the brief. Dispatch the `retro` agent with the trigger and the vault paths. Hand it paths, not
+1. Run `~/.claude/scripts/risk-gate.sh calibrate` and `~/.claude/scripts/usage-report.sh`
+   (≤ 20 lines each, read-only) and paste both outputs into the brief. Dispatch the `retro` agent with the trigger and the vault paths. Hand it paths, not
    log contents. Always the `retro` type, never general-purpose: its Read, Grep, Glob
    tools make it read-only by harness, not by prose.
 2. For each PROPOSAL, append an entry to vault/flags/pending-review.md with the usual
@@ -28,7 +29,7 @@ changes to the setup.
    log lines and the proposed change. Tag it `[retro]`.
 3. Record the run: `log-event.sh - retro done --signal "<n> proposals"`. This line
    closes the window — the next retro reads only what comes after it.
-4. Commit pending-review.md and log.jsonl together:
+4. Commit pending-review.md, log.jsonl and usage.jsonl together:
    `docs(vault): retro — <n> proposals`.
 
 ## Routing a proposal once a human accepts it

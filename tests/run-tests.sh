@@ -937,6 +937,7 @@ echo "== log-event.sh — structured, append-only log =="
 repo=$(make_repo)
 : > "$repo/vault/log.jsonl"
 echo "hand-written line from before the script" >> "$repo/vault/log.jsonl"
+echo '"a bare JSON string"' >> "$repo/vault/log.jsonl"
 out=$(cd "$repo" && "$LOG_EVENT" S001 reviewer REJECTED --sha abc123 --attempt 1 --category error-handling \
   --signal "$(printf 'app.py:3 CRITICAL bare except\nswallows')" 2>&1)
 line=$(tail -1 "$repo/vault/log.jsonl")
@@ -991,10 +992,116 @@ if [ "$status" -eq 1 ] && [ "$(wc -l < "$repo/vault/log.jsonl")" -eq "$before" ]
 else
   bad "rejects an evidence rung outside the ladder and writes nothing" "exit $status"
 fi
+before=$(wc -l < "$repo/vault/log.jsonl")
+s1=0; (cd "$repo" && "$LOG_EVENT" S004 defect found --signal "app.py:9 crash" >/dev/null 2>&1) || s1=$?
+s2=0; (cd "$repo" && "$LOG_EVENT" S004 defect found --category error-handling >/dev/null 2>&1) || s2=$?
+s3=0; (cd "$repo" && "$LOG_EVENT" - defect found --category error-handling --signal x >/dev/null 2>&1) || s3=$?
+if [ "$s1" -eq 1 ] && [ "$s2" -eq 1 ] && [ "$s3" -eq 1 ] && [ "$(wc -l < "$repo/vault/log.jsonl")" -eq "$before" ]; then
+  ok "a defect needs a slice, a category and a signal, or nothing is written"
+else
+  bad "a defect needs a slice, a category and a signal, or nothing is written" "exits $s1/$s2/$s3"
+fi
+out=$(cd "$repo" && "$LOG_EVENT" S006 defect found --sha 9a8b7c --category logging --signal "api.py:40 logs the raw token" 2>&1)
+if tail -1 "$repo/vault/log.jsonl" | jq -e '.event == "defect" and .slice == "S006" and .categories == ["logging"]' >/dev/null \
+   && echo "$out" | grep -q "^RETRO DUE: post-merge defect in S006 (logging)"; then
+  ok "one post-merge defect is enough for RETRO DUE"
+else
+  bad "one post-merge defect is enough for RETRO DUE" "$out"
+fi
+(cd "$repo" && "$LOG_EVENT" - retro "done" --signal "1 proposal" >/dev/null)
+out=$(cd "$repo" && "$LOG_EVENT" S007 reviewer APPROVED 2>&1)
+if [ -z "$out" ]; then ok "a retro line closes a defect's window too"; else bad "a retro line closes a defect's window too" "$out"; fi
 rm -rf "$repo/vault"
 status=0; (cd "$repo" && "$LOG_EVENT" S001 gate PASS >/dev/null 2>&1) || status=$?
 if [ "$status" -eq 1 ]; then ok "fails without a vault"; else bad "fails without a vault" "exit $status"; fi
 rm -rf "$repo"
+
+echo "== usage-log.sh / usage-report.sh — agent cost per slice =="
+USAGE_LOG="$ROOT/scripts/usage-log.sh"
+USAGE_REPORT="$ROOT/scripts/usage-report.sh"
+transcript_of() {
+  jq -cn --arg brief "$1" '
+    {type: "user", timestamp: "2026-10-01T10:00:00.250Z", message: {role: "user", content: $brief}},
+    {type: "assistant", timestamp: "2026-10-01T10:00:05Z", message: {id: "m1", model: "claude-sonnet-5-5", usage: {input_tokens: 10, cache_creation_input_tokens: 1000, cache_read_input_tokens: 5000, output_tokens: 200}}},
+    {type: "assistant", timestamp: "2026-10-01T10:00:06Z", message: {id: "m1", model: "claude-sonnet-5-5", usage: {input_tokens: 10, cache_creation_input_tokens: 1000, cache_read_input_tokens: 5000, output_tokens: 200}}},
+    {type: "assistant", timestamp: "2026-10-01T10:01:30.75Z", message: {id: "m2", model: "claude-sonnet-5-5", usage: {input_tokens: 5, cache_creation_input_tokens: 0, cache_read_input_tokens: 6000, output_tokens: 300}}},
+    {type: "assistant", timestamp: "2026-10-01T10:01:31Z", message: {id: "m3", model: "<synthetic>", usage: {input_tokens: 0, output_tokens: 0}}}'
+  echo "{\"type\":\"assistant\",\"message\":"
+}
+stop_hook() {
+  jq -n --arg cwd "$1" --arg t "$2" --arg a "${3-builder}" --arg e "${4:-SubagentStop}" \
+    '{hook_event_name: $e, cwd: $cwd, agent_id: "agent-1", agent_type: $a, agent_transcript_path: $t}' | "$USAGE_LOG" 2>&1
+}
+repo=$(make_repo)
+tdir=$(mktemp -d)
+transcript_of "$(printf 'GOAL: x\nSLICE: S021 — Reader can search\nSCOPE: y')" > "$tdir/builder.jsonl"
+out=$(stop_hook "$repo" "$tdir/builder.jsonl"); status=$?
+if [ "$status" -eq 0 ] && [ -z "$out" ] && jq -e 'select(.slice == "S021" and .agent == "builder" and .model == "claude-sonnet-5-5"
+     and .turns == 2 and .input_tokens == 15 and .cache_write_tokens == 1000 and .cache_read_tokens == 11000
+     and .output_tokens == 500 and .duration_ms == 90750)' "$repo/vault/usage.jsonl" >/dev/null; then
+  ok "usage-log records slice, model, turns, tokens and duration, counting each message once and skipping synthetic ones"
+else
+  bad "usage-log records slice, model, turns, tokens and duration, counting each message once and skipping synthetic ones" "exit $status: $out $(cat "$repo/vault/usage.jsonl" 2>/dev/null)"
+fi
+transcript_of 'Review the diff on slice/S022 at abc123.' > "$tdir/reviewer.jsonl"
+stop_hook "$repo" "$tdir/reviewer.jsonl" reviewer >/dev/null
+git -C "$repo" worktree add -q "$repo/.worktrees/S023" -b slice/S023
+transcript_of 'GOAL: audit the diff' > "$tdir/auditor.jsonl"
+stop_hook "$repo/.worktrees/S023" "$tdir/auditor.jsonl" auditor >/dev/null
+if [ "$(jq -r '.slice' "$repo/vault/usage.jsonl" | tr '\n' ' ')" = "S021 S022 S023 " ] && [ ! -e "$repo/.worktrees/S023/vault/usage.jsonl" ]; then
+  ok "usage-log falls back to a slice/<ID> mention, then the worktree, and writes to the main checkout's vault"
+else
+  bad "usage-log falls back to a slice/<ID> mention, then the worktree, and writes to the main checkout's vault" "$(cat "$repo/vault/usage.jsonl")"
+fi
+before=$(wc -l < "$repo/vault/usage.jsonl")
+o1=$(stop_hook "$repo" "$tdir/builder.jsonl" "")
+o2=$(stop_hook "$repo" "$tdir/builder.jsonl" builder Stop)
+o3=$(stop_hook "$repo" "$tdir/missing.jsonl")
+printf 'not json\n' > "$tdir/empty.jsonl"
+o4=$(stop_hook "$repo" "$tdir/empty.jsonl")
+plain=$(mktemp -d); git -C "$plain" init -q
+o5=$(stop_hook "$plain" "$tdir/builder.jsonl")
+if [ "$(wc -l < "$repo/vault/usage.jsonl")" -eq "$before" ] && [ -z "$o1$o2$o3$o4$o5" ] && [ ! -e "$plain/vault" ]; then
+  ok "usage-log stays silent and writes nothing for internal agents, other events, unreadable transcripts or a project without a vault"
+else
+  bad "usage-log stays silent and writes nothing for internal agents, other events, unreadable transcripts or a project without a vault" "$o1|$o2|$o3|$o4|$o5"
+fi
+guarded=$(make_repo)
+(cd "$guarded" && "$VAULT_GUARD" --snapshot)
+stop_hook "$guarded" "$tdir/builder.jsonl" >/dev/null
+status=0
+out=$(jq -n --arg cwd "$guarded" '{hook_event_name: "SubagentStop", cwd: $cwd, agent_id: "agent-1", agent_type: "builder"}' | "$VAULT_GUARD" 2>&1) || status=$?
+if [ "$status" -eq 0 ] && [ "$(wc -l < "$guarded/vault/usage.jsonl")" -eq 1 ]; then
+  ok "vault-guard keeps the usage line written as the subagent stops"
+else
+  bad "vault-guard keeps the usage line written as the subagent stops" "exit $status: $out"
+fi
+rm -rf "$guarded"
+(cd "$repo" && "$LOG_EVENT" S021 reviewer REJECTED --category error-handling >/dev/null)
+transcript_of 'SLICE: S024' | sed 's/claude-sonnet-5-5/claude-opus-5-5/' > "$tdir/opus.jsonl"
+stop_hook "$repo" "$tdir/opus.jsonl" >/dev/null
+out=$(cd "$repo" && "$USAGE_REPORT")
+if echo "$out" | grep -q "^USAGE: 4 agent runs · 4 slices" && echo "$out" | grep -q "^  builder claude-sonnet-5-5: 1 · 500 · 1k · 11k · 1.5m" \
+   && echo "$out" | grep -q "^  claude-sonnet-5-5: 1 · 1 · 500" && echo "$out" | grep -q "^  claude-opus-5-5: 1 · 0 · 500" \
+   && [ "$(echo "$out" | wc -l)" -le 20 ]; then
+  ok "usage-report totals by agent and model, and sets each builder model against its reviewer rejections"
+else
+  bad "usage-report totals by agent and model, and sets each builder model against its reviewer rejections" "$out"
+fi
+out=$(cd "$repo" && "$USAGE_REPORT" S022)
+if echo "$out" | grep -q "^USAGE S022: 1 agent runs" && echo "$out" | grep -q "reviewer claude-sonnet-5-5 · 2 turns"; then
+  ok "usage-report <ID> lists one slice's runs"
+else
+  bad "usage-report <ID> lists one slice's runs" "$out"
+fi
+out=$(cd "$plain" && mkdir vault && "$USAGE_REPORT")
+if echo "$out" | grep -q "^USAGE: no agent runs recorded yet"; then ok "usage-report says so when nothing is recorded"; else bad "usage-report says so when nothing is recorded" "$out"; fi
+if jq -e '[.hooks.SubagentStop[].hooks[].command] | index("~/.claude/scripts/usage-log.sh")' "$ROOT/settings.json" >/dev/null; then
+  ok "settings.json runs usage-log.sh when a subagent stops"
+else
+  bad "settings.json runs usage-log.sh when a subagent stops" "missing"
+fi
+rm -rf "$repo" "$tdir" "$plain"
 
 echo "== gate.sh — verdict binds to sha + patch_id =="
 repo=$(make_gate_repo '- gate.test: true')
@@ -2169,6 +2276,16 @@ if echo "$out" | grep -q "^CALIBRATION: 3 assessed slices" && echo "$out" | grep
   ok "calibrate flags rollbacks and raised reassessments, and writes no policy"
 else
   bad "calibrate flags rollbacks and raised reassessments, and writes no policy" "$out"
+fi
+lg "$repo" S013 risk moderate --score 25 --hash eeeeeeeeeeee
+lg "$repo" S013 reviewer APPROVED
+lg "$repo" S013 defect found --category error-handling --signal "pay.py:12 swallows a timeout"
+out=$(rg "$repo" calibrate)
+if echo "$out" | grep -q "^moderate: 2 slices .* 1 post-merge defects" \
+   && echo "$out" | grep -q "UNDERESTIMATE?: S013 assessed moderate — .*1 post-merge defects" && ! echo "$out" | grep -q "S011"; then
+  ok "calibrate counts post-merge defects and flags the slice that shipped one"
+else
+  bad "calibrate counts post-merge defects and flags the slice that shipped one" "$out"
 fi
 status=0; (cd "$repo" && "$LOG_EVENT" S010 risk low --score 101 >/dev/null 2>&1) || status=$?
 if [ "$status" -eq 1 ]; then ok "log-event.sh rejects a score over 100"; else bad "log-event.sh rejects a score over 100" "exit $status"; fi

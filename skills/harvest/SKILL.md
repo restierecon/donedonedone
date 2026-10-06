@@ -49,6 +49,7 @@ slice, or as /harvest to backfill many.
      Drop implementation detail; keep numbers, limits, and error behavior exact.
 6. Delete the harvested slices from task-tree.json. Leave `depends_on` entries that
    name them alone — an ID with no matching slice is satisfied by definition.
-7. Commit both files together: `docs(vault): harvest <n> stories, prune task tree`.
+7. Commit both files together, with vault/usage.jsonl if it changed:
+   `docs(vault): harvest <n> stories, prune task tree`.
 8. Report a table — ID · harvested / skipped (already in stories.md) / kept (unmerged)
    — plus the slice count remaining in the tree.

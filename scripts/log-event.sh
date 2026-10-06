@@ -2,7 +2,7 @@
 # shellcheck source=/dev/null
 [ -f "$(dirname "$0")/jq-text.sh" ] && . "$(dirname "$0")/jq-text.sh"
 
-EVENTS="builder gate reviewer auditor merge tier3 escalation correction retro risk scope rollback"
+EVENTS="builder gate reviewer auditor merge tier3 escalation correction retro risk scope rollback defect"
 CATEGORIES="criterion-unmet test-quality test-speed speculative-abstraction error-handling dead-code duplication scope-creep comments contract-mismatch dependency security logging gate-failure merge-conflict ambiguous-criteria human-correction scope-expansion risk-underestimate other"
 EVIDENCE="live-verified unit-test-verified type-check-only verifier-blocked verifier-failed"
 MAX_SIGNALS=5
@@ -41,6 +41,12 @@ while [ $# -gt 0 ]; do
   shift 2
 done
 
+if [ "$event" = "defect" ]; then
+  [ "$slice" != "-" ] || { echo "log-event.sh: a defect names the shipped slice that introduced it, not '-'" >&2; exit 1; }
+  [ ${#categories[@]} -gt 0 ] && [ ${#signals[@]} -gt 0 ] \
+    || { echo "log-event.sh: a defect needs --category (what kind of failure) and --signal (file:line and what broke)" >&2; exit 1; }
+fi
+
 common=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) \
   || { echo "log-event.sh: not inside a git repo" >&2; exit 1; }
 log="$(dirname "$common")/vault/log.jsonl"
@@ -64,10 +70,13 @@ jq -cn \
 [ "$event" = "retro" ] && exit 0
 
 jq -Rrn '
-  [inputs | fromjson?] as $all
+  [inputs | fromjson? | select(type == "object")] as $all
   | ([$all | to_entries[] | select(.value.event == "retro") | .key] | last // -1) as $cut
-  | [$all[($cut + 1):][] | .slice as $s | (.categories // [])[] | select(. != "other") | {c: ., s: $s}]
-  | group_by(.c)[] | {c: .[0].c, s: (map(.s) | unique)} | select(.s | length >= 2)
-  | "RETRO DUE: \(.c) recurred in \(.s | join(", ")) since the last retro — dispatch it now (learning-loop skill)"
+  | $all[($cut + 1):] as $window
+  | ($window[] | select(.event == "defect")
+     | "RETRO DUE: post-merge defect in \(.slice) (\((.categories // []) | join(", "))) — a shipped slice passed every gate with this bug; dispatch the retro now (learning-loop skill)"),
+    ([$window[] | .slice as $s | (.categories // [])[] | select(. != "other") | {c: ., s: $s}]
+     | group_by(.c)[] | {c: .[0].c, s: (map(.s) | unique)} | select(.s | length >= 2)
+     | "RETRO DUE: \(.c) recurred in \(.s | join(", ")) since the last retro — dispatch it now (learning-loop skill)")
 ' "$log" 2>/dev/null
 exit 0
