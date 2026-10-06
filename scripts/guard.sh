@@ -128,6 +128,29 @@ if [ -n "$file_path" ] && secret_path "$file_path"; then
   block "BLOCKED: $file_path looks like a secret (.env, key, secrets/). Ask the human for the value you need instead."
 fi
 
+USAGE_MSG="BLOCKED: agent usage is recorded by hooks alone — usage-log.sh writes .git/donedonedone/usage.jsonl when an agent or the Director stops, and usage-report.sh export copies it to vault/usage.jsonl. Read it with usage-report.sh."
+TRANSCRIPT_MSG="BLOCKED: session transcripts under ~/.claude/projects are read-only — the usage ledger is computed from them."
+
+usage_path() {
+  echo "$1" | lower | grep -qE '(^|/)vault/usage\.jsonl$|(^|/)\.git/donedonedone/usage'
+}
+
+transcript_file() {
+  echo "$1" | lower | grep -qE '(^|/)\.claude/projects/'
+}
+
+read_tool() {
+  case "$tool" in
+    Read|Grep|Glob|LS|NotebookRead|read_file|grep_search|file_search|list_dir|semantic_search) return 0 ;;
+  esac
+  return 1
+}
+
+if [ -n "$file_path" ] && ! read_tool; then
+  usage_path "$file_path" && block "$USAGE_MSG"
+  transcript_file "$file_path" && vault_project && block "$TRANSCRIPT_MSG"
+fi
+
 if [ -n "$file_path" ] && [ "$tool" != "Read" ] && human_only_path "$file_path"; then
   block "$HUMAN_ONLY_MSG"
 fi
@@ -143,6 +166,8 @@ if [ -n "$agent_id" ]; then
     plain=$(normalize "$cmd")
     protected_name "$plain" 'log-event' \
       && block "BLOCKED: vault/log.jsonl is written by the Director only (log-event.sh). Return your verdict as text."
+    protected_name "$plain" 'usage-report[^[:space:]]*[[:space:]]+export' \
+      && block "$USAGE_MSG"
     protected_name "$plain" 'risk-gate' && ! read_only_shell "$plain" && vault_project \
       && block "BLOCKED: risk-gate.sh is the Director's: it records risk assessments and judges merges. If your work needs files outside the approved scope, stop and report SCOPE-EXPANSION."
     if protected_name "$plain" 'vault|task-tree|log\.jsonl' && ! read_only_shell "$plain"; then
@@ -269,6 +294,14 @@ plain=$(normalize "$cmd")
 
 if secret_in_shell "$plain"; then
   block "BLOCKED: this command touches a secret (.env, key, secrets/). Ask the human for the value you need instead."
+fi
+
+if protected_name "$plain" 'usage\.jsonl|usage-state|usage\.lock|usage-log' \
+   && ! read_only_shell "$plain" "add commit" && vault_project; then
+  block "$USAGE_MSG"
+fi
+if protected_name "$plain" '\.claude/projects' && ! read_only_shell "$plain" && vault_project; then
+  block "$TRANSCRIPT_MSG"
 fi
 
 if protected_name "$plain" 'approvals\.jsonl|risk-policy|approve-risk|approve-ui|vault-guard[^[:space:]]*[[:space:]]+--|\.git/donedonedone' \

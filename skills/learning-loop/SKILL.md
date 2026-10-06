@@ -21,7 +21,8 @@ changes to the setup.
 
 ## Steps
 1. Run `~/.claude/scripts/risk-gate.sh calibrate` and `~/.claude/scripts/usage-report.sh`
-   (≤ 20 lines each, read-only) and paste both outputs into the brief. Dispatch the `retro` agent with the trigger and the vault paths. Hand it paths, not
+   (≤ 20 lines each, read-only) and paste both outputs into the brief. A usage report
+   whose second line reads `USAGE LEDGER: TAMPERED` goes to the human, not the retro. Dispatch the `retro` agent with the trigger and the vault paths. Hand it paths, not
    log contents. Always the `retro` type, never general-purpose: its Read, Grep, Glob
    tools make it read-only by harness, not by prose.
 2. For each PROPOSAL, append an entry to vault/flags/pending-review.md with the usual
@@ -29,7 +30,7 @@ changes to the setup.
    log lines and the proposed change. Tag it `[retro]`.
 3. Record the run: `log-event.sh - retro done --signal "<n> proposals"`. This line
    closes the window — the next retro reads only what comes after it.
-4. Commit pending-review.md, log.jsonl and usage.jsonl together:
+4. Commit pending-review.md and log.jsonl together:
    `docs(vault): retro — <n> proposals`.
 
 ## Routing a proposal once a human accepts it

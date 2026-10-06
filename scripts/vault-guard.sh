@@ -35,8 +35,13 @@ mkdir -p "$state" || exit 0
 protected=(vault/task-tree.json vault/log.jsonl)
 human=(vault/risk-policy.json)
 case "$common" in
-  "$main_root"/*) human+=("${common#"$main_root"/}/donedonedone/approvals.jsonl") ;;
+  "$main_root"/*) human+=("${common#"$main_root"/}/donedonedone/approvals.jsonl" "${common#"$main_root"/}/donedonedone/usage.jsonl") ;;
 esac
+usage_lock="$common/donedonedone/usage.lock"
+
+usage_writer_busy() {
+  case "$1" in */donedonedone/usage.jsonl) [ -n "$(find "$usage_lock" -maxdepth 0 -mmin -1 2>/dev/null)" ] ;; *) return 1 ;; esac
+}
 
 key() { printf '%s' "$1" | tr '/' '_'; }
 
@@ -86,19 +91,22 @@ restore() {
 
 snapshot_human() {
   local f
-  for f in "${human[@]}"; do snapshot "$f"; done
+  for f in "${human[@]}"; do
+    usage_writer_busy "$f" || snapshot "$f"
+  done
 }
 
 restore_human() {
   local f restored=()
   for f in "${human[@]}"; do
+    usage_writer_busy "$f" && continue
     if ! has_snapshot "$f"; then snapshot "$f"; continue; fi
     changed "$f" || continue
     restore "$f"
     restored+=("$f")
   done
   [ ${#restored[@]} -eq 0 ] && return 0
-  echo "RESTORED: ${restored[*]} — human-only files changed during a tool call. Approvals come from approve-risk.sh and approve-ui.sh run by a human in their own terminal; the risk policy is edited by a human between tool calls." >&2
+  echo "RESTORED: ${restored[*]} — human-only files changed during a tool call. Approvals come from approve-risk.sh and approve-ui.sh run by a human in their own terminal; the risk policy is edited by a human between tool calls; the usage ledger is written by the usage-log.sh hook alone." >&2
   return 1
 }
 

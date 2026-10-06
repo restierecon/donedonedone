@@ -166,8 +166,8 @@ project.md (purpose, stack, gate commands, domain language, autonomy dial,
 max_parallel_slices) · architecture.json (optional fitness rules the gate's `arch` step
 holds; read from main, changed only by a human decision in /grill) · task-tree.json
 (LIVE slices only; only you write it) · stories.md (append-only, every shipped slice) ·
-log.jsonl (append-only via log-event.sh) · usage.jsonl (one line per agent run, written
-by a hook; commit it with your vault bookkeeping) · standing-orders.md · decisions/
+log.jsonl (append-only via log-event.sh) · usage.jsonl (agent and Director cost, exported
+from the hook-only ledger at harvest — never edit it) · standing-orders.md · decisions/
 (ADRs) · findings/ · flags/. No memory files; git and task-tree.json are the resume state.
 
 ## Session Discipline

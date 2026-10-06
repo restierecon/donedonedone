@@ -49,7 +49,10 @@ slice, or as /harvest to backfill many.
      Drop implementation detail; keep numbers, limits, and error behavior exact.
 6. Delete the harvested slices from task-tree.json. Leave `depends_on` entries that
    name them alone — an ID with no matching slice is satisfied by definition.
-7. Commit both files together, with vault/usage.jsonl if it changed:
+7. Run `~/.claude/scripts/usage-report.sh export` as its own command. It refreshes
+   vault/usage.jsonl from the hook-only usage ledger, or prints `USAGE LEDGER:
+   TAMPERED` and refuses — then stop and put that line in vault/flags/pending-review.md
+   for the human. Commit both files, with vault/usage.jsonl when export wrote it:
    `docs(vault): harvest <n> stories, prune task tree`.
 8. Report a table — ID · harvested / skipped (already in stories.md) / kept (unmerged)
    — plus the slice count remaining in the tree.

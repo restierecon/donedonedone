@@ -1016,7 +1016,7 @@ status=0; (cd "$repo" && "$LOG_EVENT" S001 gate PASS >/dev/null 2>&1) || status=
 if [ "$status" -eq 1 ]; then ok "fails without a vault"; else bad "fails without a vault" "exit $status"; fi
 rm -rf "$repo"
 
-echo "== usage-log.sh / usage-report.sh — agent cost per slice =="
+echo "== usage-log.sh / usage-report.sh — agent and Director cost, recorded by hooks alone =="
 USAGE_LOG="$ROOT/scripts/usage-log.sh"
 USAGE_REPORT="$ROOT/scripts/usage-report.sh"
 transcript_of() {
@@ -1028,78 +1028,212 @@ transcript_of() {
     {type: "assistant", timestamp: "2026-10-01T10:01:31Z", message: {id: "m3", model: "<synthetic>", usage: {input_tokens: 0, output_tokens: 0}}}'
   echo "{\"type\":\"assistant\",\"message\":"
 }
+director_line() {
+  jq -cn --arg id "$1" --argjson out "$2" --arg side "${3:-false}" \
+    '{type: "assistant", isSidechain: ($side == "true"), timestamp: "2026-10-01T11:00:00Z", message: {id: $id, model: "claude-opus-5-5", usage: {input_tokens: 1, cache_creation_input_tokens: 100, cache_read_input_tokens: 900, output_tokens: $out}}}'
+}
 stop_hook() {
   jq -n --arg cwd "$1" --arg t "$2" --arg a "${3-builder}" --arg e "${4:-SubagentStop}" \
     '{hook_event_name: $e, cwd: $cwd, agent_id: "agent-1", agent_type: $a, agent_transcript_path: $t}' | "$USAGE_LOG" 2>&1
 }
+director_stop() {
+  jq -n --arg cwd "$1" --arg t "$2" '{hook_event_name: "Stop", cwd: $cwd, session_id: "sess-1", transcript_path: $t}' | "$USAGE_LOG" 2>&1
+}
+vguard() {
+  jq -n --arg cwd "$1" --arg e "$2" --arg a "$3" --arg c "${4:-true}" \
+    '{hook_event_name: $e, cwd: $cwd, tool_name: "Bash", tool_input: {command: $c}}
+     + (if $a == "" then {} else {agent_id: "agent-1", agent_type: $a} end)' | "$VAULT_GUARD" 2>&1
+}
+guard_at() {
+  jq -n --arg cwd "$1" --arg tool "$2" --arg v "$3" --arg a "${4:-}" \
+    '{tool_name: $tool, cwd: $cwd, tool_input: (if $tool == "Bash" then {command: $v} else {file_path: $v} end)}
+     + (if $a == "" then {} else {agent_id: "agent-1", agent_type: $a} end)' | "$GUARD" 2>/dev/null
+}
 repo=$(make_repo)
+ledger="$repo/.git/donedonedone/usage.jsonl"
 tdir=$(mktemp -d)
 transcript_of "$(printf 'GOAL: x\nSLICE: S021 — Reader can search\nSCOPE: y')" > "$tdir/builder.jsonl"
 out=$(stop_hook "$repo" "$tdir/builder.jsonl"); status=$?
-if [ "$status" -eq 0 ] && [ -z "$out" ] && jq -e 'select(.slice == "S021" and .agent == "builder" and .model == "claude-sonnet-5-5"
+if [ "$status" -eq 0 ] && [ -z "$out" ] && [ ! -e "$repo/vault/usage.jsonl" ] && jq -e 'select(.slice == "S021" and .agent == "builder" and .model == "claude-sonnet-5-5"
      and .turns == 2 and .input_tokens == 15 and .cache_write_tokens == 1000 and .cache_read_tokens == 11000
-     and .output_tokens == 500 and .duration_ms == 90750)' "$repo/vault/usage.jsonl" >/dev/null; then
-  ok "usage-log records slice, model, turns, tokens and duration, counting each message once and skipping synthetic ones"
+     and .output_tokens == 500 and .duration_ms == 90750)' "$ledger" >/dev/null; then
+  ok "usage-log records an agent run in the git-dir ledger, counting each message once and skipping synthetic ones"
 else
-  bad "usage-log records slice, model, turns, tokens and duration, counting each message once and skipping synthetic ones" "exit $status: $out $(cat "$repo/vault/usage.jsonl" 2>/dev/null)"
+  bad "usage-log records an agent run in the git-dir ledger, counting each message once and skipping synthetic ones" "exit $status: $out $(cat "$ledger" 2>/dev/null)"
 fi
 transcript_of 'Review the diff on slice/S022 at abc123.' > "$tdir/reviewer.jsonl"
 stop_hook "$repo" "$tdir/reviewer.jsonl" reviewer >/dev/null
 git -C "$repo" worktree add -q "$repo/.worktrees/S023" -b slice/S023
 transcript_of 'GOAL: audit the diff' > "$tdir/auditor.jsonl"
 stop_hook "$repo/.worktrees/S023" "$tdir/auditor.jsonl" auditor >/dev/null
-if [ "$(jq -r '.slice' "$repo/vault/usage.jsonl" | tr '\n' ' ')" = "S021 S022 S023 " ] && [ ! -e "$repo/.worktrees/S023/vault/usage.jsonl" ]; then
-  ok "usage-log falls back to a slice/<ID> mention, then the worktree, and writes to the main checkout's vault"
+if [ "$(jq -r '.slice' "$ledger" | tr '\n' ' ')" = "S021 S022 S023 " ]; then
+  ok "usage-log falls back to a slice/<ID> mention, then the worktree, and writes the main checkout's ledger"
 else
-  bad "usage-log falls back to a slice/<ID> mention, then the worktree, and writes to the main checkout's vault" "$(cat "$repo/vault/usage.jsonl")"
+  bad "usage-log falls back to a slice/<ID> mention, then the worktree, and writes the main checkout's ledger" "$(cat "$ledger")"
 fi
-before=$(wc -l < "$repo/vault/usage.jsonl")
+before=$(wc -l < "$ledger")
 o1=$(stop_hook "$repo" "$tdir/builder.jsonl" "")
-o2=$(stop_hook "$repo" "$tdir/builder.jsonl" builder Stop)
+o2=$(stop_hook "$repo" "$tdir/builder.jsonl" builder SessionStart)
 o3=$(stop_hook "$repo" "$tdir/missing.jsonl")
 printf 'not json\n' > "$tdir/empty.jsonl"
 o4=$(stop_hook "$repo" "$tdir/empty.jsonl")
 plain=$(mktemp -d); git -C "$plain" init -q
 o5=$(stop_hook "$plain" "$tdir/builder.jsonl")
-if [ "$(wc -l < "$repo/vault/usage.jsonl")" -eq "$before" ] && [ -z "$o1$o2$o3$o4$o5" ] && [ ! -e "$plain/vault" ]; then
+if [ "$(wc -l < "$ledger")" -eq "$before" ] && [ -z "$o1$o2$o3$o4$o5" ] && [ ! -e "$plain/.git/donedonedone" ]; then
   ok "usage-log stays silent and writes nothing for internal agents, other events, unreadable transcripts or a project without a vault"
 else
   bad "usage-log stays silent and writes nothing for internal agents, other events, unreadable transcripts or a project without a vault" "$o1|$o2|$o3|$o4|$o5"
 fi
-guarded=$(make_repo)
-(cd "$guarded" && "$VAULT_GUARD" --snapshot)
-stop_hook "$guarded" "$tdir/builder.jsonl" >/dev/null
-status=0
-out=$(jq -n --arg cwd "$guarded" '{hook_event_name: "SubagentStop", cwd: $cwd, agent_id: "agent-1", agent_type: "builder"}' | "$VAULT_GUARD" 2>&1) || status=$?
-if [ "$status" -eq 0 ] && [ "$(wc -l < "$guarded/vault/usage.jsonl")" -eq 1 ]; then
-  ok "vault-guard keeps the usage line written as the subagent stops"
+
+git -C "$repo" checkout -q -b slice/S030
+{ director_line d1 40; director_line d1 40; director_line x9 999 true; director_line d2 60; } > "$tdir/main.jsonl"
+out=$(director_stop "$repo" "$tdir/main.jsonl")
+if [ -z "$out" ] && tail -1 "$ledger" | jq -e '.agent == "director" and .slice == "S030" and .turns == 2 and .output_tokens == 100 and .model == "claude-opus-5-5"' >/dev/null; then
+  ok "a Director stop records the Director's turn against the slice branch it is on, leaving out sidechain messages"
 else
-  bad "vault-guard keeps the usage line written as the subagent stops" "exit $status: $out"
+  bad "a Director stop records the Director's turn against the slice branch it is on, leaving out sidechain messages" "$out $(tail -1 "$ledger")"
 fi
-rm -rf "$guarded"
+{ director_line d2 60; director_line d3 7; } >> "$tdir/main.jsonl"
+director_line d4 5 | tr -d '\n' >> "$tdir/main.jsonl"
+git -C "$repo" checkout -q main
+director_stop "$repo" "$tdir/main.jsonl" >/dev/null
+lines=$(wc -l < "$ledger")
+director_stop "$repo" "$tdir/main.jsonl" >/dev/null
+lines2=$(wc -l < "$ledger")
+echo >> "$tdir/main.jsonl"
+director_stop "$repo" "$tdir/main.jsonl" >/dev/null
+if sed -n "${lines}p" "$ledger" | jq -e '.agent == "director" and .slice == "-" and .turns == 1 and .output_tokens == 7' >/dev/null && [ "$lines2" -eq "$lines" ] \
+   && tail -1 "$ledger" | jq -e '.turns == 1 and .output_tokens == 5' >/dev/null && [ "$(wc -l < "$ledger")" -eq $((lines + 1)) ]; then
+  ok "each Director stop counts only messages since the last one, leaves a half-written line for the next, and records nothing when nothing is new"
+else
+  bad "each Director stop counts only messages since the last one, leaves a half-written line for the next, and records nothing when nothing is new" "$(tail -3 "$ledger")"
+fi
+
+(cd "$repo" && "$VAULT_GUARD" --snapshot)
+vguard "$repo" PreToolUse "" >/dev/null
+stop_hook "$repo" "$tdir/reviewer.jsonl" reviewer >/dev/null
+lines=$(wc -l < "$ledger")
+status=0; out=$(vguard "$repo" PostToolUse "") || status=$?
+s2=0; out2=$(vguard "$repo" SubagentStop reviewer) || s2=$?
+if [ "$status" -eq 0 ] && [ "$s2" -eq 0 ] && [ "$(wc -l < "$ledger")" -eq "$lines" ]; then
+  ok "vault-guard keeps a line the hook writes while a tool call runs"
+else
+  bad "vault-guard keeps a line the hook writes while a tool call runs" "exit $status/$s2: $out $out2"
+fi
+echo '{"agent":"builder","output_tokens":1}' >> "$ledger"
+status=0; out=$(vguard "$repo" PostToolUse builder 'python3 tamper.py') || status=$?
+if [ "$status" -eq 2 ] && echo "$out" | grep -q "RESTORED: .git/donedonedone/usage.jsonl" && echo "$out" | grep -q "usage-log.sh hook" \
+   && [ "$(wc -l < "$ledger")" -eq "$lines" ]; then
+  ok "a subagent's change to the usage ledger is undone, however it was made"
+else
+  bad "a subagent's change to the usage ledger is undone, however it was made" "exit $status: $out"
+fi
+vguard "$repo" PreToolUse "" >/dev/null
+sed -i.bak 's/"output_tokens":500/"output_tokens":5/' "$ledger"
+status=0; out=$(vguard "$repo" PostToolUse "" 'python3 shrink.py') || status=$?
+if [ "$status" -eq 2 ] && grep -q '"output_tokens":500' "$ledger"; then
+  ok "the Director's own change to the usage ledger is undone too"
+else
+  bad "the Director's own change to the usage ledger is undone too" "exit $status: $out"
+fi
+rm -f "$ledger.bak"
+
+expect_block "nobody may Edit the usage ledger"                 guard_at "$repo" Edit "$ledger"
+expect_block "nobody may Write vault/usage.jsonl"               guard_at "$repo" Write "$repo/vault/usage.jsonl"
+expect_block "the Director can't append to vault/usage.jsonl"   guard_at "$repo" Bash 'echo "{}" >> vault/usage.jsonl'
+expect_block "the Director can't run the usage hook by hand"    guard_at "$repo" Bash 'echo "{}" | ~/.claude/scripts/usage-log.sh'
+expect_block "a subagent can't export the usage ledger"         guard_at "$repo" Bash "$HOME/.claude/scripts/usage-report.sh export" builder
+expect_allow "the Director may export the usage ledger"         guard_at "$repo" Bash "$HOME/.claude/scripts/usage-report.sh export"
+expect_allow "the Director may commit vault/usage.jsonl"        guard_at "$repo" Bash 'git add vault/usage.jsonl'
+expect_allow "anyone may read the usage ledger"                 guard_at "$repo" Bash 'jq . .git/donedonedone/usage.jsonl' builder
+expect_block "nobody may Edit a session transcript"             guard_at "$repo" Edit "$HOME/.claude/projects/p/s/subagents/agent-1.jsonl" builder
+expect_block "nobody may rewrite a session transcript in shell" guard_at "$repo" Bash "sed -i s/9/1/ $HOME/.claude/projects/p/s.jsonl"
+expect_allow "the retro may Grep session transcripts"           guard_at "$repo" Grep "$HOME/.claude/projects/p" retro
+
 (cd "$repo" && "$LOG_EVENT" S021 reviewer REJECTED --category error-handling >/dev/null)
 transcript_of 'SLICE: S024' | sed 's/claude-sonnet-5-5/claude-opus-5-5/' > "$tdir/opus.jsonl"
 stop_hook "$repo" "$tdir/opus.jsonl" >/dev/null
 out=$(cd "$repo" && "$USAGE_REPORT")
-if echo "$out" | grep -q "^USAGE: 4 agent runs · 4 slices" && echo "$out" | grep -q "^  builder claude-sonnet-5-5: 1 · 500 · 1k · 11k · 1.5m" \
+if echo "$out" | grep -q "^USAGE: 8 runs · 5 slices" && echo "$out" | grep -q "^USAGE LEDGER: OK — 8 records" \
+   && echo "$out" | grep -q "^  builder claude-sonnet-5-5: 1 · 500 · 1k · 11k · 1.5m" && echo "$out" | grep -q "^  director claude-opus-5-5: 3 · 112 · " \
    && echo "$out" | grep -q "^  claude-sonnet-5-5: 1 · 1 · 500" && echo "$out" | grep -q "^  claude-opus-5-5: 1 · 0 · 500" \
    && [ "$(echo "$out" | wc -l)" -le 20 ]; then
-  ok "usage-report totals by agent and model, and sets each builder model against its reviewer rejections"
+  ok "usage-report totals agents and the Director by model, and sets each builder model against its reviewer rejections"
 else
-  bad "usage-report totals by agent and model, and sets each builder model against its reviewer rejections" "$out"
+  bad "usage-report totals agents and the Director by model, and sets each builder model against its reviewer rejections" "$out"
 fi
-out=$(cd "$repo" && "$USAGE_REPORT" S022)
-if echo "$out" | grep -q "^USAGE S022: 1 agent runs" && echo "$out" | grep -q "reviewer claude-sonnet-5-5 · 2 turns"; then
-  ok "usage-report <ID> lists one slice's runs"
+out=$(cd "$repo" && "$USAGE_REPORT" S030)
+if echo "$out" | grep -q "^USAGE S030: 1 runs" && echo "$out" | grep -q "director claude-opus-5-5 · 2 turns"; then
+  ok "usage-report <ID> lists one slice's runs, the Director's included"
 else
-  bad "usage-report <ID> lists one slice's runs" "$out"
+  bad "usage-report <ID> lists one slice's runs, the Director's included" "$out"
+fi
+
+out=$(cd "$repo" && "$USAGE_REPORT" export)
+git -C "$repo" add vault/usage.jsonl && git -C "$repo" commit -qm "docs(vault): harvest"
+stop_hook "$repo" "$tdir/reviewer.jsonl" reviewer >/dev/null
+out2=$(cd "$repo" && "$USAGE_REPORT" verify); status=$?
+if echo "$out" | grep -q "^exported 8 records" && cmp -s <(head -8 "$ledger") "$repo/vault/usage.jsonl" \
+   && [ "$status" -eq 0 ] && [ "$out2" = "USAGE LEDGER: OK — 9 records, 8 committed" ]; then
+  ok "export copies the ledger into vault/usage.jsonl, and verify accepts a ledger that only appended since"
+else
+  bad "export copies the ledger into vault/usage.jsonl, and verify accepts a ledger that only appended since" "$out | $out2"
+fi
+cp "$ledger" "$tdir/ledger.good"
+sed -i.bak '1s/"output_tokens":500/"output_tokens":5/' "$ledger"; rm -f "$ledger.bak"
+out=$(cd "$repo" && "$USAGE_REPORT" verify); s1=$?
+out2=$(cd "$repo" && "$USAGE_REPORT" export 2>&1); s2=$?
+start=$(cd "$repo" && AGENTS_MD_SRC="$ROOT/CLAUDE.md" "$SESSION_START" </dev/null 2>/dev/null)
+if [ "$s1" -eq 1 ] && echo "$out" | grep -q "^USAGE LEDGER: TAMPERED — the ledger no longer starts with the committed vault/usage.jsonl" \
+   && echo "$start" | grep -q "^!! USAGE LEDGER: TAMPERED" \
+   && [ "$s2" -eq 1 ] && echo "$out2" | grep -q "export refused" && cmp -s <(head -8 "$tdir/ledger.good") "$repo/vault/usage.jsonl"; then
+  ok "verify catches a ledger whose committed lines changed, session start says so, and export refuses to copy it"
+else
+  bad "verify catches a ledger whose committed lines changed, session start says so, and export refuses to copy it" "$s1 $out | $s2 $out2 | $start"
+fi
+cp "$tdir/ledger.good" "$ledger"
+echo 'not a record' >> "$ledger"
+out=$(cd "$repo" && "$USAGE_REPORT" verify); status=$?
+if [ "$status" -eq 1 ] && echo "$out" | grep -q "is not a usage record"; then ok "verify catches a forged non-record line"; else bad "verify catches a forged non-record line" "$out"; fi
+cp "$tdir/ledger.good" "$ledger"
+sed '2d' "$repo/vault/usage.jsonl" > "$tdir/shorter" && cp "$tdir/shorter" "$repo/vault/usage.jsonl"
+git -C "$repo" commit -qam "docs(vault): tidy usage"
+sed '2d' "$ledger" > "$tdir/shorter" && cp "$tdir/shorter" "$ledger"
+out=$(cd "$repo" && "$USAGE_REPORT" verify); status=$?
+if [ "$status" -eq 1 ] && echo "$out" | grep -q "rewrote earlier lines of vault/usage.jsonl"; then
+  ok "verify catches a commit that rewrote vault/usage.jsonl, even with the ledger rewritten to match"
+else
+  bad "verify catches a commit that rewrote vault/usage.jsonl, even with the ledger rewritten to match" "$out"
+fi
+git -C "$repo" show HEAD~1:vault/usage.jsonl > "$repo/vault/usage.jsonl"
+git -C "$repo" commit -qam "docs(vault): restore usage"
+cp "$tdir/ledger.good" "$ledger"
+out=$(cd "$repo" && "$USAGE_REPORT" verify); status=$?
+git -C "$repo" reset -q --hard HEAD~2
+out2=$(cd "$repo" && "$USAGE_REPORT" verify); s2=$?
+if [ "$status" -eq 1 ] && echo "$out" | grep -q "a revert keeps this evidence" && [ "$s2" -eq 0 ]; then
+  ok "undoing a rewrite in a new commit keeps the evidence; only dropping the commit from history clears it"
+else
+  bad "undoing a rewrite in a new commit keeps the evidence; only dropping the commit from history clears it" "$status $out | $s2 $out2"
+fi
+rm -f "$ledger"
+out=$(cd "$repo" && "$USAGE_REPORT" verify)
+report=$(cd "$repo" && "$USAGE_REPORT")
+stop_hook "$repo" "$tdir/reviewer.jsonl" reviewer >/dev/null
+out2=$(cd "$repo" && "$USAGE_REPORT" verify)
+if echo "$out" | grep -q "^USAGE LEDGER: NOT SEEDED" && echo "$report" | grep -q "^USAGE: 8 runs" \
+   && [ "$out2" = "USAGE LEDGER: OK — 9 records, 8 committed" ]; then
+  ok "a fresh clone reports from the committed copy, and the next stop seeds the ledger from it"
+else
+  bad "a fresh clone reports from the committed copy, and the next stop seeds the ledger from it" "$out | $report | $out2 | $(git -C "$repo" log --oneline -4 | tr '\n' ' ') $(git -C "$repo" status --short | tr '\n' ' ')"
 fi
 out=$(cd "$plain" && mkdir vault && "$USAGE_REPORT")
 if echo "$out" | grep -q "^USAGE: no agent runs recorded yet"; then ok "usage-report says so when nothing is recorded"; else bad "usage-report says so when nothing is recorded" "$out"; fi
-if jq -e '[.hooks.SubagentStop[].hooks[].command] | index("~/.claude/scripts/usage-log.sh")' "$ROOT/settings.json" >/dev/null; then
-  ok "settings.json runs usage-log.sh when a subagent stops"
+if jq -e '[.hooks.SubagentStop[].hooks[].command] | index("~/.claude/scripts/usage-log.sh")' "$ROOT/settings.json" >/dev/null \
+   && jq -e '[.hooks.Stop[].hooks[].command] | index("~/.claude/scripts/usage-log.sh")' "$ROOT/settings.json" >/dev/null; then
+  ok "settings.json runs usage-log.sh when a subagent stops and when the Director stops"
 else
-  bad "settings.json runs usage-log.sh when a subagent stops" "missing"
+  bad "settings.json runs usage-log.sh when a subagent stops and when the Director stops" "missing"
 fi
 rm -rf "$repo" "$tdir" "$plain"
 

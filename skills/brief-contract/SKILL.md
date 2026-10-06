@@ -42,7 +42,7 @@ STANDING:
 
 Prior critique still goes in the brief as free text, around these headers. Start
 every brief — reviewer and auditor too — with `SLICE: <ID>` on its own line: the
-usage hook reads it to charge the agent run to its slice in vault/usage.jsonl.
+usage hook reads it to charge the agent run to its slice in the usage ledger.
 
 ## Builder briefs: SLICE, RISK and harden-diff
 A builder brief in a project with vault/task-tree.json also starts with

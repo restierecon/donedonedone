@@ -44,7 +44,7 @@ builds. Nothing after the grill should need you unless a slice escalates.
 | skills/ | protocol-native: grill · ui-prototype · slice-planning · risk-gate · parallel-dispatch · architecture-review · learning-loop · test-speed · crap-hotspots · mutation-survivors · clean-diff · harden-diff · blast-radius · `/codebase-map` · brief-contract · `/init-codebase` · `/harvest` · `/create-verification-skill` · `/maintain-verification-skill` (opt-in, `/`-only: a project-local `verify-*` skill that lets the reviewer reach live-verified evidence) — plus a general engineering-practice library, a principles index (19 pstack principles, read on demand) and pstack's prose skills: unslop · technical-writing (docs/README/ADR work) (see Credits) |
 | settings.json | Permission deny/ask lists + hooks on 6 events + env that keeps Claude Code on Windows in Git Bash |
 | context-firewall/ | `ddd` — the context firewall: artifact store, per-type compressors, retrieval, ranking, stats (Python 3.8+ stdlib, installed to `~/.claude/context-firewall/`) |
-| scripts/ | ddd (the firewall's bash entry point, `PreToolUse` rewrite and `PostToolUse` hook) · guard.sh (PreToolUse) · vault-guard.sh (Pre/PostToolUse, SubagentStop — restores Director-only files) · lint.sh (PostToolUse) · checkpoint.sh (Stop) · session-start.sh (SessionStart) · codebase-graph.py + codemap/ + graph-viewer.html (code and workflow map of any repo, change impact, `arch` fitness check, drill-down HTML) · crap-score.py (lizard + coverage report → CRAP lines for `gate.crap`) · mutation-report.py (mutation tool report → mutant lines for `gate.mutation`) · gate.sh (quiet lint/types/test/build/a11y runner + diff-scoped CRAP, mutation, TODO/FIXME, no-comments and architecture-rule checks) · find-comments.sh (the comment detector behind that check) · log-event.sh (the Director's structured log.jsonl writer) · usage-log.sh (SubagentStop — each agent run's model, tokens and time into vault/usage.jsonl) · usage-report.sh (≤ 20-line cost summary by agent, model and slice) · risk-gate.sh (scores each slice's risk, judges builder spawns and merges) · approve-risk.sh (the human's approval command — refuses inside an agent) · check-plan.sh (the Director's lint for a planner draft: fields, "Actor can" titles, resolvable acyclic `depends_on`, `auditor_triggers` from a fixed list, every `ui_contract` an approved contract, gates as a verdict or `skip: <reason>`) · generate-agents.sh (Copilot/Cursor agents, install-time) · agents-md.sh (protocol block in a project's AGENTS.md, for Cursor/Copilot) |
+| scripts/ | ddd (the firewall's bash entry point, `PreToolUse` rewrite and `PostToolUse` hook) · guard.sh (PreToolUse) · vault-guard.sh (Pre/PostToolUse, SubagentStop — restores Director-only files) · lint.sh (PostToolUse) · checkpoint.sh (Stop) · session-start.sh (SessionStart) · codebase-graph.py + codemap/ + graph-viewer.html (code and workflow map of any repo, change impact, `arch` fitness check, drill-down HTML) · crap-score.py (lizard + coverage report → CRAP lines for `gate.crap`) · mutation-report.py (mutation tool report → mutant lines for `gate.mutation`) · gate.sh (quiet lint/types/test/build/a11y runner + diff-scoped CRAP, mutation, TODO/FIXME, no-comments and architecture-rule checks) · find-comments.sh (the comment detector behind that check) · log-event.sh (the Director's structured log.jsonl writer) · usage-log.sh (SubagentStop and Stop — each agent run's and Director turn's model, tokens and time into the hook-only usage ledger) · usage-report.sh (≤ 20-line cost summary by agent, model and slice; `verify` and `export` of the ledger) · risk-gate.sh (scores each slice's risk, judges builder spawns and merges) · approve-risk.sh (the human's approval command — refuses inside an agent) · check-plan.sh (the Director's lint for a planner draft: fields, "Actor can" titles, resolvable acyclic `depends_on`, `auditor_triggers` from a fixed list, every `ui_contract` an approved contract, gates as a verdict or `skip: <reason>`) · generate-agents.sh (Copilot/Cursor agents, install-time) · agents-md.sh (protocol block in a project's AGENTS.md, for Cursor/Copilot) |
 | workflow.json | This setup's stage order for the workflow map; verified by the map's build and CI |
 | tests/ | Test harness for the hook scripts — run after any script edit; CI runs it too |
 | evals/ | 16-task benchmark + scorecard — run before trusting, re-run after any manifest edit |
@@ -83,13 +83,29 @@ squash commit introduced it and logs `log-event.sh <ID> defect found --category 
 names the earliest one that could have caught it. Defects also break the dial's clean
 streak and show up in `risk-gate.sh calibrate`.
 
-Every subagent run's model, turns, tokens and wall time land in `vault/usage.jsonl`
-through the `usage-log.sh` SubagentStop hook (Claude Code only; it reads the subagent's
-transcript, and attributes the run to the slice its brief names). `usage-report.sh`
-summarizes it in ≤ 20 lines — by agent and model, each builder model against its
-reviewer rejections per slice, and the costliest slices — and the retro reads that to
-propose cost fixes alongside quality ones. It is a separate file because vault-guard
-undoes any change to log.jsonl made while a subagent stops.
+Every agent run's model, turns, tokens and wall time — the Director's included — land in
+the usage ledger, `.git/donedonedone/usage.jsonl`, through `usage-log.sh` (Claude Code
+only). As a SubagentStop hook it reads the subagent's transcript and charges the run to
+the slice its brief names; as a Stop hook it reads the main transcript since the last
+stop and charges the Director's turn to the `slice/<ID>` branch it is on (`-` on main).
+`usage-report.sh` summarizes it in ≤ 20 lines — by agent and model, each builder model
+against its reviewer rejections per slice, and the costliest slices — and the retro
+reads that to propose cost fixes alongside quality ones.
+
+The ledger is recorded by hooks alone, so a budget can't be met by editing the numbers:
+- **Writes:** guard.sh refuses any agent — the Director too — that edits either copy of
+  the ledger, runs `usage-log.sh` by hand (that would forge a record), or rewrites a
+  transcript under `~/.claude/projects`. vault-guard.sh restores the ledger after any
+  tool call that changed it however it was made, the way it guards the approvals ledger.
+- **Git:** the harvest commits `usage-report.sh export`'s copy as `vault/usage.jsonl`,
+  so the record survives a fresh container (the next stop seeds the ledger from it).
+  `usage-report.sh verify` — run by every report and at session start — requires the
+  ledger to be an append-only extension of every committed copy; a commit that rewrote
+  earlier lines stays flagged, even after a revert, until a human drops it from history.
+- **Limits:** this resists agents, not a determined same-user process — a script that
+  computes its paths at runtime and rewrites the ledger and vault-guard's snapshot
+  together goes unseen until it commits. Two checkouts appending separately also show
+  as diverged.
 
 ## Risk gate
 Risk decides autonomy. The planner rates every slice on five dimensions (blast radius,
@@ -495,10 +511,10 @@ Where the protocol spends tokens, and what keeps it down:
 - **Resume** — the SessionStart hook injects live slices, git status and leftover
   worktrees in one go; git and task-tree.json are the only resume state.
 
-Agent runs are measured: `usage-log.sh` records each subagent's model, tokens and time in
-vault/usage.jsonl, and `usage-report.sh` sets builder models against reviewer
-rejections. The Director's own context is not in it — to compare two manifest commits
-end to end, run eval E1 on each and compare the session's cost.
+Every agent run and every Director turn is measured: `usage-log.sh` records model,
+tokens and time in the usage ledger, and `usage-report.sh` sets builder models against
+reviewer rejections. To compare two manifest commits end to end, run eval E1 on each and
+compare their `usage-report.sh` totals.
 
 ## Context firewall
 Shell output that slips past `gate.sh` (diffs, searches, logs, installs, ad-hoc test
@@ -561,14 +577,18 @@ jq is missing, the payload isn't JSON, or a field has the wrong type).
   `slice/<ID>` on main run `risk-gate.sh check`. No agent may write
   `.git/donedonedone/approvals.jsonl` or `vault/risk-policy.json`, or run
   `approve-risk.sh`, `approve-ui.sh` or `vault-guard.sh`. Subagents may not run `risk-gate.sh`.
+- The usage ledger (see Learning loop): no agent may write `.git/donedonedone/usage.jsonl`
+  or `vault/usage.jsonl`, run `usage-log.sh`, or write a transcript under
+  `~/.claude/projects`; subagents may not run `usage-report.sh export`.
 - The reviewer's Chrome tools (claude-in-chrome navigate and tabs_create) may only open
   http(s) on localhost, 127.0.0.1, [::1], *.local, *.localhost or *.test; userinfo,
   numeric-IP spellings, non-ASCII hosts and whitespace or control characters are refused.
   Run claude-in-chrome in a dedicated, signed-out Chrome profile all the same.
 
 **2. vault-guard.sh — undoes what got through, by content, not by syntax.** Human-only
-files (the approvals ledger and `vault/risk-policy.json`) are restored after any tool
-call that changed them, the Director's included. A human's edits between calls are
+files (the approvals ledger and `vault/risk-policy.json`) and the hook-only usage ledger
+are restored after any tool call that changed them, the Director's included; the usage
+hook updates the snapshot as it appends, and vault-guard leaves the ledger alone while that write holds its lock. A human's edits between calls are
 kept, and approve-risk.sh and approve-ui.sh re-snapshot the ledger after they write. It also snapshots
 the main checkout's task-tree.json and log.jsonl (in `.git/`, at
 session start and after each Director call that may touch them). After every subagent
@@ -799,17 +819,17 @@ end to end); codebase-graph.py's in `tests/codebase-graph.sh`.
 | gate.sh | `gate.sh [lint\|types\|test\|build\|a11y\|crap\|mutation\|markers\|comments\|scope\|arch ...]` or `gate.sh test -- <targets>` | Refuses a dirty tree (`GATE_ALLOW_DIRTY=1` overrides), an unknown step, or a missing `gate.test`. With `-- <targets>`, runs only those tests through `gate.test.focus` and ends `FOCUSED:`, never `GATE:`. Flags a passing test step slower than `gate.test.budget`. Fails a function the diff touches whose `gate.crap` score is over `gate.crap.max`, and a diff whose added lines' mutants score under `gate.mutation.min`. Runs the gate one line per step, a ≤ 30-line failure excerpt (`GATE_EXCERPT_LINES`), full log in `.gate/<step>.log`. Exit 0 all pass, 1 otherwise. From a worktree that predates project.md, it reads the main checkout's. |
 | find-comments.sh | `find-comments.sh --base <ref>` or `find-comments.sh <file>...` | Prints `path:line: text` for every comment added since `<ref>`, or in the given files. Exit 1 when it finds one, 2 on bad usage. |
 | log-event.sh | `log-event.sh <ID\|-> <event> <verdict> [--sha S] [--patch-id P] [--evidence E] [--attempt N] [--score 0-100] [--hash H] [--category C]... [--signal TEXT]...` | Appends one JSON line to the main checkout's `vault/log.jsonl`. Events include `risk`, `scope`, `rollback` and `defect` (which needs a slice ID, a category and a signal). Up to 5 signals of 200 chars. Unknown events, categories or evidence rungs, or a score outside 0-100, exit 1 and list the valid ones. Prints `RETRO DUE` when a category recurs across slices or any defect is logged. |
-| usage-log.sh | SubagentStop hook | Appends one line per subagent run to the main checkout's `vault/usage.jsonl`: slice (from the brief's `SLICE:` line, else a `slice/<ID>` mention, else the `.worktrees/<ID>` cwd, else `-`), agent, model, turns, input / cache-write / cache-read / output tokens, duration. Counts each API message once. Silent and exit 0 always; skips internal agents and projects without a vault. |
-| usage-report.sh | `usage-report.sh [ID]` | Read-only ≤ 20-line summary of usage.jsonl: totals by agent and model, each builder model's reviewer rejections per slice (from log.jsonl), the five costliest slices; with an ID, that slice's runs. |
+| usage-log.sh | SubagentStop and Stop hook | Appends one line per subagent run, and per Director turn, to the usage ledger `.git/donedonedone/usage.jsonl` (seeded from the committed `vault/usage.jsonl` when missing): slice (subagent: the brief's `SLICE:` line, else a `slice/<ID>` mention, else the `.worktrees/<ID>` cwd; Director: its `slice/<ID>` branch; else `-`), agent (`director` for the main session), model, turns, input / cache-write / cache-read / output tokens, duration. Counts each API message once and skips sidechain and synthetic ones; the Director's cursor per session lives in `.git/donedonedone/usage-state/`. Updates vault-guard's snapshot with the ledger under `usage.lock`. Silent and exit 0 always; skips internal agents and projects without a vault. |
+| usage-report.sh | `usage-report.sh [ID]` · `verify` · `export` | Read-only ≤ 20-line summary of the ledger (or the committed copy before it is seeded): its verify line, totals by agent and model, each builder model's reviewer rejections per slice (from log.jsonl), the costliest slices; with an ID, that slice's runs. `verify` exits 1 with `USAGE LEDGER: TAMPERED — <why>` when a line isn't a record, the ledger no longer starts with the committed `vault/usage.jsonl`, that file has edits the ledger lacks, or a commit (last 50) rewrote it instead of appending. `export` copies a verified ledger to `vault/usage.jsonl` and refuses otherwise. |
 | risk-gate.sh | `risk-gate.sh lint\|table <plan>` · `score [file\|-]` · `show\|assess\|audit <ID>` · `check <ID> build\|merge` · `scope [ID]` · `pending` · `calibrate` | Scores a slice's `risk` (0-100, class, floors, controls) the same way every time. `assess` records it in log.jsonl; `check` exits 1 listing every missing control and ends `RISK: PASS\|FAIL`; `scope` backs gate.sh's step; `pending` feeds the SessionStart hook. Exit 2 (fail closed) without jq or on a malformed `vault/risk-policy.json`. |
 | approve-risk.sh | `approve-risk.sh <authorize\|merge\|downgrade> <ID>` | The human's approval. Refuses without a TTY or with CLAUDECODE set; shows the assessment (merge: diffstat and controls); records the typed decision in `.git/donedonedone/approvals.jsonl`. Typing anything other than the prompt records a denial; an empty line cancels. |
 | approve-ui.sh | `approve-ui.sh vault/ui/<slug>/contract.md` | The human's UI approval. Same refusals as approve-risk.sh; shows the contract and the folder's files; records the typed decision with a hash of the whole folder. |
 | ui-approval.sh | `ui-approval.sh check\|hash <contract>` | Read-only. `check` prints `UI: APPROVED … by <email>` (exit 0) only when the latest ledger decision for that contract is an approval of the folder as it is now; otherwise `UI: NOT APPROVED` with the reason and the command to run (exit 1). Behind check-plan.sh and guard.sh. |
 | guard.sh | PreToolUse hook (every tool) | Exit 2 blocks the call and feeds the reason back. Fails closed without jq or on a malformed payload. Understands Claude Code, VS Code Copilot (its own tool names; an unknown tool carrying a command is treated as a shell call) and Cursor (`beforeShellExecution` and `beforeReadFile`, answered with allow/deny JSON). See Safety model. |
-| vault-guard.sh | PreToolUse, PostToolUse, PostToolUseFailure, SubagentStop hook; `vault-guard.sh --snapshot` | Restores task-tree.json and log.jsonl in the main checkout when a subagent changes them (exit 2 tells it why); warns the Director about unexplained changes. Snapshots live in `.git/skeletoncrew-vault-guard/`. Claude Code only — other tools' payloads don't name the subagent. |
+| vault-guard.sh | PreToolUse, PostToolUse, PostToolUseFailure, SubagentStop hook; `vault-guard.sh --snapshot` | Restores the approvals and usage ledgers and the risk policy after any call that changed them; restores task-tree.json and log.jsonl in the main checkout when a subagent changes them (exit 2 tells it why); warns the Director about unexplained changes. Snapshots live in `.git/skeletoncrew-vault-guard/`. Claude Code only — other tools' payloads don't name the subagent. |
 | lint.sh | PostToolUse hook | Formats the edited file, exit 2 with lint errors. Reads Claude Code's `file_path`, Copilot's `filePath` and Cursor's top-level `file_path`; Cursor ignores the exit code, so there errors surface at the gate. |
 | checkpoint.sh | Stop hook | Commits progress on `slice/*` branches only (never main, a feature branch or a detached HEAD), inside worktrees too. Scans with `gitleaks git --staged` (v8.19+) or `gitleaks protect --staged` (older) and aborts on a finding. |
-| session-start.sh | SessionStart hook | Injects live slices, slices the risk gate is holding, git status and leftover worktrees (plus a one-line migration hint while vault/memory or vault/handoffs exists; deletes nothing); plain text, or `{"additional_context": ...}` for Cursor. Refreshes the AGENTS.md protocol block. |
+| session-start.sh | SessionStart hook | Injects live slices, slices the risk gate is holding, a `!! USAGE LEDGER: TAMPERED` line when `usage-report.sh verify` fails, git status and leftover worktrees (plus a one-line migration hint while vault/memory or vault/handoffs exists; deletes nothing); plain text, or `{"additional_context": ...}` for Cursor. Refreshes the AGENTS.md protocol block. |
 | agents-md.sh | `agents-md.sh [project-dir]` | Writes the protocol into the project's AGENTS.md between its markers; leaves everything else in the file alone. |
 | generate-agents.sh | `generate-agents.sh <copilot\|cursor> [dest]` | Emits derived agents (always overwritten, never hand-edit). Copilot gets an `orchestrator` whose roster is every agent in `agents/`; it isn't called "director" because that name means the main Claude Code session. |
 | validate-manifests.sh | `validate-manifests.sh` | Checks agent and skill frontmatter, and that CLAUDE.md's Agents table matches `agents/`. |

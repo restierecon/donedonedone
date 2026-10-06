@@ -32,6 +32,10 @@ context() {
     fi
   fi
 
+  if ledger=$("$here/usage-report.sh" verify 2>/dev/null); then :; elif [ -n "$ledger" ]; then
+    echo "!! $ledger — tell the human before anything else; never export or commit vault/usage.jsonl until they clear it."
+  fi
+
   echo "--- git reality check ---"
   git status --short 2>/dev/null | head -20
 
