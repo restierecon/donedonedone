@@ -166,7 +166,6 @@ resolve_file() {
   local p="$1" t d rest="" n=0
   case "$p" in /*) ;; *) p="$(field '.cwd')/$p" ;; esac
   p=$(lexical "$p")
-  realpath -m -- "$p" 2>/dev/null || true
   while [ -L "$p" ] && [ "$n" -lt 16 ]; do
     t=$(readlink "$p") || break
     case "$t" in /*) p=$(lexical "$t") ;; *) p=$(lexical "$(dirname "$p")/$t") ;; esac
@@ -179,9 +178,12 @@ resolve_file() {
 }
 
 file_forms() {
-  printf '%s\n' "$1"
-  case "$1" in *\\*) return ;; esac
-  resolve_file "$1"
+  local p="$1"
+  printf '%s\n' "$p"
+  p=${p//\\//}
+  [ "$p" = "$1" ] || printf '%s\n' "$p"
+  case "$p" in [A-Za-z]:/*) command -v cygpath >/dev/null 2>&1 && p=$(cygpath -u "$p" 2>/dev/null || printf '%s' "$p") ;; esac
+  resolve_file "$p"
 }
 
 FAKE_HUMAN_MSG="BLOCKED: in a vault project an agent may not allocate a pseudo-terminal or scrub its environment (script, expect, unbuffer, pty, CLAUDECODE, env -i) — those are the means to pass for a human at approve-risk.sh. Tell the human what needs their decision and continue with other work."
