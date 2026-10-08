@@ -217,6 +217,15 @@ has "lines a human set are kept, including a declined step" "$out" \
 matches "a set gate.test that writes no coverage turns crap into a question with the exact switch" "$out" '^ASK    gate\.crap — it reads a coverage report the current gate\.test doesn.t write; switch gate\.test to: COVERAGE_FILE=\.gate/\.coverage python3? -m pytest -q --cov=\. --cov-report=lcov:\.gate/coverage\.lcov'
 rm -rf "$d"
 
+d=$(repo pom.xml '<project></project>')
+status=0; out=$(PYTHONIOENCODING=cp1252 "$PY" "$DETECT" "$d" 2>&1 | tr -d '\r') || status=$?
+if [ "$status" -eq 0 ] && printf '%s\n' "$out" | grep -qxF "N/A    gate.a11y — no UI framework in pom.xml" && printf '%s\n' "$out" | grep -q '⇒'; then
+  ok "a cp1252 console (Windows) still gets every line, in UTF-8"
+else
+  bad "a cp1252 console (Windows) still gets every line, in UTF-8" "exit $status: $out"
+fi
+rm -rf "$d"
+
 echo "== detect-gates.py --apply =="
 d=$(repo pom.xml '<project></project>' .gitignore '.env' vault/project.md '# Shop
 

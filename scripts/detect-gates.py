@@ -479,6 +479,9 @@ def apply(repo, project_path, project_text, steps):
 
 
 def main():
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8")
     args = sys.argv[1:]
     write = "--apply" in args
     rest = [a for a in args if a != "--apply"]
