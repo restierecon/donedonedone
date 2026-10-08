@@ -2155,6 +2155,11 @@ expect_block "a dot segment doesn't hide the risk policy from Write" guard_file 
 expect_block "a doubled slash doesn't hide the ledger from Edit"   guard_file Edit '/repo/.git//donedonedone/approvals.jsonl'
 expect_block "a .. detour doesn't hide the ledger from Write"      guard_file Write '/repo/.git/hooks/../donedonedone/approvals.jsonl'
 expect_block "vault-guard's snapshot store is human-only"          guard_file Write '/repo/.git/skeletoncrew-vault-guard/vault_risk-policy.json'
+expect_block "a Windows path with backslashes doesn't hide the ledger from Write" guard_file Write 'C:\repo\.git\donedonedone\approvals.jsonl'
+expect_block "a Windows path with backslashes doesn't hide the risk policy from Edit" guard_file Edit 'C:\Repo\Vault\Risk-Policy.json'
+expect_block "a Windows path with backslashes doesn't hide a .env from Read" guard_file Read 'C:\proj\.env'
+expect_block "a Windows path with backslashes doesn't hide secrets/ from Write" guard_file Write 'C:\proj\secrets\key.txt'
+expect_allow "an ordinary Windows path is still writable"       guard_file Write 'C:\proj\src\app.py'
 MSYS=winsymlinks:nativestrict ln -s "$repo/.git" "$repo/gl" 2>/dev/null
 if [ -L "$repo/gl" ]; then
   status=0; guard_file Write "$repo/gl/donedonedone/approvals.jsonl" || status=$?
