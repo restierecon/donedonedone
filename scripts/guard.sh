@@ -166,6 +166,7 @@ resolve_file() {
   local p="$1" t d rest="" n=0
   case "$p" in /*) ;; *) p="$(field '.cwd')/$p" ;; esac
   p=$(lexical "$p")
+  realpath -m -- "$p" 2>/dev/null || true
   while [ -L "$p" ] && [ "$n" -lt 16 ]; do
     t=$(readlink "$p") || break
     case "$t" in /*) p=$(lexical "$t") ;; *) p=$(lexical "$(dirname "$p")/$t") ;; esac
