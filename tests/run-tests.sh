@@ -957,6 +957,7 @@ echo "== jq without admin rights — ~/.claude/bin and fetch-jq.sh =="
 FETCH_JQ="$ROOT/scripts/fetch-jq.sh"
 jq_name=jq
 case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) jq_name=jq.exe ;; esac
+file_url() { if command -v cygpath >/dev/null 2>&1; then echo "file:///$(cygpath -m "$1")"; else echo "file://$1"; fi; }
 sha256_of() { if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1"; else shasum -a 256 "$1"; fi | cut -d' ' -f1 | tr -d '*'; }
 nojq_home=$(mktemp -d)
 nojq_path=$(mktemp -d)
@@ -967,7 +968,7 @@ chmod +x "$nojq_home/.claude/bin/jq"
 # shellcheck disable=SC2016
 got=$(env HOME="$nojq_home" PATH="$nojq_path" "$(command -v bash)" -c '. "$1"; jq -rn "\"S001\""' _ "$ROOT/scripts/jq-text.sh" 2>/dev/null | tr -d '\r')
 if [ "$got" = "S001" ]; then ok "with no jq on PATH, the helper finds the one in ~/.claude/bin"; else bad "with no jq on PATH, the helper finds the one in ~/.claude/bin" "got: $got"; fi
-got=$(HOME="$nojq_home" bash -c '. "$1"; command -v jq' _ "$ROOT/scripts/jq-text.sh")
+got=$(HOME="$nojq_home" bash -c '. "$1"; type -P jq' _ "$ROOT/scripts/jq-text.sh")
 if [ "$got" = "$real_jq" ]; then ok "a jq already on PATH wins over ~/.claude/bin"; else bad "a jq already on PATH wins over ~/.claude/bin" "got: $got"; fi
 case "$(uname -s)" in
   MINGW*|MSYS*|CYGWIN*) ;;
@@ -1005,7 +1006,7 @@ dest=$(mktemp -d)
 if ! "$src/probe-$jq_name" --version >/dev/null 2>&1; then
   echo "  SKIP  fetch-jq.sh installs a download whose checksum matches (this machine's jq at $real_jq doesn't run once copied, e.g. a package-manager shim)"
 else
-  status=0; out=$("$FETCH_JQ" "$dest/bin" --url "file://$src/release-jq" --sha256 "$(sha256_of "$src/release-jq")" 2>&1) || status=$?
+  status=0; out=$("$FETCH_JQ" "$dest/bin" --url "$(file_url "$src/release-jq")" --sha256 "$(sha256_of "$src/release-jq")" 2>&1) || status=$?
   if [ "$status" -eq 0 ] && [ "$out" = "$dest/bin/$jq_name" ] && [ "$("$dest/bin/$jq_name" -rn '"ok"' | tr -d '\r')" = "ok" ]; then
     ok "fetch-jq.sh installs a download whose checksum matches, and prints where"
   else
@@ -1013,20 +1014,20 @@ else
   fi
 fi
 rm -rf "$dest"; dest=$(mktemp -d)
-status=0; out=$("$FETCH_JQ" "$dest/bin" --url "file://$src/release-jq" --sha256 0000000000000000000000000000000000000000000000000000000000000000 2>&1) || status=$?
+status=0; out=$("$FETCH_JQ" "$dest/bin" --url "$(file_url "$src/release-jq")" --sha256 0000000000000000000000000000000000000000000000000000000000000000 2>&1) || status=$?
 if [ "$status" -ne 0 ] && echo "$out" | grep -q "checksum mismatch" && [ -z "$(ls -A "$dest/bin" 2>/dev/null)" ]; then
   ok "fetch-jq.sh refuses a download whose checksum doesn't match and leaves nothing behind"
 else
   bad "fetch-jq.sh refuses a download whose checksum doesn't match and leaves nothing behind" "exit $status: $out; left: $(ls -A "$dest/bin" 2>/dev/null)"
 fi
 printf 'not a program\n' > "$src/broken"
-status=0; out=$("$FETCH_JQ" "$dest/bin" --url "file://$src/broken" --sha256 "$(sha256_of "$src/broken")" 2>&1) || status=$?
+status=0; out=$("$FETCH_JQ" "$dest/bin" --url "$(file_url "$src/broken")" --sha256 "$(sha256_of "$src/broken")" 2>&1) || status=$?
 if [ "$status" -ne 0 ] && echo "$out" | grep -q "doesn't run" && [ -z "$(ls -A "$dest/bin" 2>/dev/null)" ]; then
   ok "fetch-jq.sh refuses a download that doesn't run, even with a matching checksum"
 else
   bad "fetch-jq.sh refuses a download that doesn't run, even with a matching checksum" "exit $status: $out"
 fi
-status=0; out=$("$FETCH_JQ" "$dest/bin" --url "file://$src/release-jq" 2>&1) || status=$?
+status=0; out=$("$FETCH_JQ" "$dest/bin" --url "$(file_url "$src/release-jq")" 2>&1) || status=$?
 if [ "$status" -ne 0 ] && echo "$out" | grep -q "go together"; then
   ok "fetch-jq.sh never takes a custom URL without its checksum"
 else
