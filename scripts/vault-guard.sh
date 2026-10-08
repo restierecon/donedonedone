@@ -34,8 +34,9 @@ mkdir -p "$state" || exit 0
 
 protected=(vault/task-tree.json vault/log.jsonl)
 human=(vault/risk-policy.json)
+ledger=()
 case "$common" in
-  "$main_root"/*) human+=("${common#"$main_root"/}/donedonedone/approvals.jsonl") ;;
+  "$main_root"/*) ledger=("${common#"$main_root"/}/donedonedone/approvals.jsonl"); human+=("${ledger[@]}") ;;
 esac
 
 key() { printf '%s' "$1" | tr '/' '_'; }
@@ -89,6 +90,21 @@ snapshot_human() {
   for f in "${human[@]}"; do snapshot "$f"; done
 }
 
+snapshot_between_calls() {
+  local f restored=()
+  for f in "${human[@]}"; do
+    case " ${ledger[*]} " in
+      *" $f "*)
+        if has_snapshot "$f" && changed "$f"; then restore "$f"; restored+=("$f"); fi
+        has_snapshot "$f" || snapshot "$f" ;;
+      *) snapshot "$f" ;;
+    esac
+  done
+  [ ${#restored[@]} -eq 0 ] && return 0
+  echo "RESTORED: ${restored[*]} — the approvals ledger changed between tool calls without approve-risk.sh or approve-ui.sh (a background job?). Only those scripts, run by a human in their own terminal, may add to it. If a human edited it by hand, they run ~/.claude/scripts/vault-guard.sh --human-snapshot in their own terminal." >&2
+  return 1
+}
+
 restore_human() {
   local f restored=()
   for f in "${human[@]}"; do
@@ -129,9 +145,10 @@ fi
 if [ -z "$agent_id" ]; then
   case "$event" in
     PreToolUse)
-      snapshot_human
+      pre_status=0
+      snapshot_between_calls || pre_status=2
       director_may_touch_vault && touch "$busy"
-      exit 0 ;;
+      exit "$pre_status" ;;
     PostToolUse|PostToolUseFailure)
       human_status=0
       restore_human || human_status=2

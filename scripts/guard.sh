@@ -60,7 +60,8 @@ normalize() {
     -e 's#(^|[[:space:];&|(`])/[^[:space:];&|()`]*/(rm|git|find|sudo|dd|chmod|eval|shutdown|reboot|halt|poweroff|env|xargs|(ba|z|da|k|fi|c|tc)?sh)([[:space:]]|$)#\1\2\4#g' \
     -e ':a' \
     -e 's#(^|[^[:alnum:]_-])git[[:space:]]+(-c[[:space:]]+[^[:space:]]+|--git-dir(=|[[:space:]]+)[^[:space:]]+|--work-tree(=|[[:space:]]+)[^[:space:]]+|--namespace(=|[[:space:]]+)[^[:space:]]+|--no-pager|-p|--paginate|--bare|--no-replace-objects|--literal-pathspecs)([[:space:]]|$)#\1git #' \
-    -e 'ta'
+    -e 'ta' \
+    -e ':b' -e 's#/\.?/#/#g' -e 'tb'
 }
 
 segments() { printf '%s\n' "$1" | tr ';&|()`' '\n'; }
@@ -101,8 +102,26 @@ secret_in_shell() {
     fi
     for w in "${words[@]}"; do
       secret_path "$w" && return 0
+      secret_glob "$w" && return 0
     done
   done < <(segments "$1")
+  return 1
+}
+
+has_glob() { case "$1" in *[*?[]*) return 0 ;; esac; return 1; }
+
+secret_glob() {
+  local part name
+  has_glob "$1" || return 1
+  IFS=/ read -ra parts <<< "$1"
+  for part in "${parts[@]}"; do
+    has_glob "$part" || continue
+    for name in .env .env.local .env.production .env.development .ssh id_rsa id_dsa id_ecdsa id_ed25519 secrets; do
+      case "$name:$part" in .*:.*|[!.]*:*[a-z0-9_-]*[a-z0-9_-]*) ;; *) continue ;; esac
+      # shellcheck disable=SC2053
+      [[ $name == $part ]] && return 0
+    done
+  done
   return 1
 }
 
@@ -121,15 +140,162 @@ vault_project() {
 HUMAN_ONLY_MSG="BLOCKED: approvals and the risk policy are human-only. A human runs ~/.claude/scripts/approve-risk.sh or approve-ui.sh in their own terminal, never through an agent, and edits vault/risk-policy.json themselves. Tell the human what needs their decision and continue with other work."
 
 human_only_path() {
-  echo "$1" | lower | grep -qE '(^|/)vault/risk-policy\.json$|(^|/)\.git/donedonedone(/|$)'
+  echo "$1" | lower | grep -qE '(^|/)vault/risk-policy\.json$|(^|/)\.git/(donedonedone|skeletoncrew-vault-guard)(/|$)'
 }
 
-if [ -n "$file_path" ] && secret_path "$file_path"; then
-  block "BLOCKED: $file_path looks like a secret (.env, key, secrets/). Ask the human for the value you need instead."
-fi
+lexical() {
+  local part lead="" out=() n
+  case "$1" in /*) lead=/ ;; esac
+  IFS=/ read -ra parts <<< "$1"
+  for part in "${parts[@]}"; do
+    n=${#out[@]}
+    case "$part" in
+      ''|.) ;;
+      ..)
+        if [ "$n" -gt 0 ] && [ "${out[$((n - 1))]}" != .. ]; then unset "out[$((n - 1))]"; out=("${out[@]}")
+        elif [ -z "$lead" ]; then out+=(..)
+        fi ;;
+      *) out+=("$part") ;;
+    esac
+  done
+  local IFS=/
+  printf '%s%s\n' "$lead" "${out[*]}"
+}
 
-if [ -n "$file_path" ] && [ "$tool" != "Read" ] && human_only_path "$file_path"; then
-  block "$HUMAN_ONLY_MSG"
+resolve_file() {
+  local p="$1" t d rest="" n=0
+  case "$p" in /*) ;; *) p="$(field '.cwd')/$p" ;; esac
+  p=$(lexical "$p")
+  while [ -L "$p" ] && [ "$n" -lt 16 ]; do
+    t=$(readlink "$p") || break
+    case "$t" in /*) p=$(lexical "$t") ;; *) p=$(lexical "$(dirname "$p")/$t") ;; esac
+    n=$((n + 1))
+  done
+  d=$(dirname "$p")
+  while [ ! -d "$d" ] && [ "$d" != / ] && [ "$d" != . ]; do rest="/$(basename "$d")$rest"; d=$(dirname "$d"); done
+  d=$(cd -P "$d" 2>/dev/null && pwd -P) || { printf '%s\n' "$p"; return; }
+  printf '%s%s/%s\n' "${d%/}" "$rest" "$(basename "$p")"
+}
+
+file_forms() {
+  printf '%s\n' "$1"
+  case "$1" in *\\*) return ;; esac
+  resolve_file "$1"
+}
+
+FAKE_HUMAN_MSG="BLOCKED: in a vault project an agent may not allocate a pseudo-terminal or scrub its environment (script, expect, unbuffer, pty, CLAUDECODE, env -i) — those are the means to pass for a human at approve-risk.sh. Tell the human what needs their decision and continue with other work."
+
+fakes_human() {
+  local seg words
+  printf '%s\n' "$1" | grep -qE 'claudecode|(^|[^[:alnum:]_])(pty\.(spawn|fork|openpty)|forkpty|openpty|import[[:space:]]+pty|from[[:space:]]+pty|pexpect|node-pty|posix_openpt)([^[:alnum:]_]|$)|(^|[^[:alnum:]_-])env[[:space:]]+(-[a-z]*i|--ignore-environment)([[:space:]]|$)' && return 0
+  while IFS= read -r seg; do
+    read -ra words <<< "$seg"
+    case "${words[0]:-}" in script|unbuffer|expect|socat|empty|ptyrun|faketty|winpty) return 0 ;; esac
+  done < <(segments "$1")
+  return 1
+}
+
+repo_dirs() {
+  local dir
+  dir=$(field '.cwd')
+  [ -n "$dir" ] && [ -d "$dir" ] || dir=.
+  g_common=$(git -C "$dir" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || return 1
+  g_common=$(cd -P "$g_common" && pwd -P) || return 1
+  g_root=$(dirname "$g_common")
+  g_cwd=$(cd -P "$dir" && pwd -P)
+}
+
+sensitive_paths() {
+  local d f
+  for d in "$g_common/donedonedone" "$g_common/skeletoncrew-vault-guard"; do
+    printf '%s\n' "$d"
+    [ -d "$d" ] && for f in "$d"/* "$d"/.[!.]*; do [ -e "$f" ] && printf '%s\n' "$f"; done
+  done
+  printf '%s\n' "$g_root/vault/risk-policy.json" "$g_common/donedonedone/approvals.jsonl" "$(cd -P "$here" && pwd -P)/approve-risk.sh" "$(cd -P "$here" && pwd -P)/approve-ui.sh"
+  [ "${1:-}" = subagent ] && printf '%s\n' "$g_root/vault" "$g_root/vault/task-tree.json" "$g_root/vault/log.jsonl"
+}
+
+component_match() {
+  case "$1" in .*) case "$2" in .*) ;; *) return 1 ;; esac ;; esac
+  # shellcheck disable=SC2053
+  [[ $1 == $2 ]]
+}
+
+suffix_match() {
+  local s="$1" pat="$2" whole="${3:-}" sp pp i j
+  IFS=/ read -ra sp <<< "${s#/}"
+  IFS=/ read -ra pp <<< "${pat#/}"
+  [ ${#pp[@]} -le ${#sp[@]} ] || return 1
+  [ -z "$whole" ] || [ ${#pp[@]} -eq ${#sp[@]} ] || return 1
+  i=$((${#sp[@]} - 1)); j=$((${#pp[@]} - 1))
+  while [ "$j" -ge 0 ]; do
+    case "${pp[$j]}" in ''|.) j=$((j - 1)); continue ;; ..) return 0 ;; esac
+    component_match "${sp[$i]}" "${pp[$j]}" || return 1
+    i=$((i - 1)); j=$((j - 1))
+  done
+  return 0
+}
+
+physical() {
+  local p="$1" head="" rest="" part
+  IFS=/ read -ra parts <<< "${p#/}"
+  for part in "${parts[@]}"; do
+    if [ -z "$rest" ] && ! has_glob "$part" && [ -d "$head/$part" ]; then head="$head/$part"; else rest="$rest/$part"; fi
+  done
+  [ -n "$head" ] && head=$(cd -P "$head" 2>/dev/null && pwd -P)
+  printf '%s%s\n' "$head" "$rest"
+}
+
+word_paths() {
+  local w="$1"
+  w="${w#[0-9]}"; w="${w#&}"; w="${w#>}"; w="${w#>}"; w="${w#<}"
+  case "$w" in --*=*) w="${w#*=}" ;; esac
+  case "$w" in \~|\~/*) w="$HOME${w#\~}" ;; esac
+  [ -n "$w" ] && printf '%s\n' "$w"
+}
+
+touches_sensitive() {
+  local cmd_raw="$1" who="${2:-}" seg words w path cwd known=1 sens
+  printf '%s\n' "$cmd_raw" | grep -qE '[*?[]|\.\.|//|/\./|~|(^|[;&|(`[:space:]])(cd|pushd)([[:space:]]|$)' || return 1
+  repo_dirs || return 1
+  sens=$(sensitive_paths "$who" | lower)
+  cwd="$g_cwd"
+  while IFS= read -r seg; do
+    read -ra words <<< "$seg"
+    [ ${#words[@]} -eq 0 ] && continue
+    case "${words[0]}" in
+      cd|pushd)
+        w="${words[1]:-$HOME}"
+        case "$w" in \~|\~/*) w="$HOME${w#\~}" ;; esac
+        if has_glob "$w" || [ "${w#*\$}" != "$w" ] || [ "$w" = - ]; then known=0
+        else case "$w" in /*) cwd=$(lexical "$w") ;; *) cwd=$(lexical "$cwd/$w") ;; esac
+        fi
+        continue ;;
+    esac
+    for w in "${words[@]}"; do
+      w=$(word_paths "$w") || continue
+      case "$w" in */*|*[*?[]*|.*) ;; *) has_glob "$w" || continue ;; esac
+      case "$w" in /*) path=$(lexical "$w") ;; *) path=$(lexical "$cwd/$w") ;; esac
+      path=$(physical "$path" | lower)
+      while IFS= read -r s; do
+        [ -n "$s" ] || continue
+        suffix_match "$s" "$path" whole && return 0
+        if [ "$known" -eq 0 ] || [ "${w#*..}" != "$w" ]; then suffix_match "$s" "$(printf '%s' "$w" | lower)" && return 0; fi
+      done <<< "$sens"
+    done
+  done < <(segments "$(printf '%s\n' "$cmd_raw" | tr -d "\"'\\\\")")
+  return 1
+}
+
+if [ -n "$file_path" ]; then
+  forms=$(printf '%s\n' "$file_path" | while IFS= read -r fp; do [ -n "$fp" ] && file_forms "$fp"; done)
+  while IFS= read -r fp; do
+    [ -n "$fp" ] || continue
+    secret_path "$fp" \
+      && block "BLOCKED: $file_path looks like a secret (.env, key, secrets/). Ask the human for the value you need instead."
+    [ "$tool" != "Read" ] && human_only_path "$fp" && block "$HUMAN_ONLY_MSG"
+  done <<< "$forms"
+  file_path="$file_path"$'\n'"$forms"
 fi
 
 if [ -n "$agent_id" ]; then
@@ -145,6 +311,9 @@ if [ -n "$agent_id" ]; then
       && block "BLOCKED: vault/log.jsonl is written by the Director only (log-event.sh). Return your verdict as text."
     protected_name "$plain" 'risk-gate' && ! read_only_shell "$plain" && vault_project \
       && block "BLOCKED: risk-gate.sh is the Director's: it records risk assessments and judges merges. If your work needs files outside the approved scope, stop and report SCOPE-EXPANSION."
+    if ! read_only_shell "$plain" && vault_project && touches_sensitive "$cmd" subagent; then
+      block "BLOCKED: a subagent's shell commands may only read vault/ and may not touch the human-only approvals or risk policy. Use the Write tool for a vault file your manifest names."
+    fi
     if protected_name "$plain" 'vault|task-tree|log\.jsonl' && ! read_only_shell "$plain"; then
       protected_name "$plain" 'task-tree' \
         && block "BLOCKED: task-tree.json is written by the Director only. Return your verdict as text."
@@ -271,9 +440,14 @@ if secret_in_shell "$plain"; then
   block "BLOCKED: this command touches a secret (.env, key, secrets/). Ask the human for the value you need instead."
 fi
 
-if protected_name "$plain" 'approvals\.jsonl|risk-policy|approve-risk|approve-ui|vault-guard[^[:space:]]*[[:space:]]+--|\.git/donedonedone' \
+if protected_name "$plain" 'approvals\.jsonl|risk-policy|approve-risk|approve-ui|vault-guard[^[:space:]]*[[:space:]]+--|--human-snapshot|\.git/(donedonedone|skeletoncrew-vault-guard)' \
    && ! read_only_shell "$plain" "add commit" && vault_project; then
   block "$HUMAN_ONLY_MSG"
+fi
+
+if vault_project && ! read_only_shell "$plain" "add commit"; then
+  fakes_human "$plain" && block "$FAKE_HUMAN_MSG"
+  touches_sensitive "$cmd" && block "$HUMAN_ONLY_MSG"
 fi
 
 dangerous_target() {
