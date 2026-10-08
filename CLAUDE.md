@@ -90,6 +90,8 @@ score. Load the risk-gate skill for the rubric, reassessment and approval steps.
 2. Automated: you run `gate.sh` once, in the slice's checkout, at the builder's SHA.
    A test line `over gate.test.budget` still passes: open one pending-review entry
    for it (test-speed skill) unless one is open — a slice never fixes the suite.
+   A `SKIP (no gate.<step> …)` line doesn't block the slice: after it merges, run the
+   configure-gates skill unless an open pending-review card names that step.
    A `crap` FAIL goes back to the builder, and so does a `mutation` FAIL; hotspots
    outside the diff go to the crap-hotspots skill (~/.claude/skills/crap-hotspots/SKILL.md),
    survivors to mutation-survivors (~/.claude/skills/mutation-survivors/SKILL.md)

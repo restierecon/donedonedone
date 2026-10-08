@@ -5,7 +5,7 @@ description: Initialize this project for the autonomous engineering workflow (va
 
 Initialize this project for the autonomous workflow. Do all of the following.
 Re-running on an existing vault upgrades it: never overwrite an existing file, create
-only what is missing, and always run step 6.
+only what is missing, and always run step 6 and the configure-gates skill (step 11).
 
 1. Verify this is a git repo (`git rev-parse`); if not, `git init`.
 2. Verify `.env` and `.env.*` are in .gitignore — add them if missing. Never proceed
@@ -35,9 +35,12 @@ only what is missing, and always run step 6.
 8. Create vault/project.md by asking me (one round of questions max) for:
    - Project name and one-line purpose
    - Stack (suggest from what you see in the repo if it's not empty)
-   - Gate commands (suggest from the repo: package.json scripts, pyproject, Makefile),
-     including how to run only some tests, and a full-suite budget in seconds (default 300)
-   Then write it with these sections: Purpose · Stack · Gate — one line per step, read
+   - Every ASK line from `python3 ~/.claude/scripts/detect-gates.py` (read-only; run
+     it before asking — `python` on Windows), and a full-suite budget in seconds if
+     not the default 300. Don't ask for gate commands it already proposes.
+   Then write it with these sections: Purpose · Stack · Gate — the configure-gates
+   skill writes and proves the gate lines in step 11, and this is the contract they
+   follow (the human's ASK answers go in as they said): one line per step, read
    by `~/.claude/scripts/gate.sh`, omit a step the stack doesn't have (except
    `gate.test`, which the gate requires — write `- gate.test: none` only if the
    project truly has no tests):
@@ -71,7 +74,10 @@ only what is missing, and always run step 6.
     Cursor and GitHub Copilot read (Claude Code ignores it and reads the global CLAUDE.md).
     It only manages its own marked block, so an existing AGENTS.md keeps its content, and
     the session-start hook keeps the block current after upgrades.
-11. Commit: `git add -A && git commit -m "chore: init autonomous workflow vault"`
+11. Commit: `git add -A && git commit -m "chore: init autonomous workflow vault"`.
+    Then run the configure-gates skill (~/.claude/skills/configure-gates/SKILL.md): it
+    writes every gate line the repo supports, proves each one on main, and turns the
+    rest into one SLICE card for /grill and one TOOL card for me.
 12. Existing codebase: run `python3 ~/.claude/scripts/codebase-graph.py build` (codebase-map
     skill), read the intent docs its FACTS list, then give me an onboarding brief in the
     conversation (≤ 30 lines; nothing written to disk, so nothing goes stale). It covers
