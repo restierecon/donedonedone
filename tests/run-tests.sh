@@ -986,8 +986,9 @@ case "$(uname -s)" in
     allow=0
     echo '{"tool_name":"Bash","tool_input":{"command":"ls"}}' \
       | env HOME="$nojq_home" PATH="$nojq_dirs" bash "$GUARD" >/dev/null 2>&1 || allow=$?
-    if [ -n "$(PATH="$nojq_dirs" command -v jq)" ]; then
-      bad "guard.sh enforces its rules with only the ~/.claude/bin jq" "could not hide the system jq"
+    leaked=$(env PATH="$nojq_dirs" bash -c 'command -v jq')
+    if [ -n "$leaked" ]; then
+      bad "guard.sh enforces its rules with only the ~/.claude/bin jq" "could not hide the system jq: $leaked"
     elif [ "$status" -eq 2 ] && [ "$allow" -eq 0 ]; then
       ok "guard.sh enforces its rules with only the ~/.claude/bin jq"
     else
