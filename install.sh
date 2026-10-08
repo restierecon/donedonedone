@@ -59,6 +59,15 @@ rm -f "$DEST/scripts/generate-copilot-agents.sh"
 
 "$DEST/scripts/generate-agents.sh" copilot >/dev/null
 
+if ! command -v jq >/dev/null 2>&1; then
+  echo "  jq not found — fetching jq from github.com/jqlang/jq (checksum-pinned) into $DEST/bin"
+  if fetched=$("$SRC/scripts/fetch-jq.sh" "$DEST/bin"); then
+    echo "  jq → $fetched (the hook scripts find it there; no admin rights or PATH change needed)"
+    # shellcheck source=/dev/null
+    . "$SRC/scripts/jq-text.sh"
+  fi
+fi
+
 vscode_status="hooks SKIPPED (install jq, re-run)"
 if command -v jq >/dev/null 2>&1; then
   mkdir -p "$HOME/.copilot/hooks"
@@ -139,7 +148,7 @@ else
 fi
 echo ""
 echo "Recommended (optional) tools for full guardrails:"
-command -v jq >/dev/null 2>&1       || echo "  jq (required by hook scripts): brew install jq · winget install jqlang.jq · apt install jq"
+command -v jq >/dev/null 2>&1       || echo "  jq (required by hook scripts): brew install jq · winget install jqlang.jq · apt install jq · or, without admin rights, save a jq binary as $DEST/bin/jq (jq.exe on Windows) and re-run"
 command -v gitleaks >/dev/null 2>&1 || echo "  gitleaks (secret-scan before checkpoints): brew install gitleaks · winget install Gitleaks.Gitleaks"
 command -v semgrep >/dev/null 2>&1  || echo "  semgrep (auditor scanner): brew install semgrep · pip install semgrep"
 command -v ruff >/dev/null 2>&1     || echo "  ruff (python lint loop): pip install ruff"
