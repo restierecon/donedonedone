@@ -2157,7 +2157,12 @@ expect_block "a .. detour doesn't hide the ledger from Write"      guard_file Wr
 expect_block "vault-guard's snapshot store is human-only"          guard_file Write '/repo/.git/skeletoncrew-vault-guard/vault_risk-policy.json'
 MSYS=winsymlinks:nativestrict ln -s "$repo/.git" "$repo/gl" 2>/dev/null
 if [ -L "$repo/gl" ]; then
-  expect_block "a symlinked directory doesn't hide the ledger from Write" guard_file Write "$repo/gl/donedonedone/approvals.jsonl"
+  status=0; guard_file Write "$repo/gl/donedonedone/approvals.jsonl" || status=$?
+  if [ "$status" -eq 2 ]; then
+    ok "a symlinked directory doesn't hide the ledger from Write"
+  else
+    bad "a symlinked directory doesn't hide the ledger from Write" "exit $status, expected 2; link: $(readlink "$repo/gl" 2>&1); cd -P: $(cd -P "$repo/gl/donedonedone" 2>&1 && pwd -P); realpath: $(realpath -m "$repo/gl/donedonedone/approvals.jsonl" 2>&1)"
+  fi
   expect_block "a symlinked directory doesn't hide the ledger from a glob" guard_in "$repo" 'cp forged gl/d*/a*'
 else
   echo "  SKIP  symlinked-directory ledger tests (this machine can't create a symlink: Git Bash without native symlink rights copies the directory instead)"
