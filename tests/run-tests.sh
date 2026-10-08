@@ -30,6 +30,17 @@ pass=0
 fail=0
 
 ok()  { pass=$((pass + 1)); echo "  PASS  $1"; }
+under_claude() {
+  local pid=$$ c
+  while [ "${pid:-0}" -gt 1 ]; do
+    c=$(ps -o comm= -p "$pid" 2>/dev/null) || return 1
+    case "${c##*/}" in claude|claude.exe) return 0 ;; esac
+    pid=$(ps -o ppid= -p "$pid" 2>/dev/null | tr -d ' ') || return 1
+  done
+  return 1
+}
+refusal_ok="interactive terminal"
+under_claude && refusal_ok="interactive terminal|agent's shell"
 bad() { fail=$((fail + 1)); echo "  FAIL  $1 ($2)"; }
 
 guard_bash() {
@@ -73,6 +84,10 @@ expect_block() {
 
 echo "== guard.sh — destructive bash patterns =="
 expect_allow "allows ls -la"                        guard_bash 'ls -la'
+expect_block "blocks a glob onto .env"                guard_bash 'cat .env*'
+expect_block "blocks a ? glob onto .env"              guard_bash 'cat .en?'
+expect_block "blocks a nested glob onto .env"         guard_bash 'cat config/.e*'
+expect_allow "allows a glob that skips dotfiles"      guard_bash 'cat *.md'
 expect_allow "allows git status"                    guard_bash 'git status --short'
 expect_allow "allows relative rm -rf"               guard_bash 'rm -rf ./build'
 expect_block "blocks rm -rf /"                      guard_bash 'rm -rf /'
@@ -1331,7 +1346,7 @@ lines_before=$(wc -l < "$urepo/.git/donedonedone/approvals.jsonl")
 status=0; out=$(cd "$urepo" && CLAUDECODE=1 "$APPROVE_UI" vault/ui/notes/contract.md 2>&1) || status=$?
 if [ "$status" -eq 1 ] && echo "$out" | grep -q "agent's shell"; then ok "approve-ui.sh refuses inside an agent's shell"; else bad "approve-ui.sh refuses inside an agent's shell" "exit $status: $out"; fi
 status=0; out=$(cd "$urepo" && echo "APPROVE UI notes" | env -u CLAUDECODE "$APPROVE_UI" vault/ui/notes/contract.md 2>&1) || status=$?
-if [ "$status" -eq 1 ] && echo "$out" | grep -q "interactive terminal" && [ "$(wc -l < "$urepo/.git/donedonedone/approvals.jsonl")" -eq "$lines_before" ]; then
+if [ "$status" -eq 1 ] && echo "$out" | grep -qE "$refusal_ok" && [ "$(wc -l < "$urepo/.git/donedonedone/approvals.jsonl")" -eq "$lines_before" ]; then
   ok "approve-ui.sh refuses piped input and writes nothing"
 else
   bad "approve-ui.sh refuses piped input and writes nothing" "exit $status: $out"
@@ -2042,6 +2057,26 @@ expect_block "the Director can't re-snapshot human-only files" guard_in "$repo" 
 expect_block "the Director can't overwrite the policy in shell" guard_in "$repo" 'printf x > vault/risk-policy.json'
 expect_allow "the Director may commit the policy a human edited" guard_in "$repo" 'git add vault/risk-policy.json && git commit -m "chore: risk policy"'
 expect_allow "the Director may read the ledger in shell"        guard_in "$repo" 'jq . .git/donedonedone/approvals.jsonl'
+expect_block "a dot segment doesn't hide the risk policy from Write" guard_file Write 'vault/./risk-policy.json'
+expect_block "a doubled slash doesn't hide the ledger from Edit"   guard_file Edit '/repo/.git//donedonedone/approvals.jsonl'
+expect_block "a .. detour doesn't hide the ledger from Write"      guard_file Write '/repo/.git/hooks/../donedonedone/approvals.jsonl'
+expect_block "vault-guard's snapshot store is human-only"          guard_file Write '/repo/.git/skeletoncrew-vault-guard/vault_risk-policy.json'
+ln -s "$repo/.git" "$repo/gl"
+expect_block "a symlinked directory doesn't hide the ledger from Write" guard_file Write "$repo/gl/donedonedone/approvals.jsonl"
+expect_block "a symlinked directory doesn't hide the ledger from a glob" guard_in "$repo" 'cp forged gl/d*/a*'
+rm -f "$repo/gl"
+expect_block "a glob doesn't hide the ledger from shell"           guard_in "$repo" 'echo x >> .git/donedone*/approvals?jsonl'
+expect_block "a cd into .git doesn't hide the ledger"              guard_in "$repo" 'cd .git && cd done* && tee -a app*'
+expect_block "the snapshot store is human-only in shell"           guard_in "$repo" 'cp forged .git/skeletoncrew-vault-guard/x'
+expect_block "a glob doesn't hide approve-risk.sh"                 guard_in "$repo" "$ROOT/scripts/approve-r*.sh merge S001"
+expect_block "an agent can't unset CLAUDECODE"                     guard_in "$repo" 'unset CLAUDECODE; true'
+expect_block "an agent can't scrub its environment"                guard_in "$repo" 'env -i PATH=/usr/bin bash run.sh'
+expect_block "an agent can't open a pty from python"               guard_in "$repo" 'python3 -c "import pty; pty.spawn([\"sh\"])"'
+expect_block "an agent can't wrap a command in unbuffer"           guard_in "$repo" 'unbuffer sh run.sh'
+expect_block "a subagent can't write vault/ through a glob"        guard_in "$repo" 'echo x > vau?t/task-tree.json' builder
+expect_allow "globs into the ledger are fine for reading"          guard_in "$repo" 'jq . .git/d*/a*'
+expect_allow "a glob that can't reach a human-only file is fine"   guard_in "$repo" 'prettier --write *.json src/*.json'
+expect_allow "copying build output with a glob is fine"            guard_in "$repo" 'mkdir -p build && cp -r dist/* build/'
 expect_block "a subagent can't run risk-gate.sh"                guard_in "$repo" 'scripts/risk-gate.sh assess S001' builder
 expect_allow "a subagent may read risk-gate.sh"                 guard_in "$repo" 'grep -n scope scripts/risk-gate.sh' builder
 expect_allow "the Director runs risk-gate.sh"                   guard_in "$repo" 'scripts/risk-gate.sh assess S001'
@@ -2051,9 +2086,18 @@ expect_allow "outside a vault project, a subagent may run risk-gate.sh's tests" 
 rm -rf "$nrepo"
 status=0; out=$(cd "$repo" && CLAUDECODE=1 "$APPROVE" merge S002 2>&1) || status=$?
 if [ "$status" -eq 1 ] && echo "$out" | grep -q "agent's shell"; then ok "approve-risk.sh refuses inside an agent's shell"; else bad "approve-risk.sh refuses inside an agent's shell" "exit $status: $out"; fi
+fake=$(mktemp -d); ln -s "$(command -v bash)" "$fake/claude"
+lines_before=$(wc -l < "$repo/.git/donedonedone/approvals.jsonl")
+status=0; out=$(cd "$repo" && env -u CLAUDECODE "$fake/claude" -c "\"\$0\" merge S002; exit \$?" "$APPROVE" 2>&1) || status=$?
+if [ "$status" -eq 1 ] && echo "$out" | grep -q "agent's shell" && [ "$(wc -l < "$repo/.git/donedonedone/approvals.jsonl")" -eq "$lines_before" ]; then
+  ok "approve-risk.sh refuses under a Claude Code process even with CLAUDECODE unset"
+else
+  bad "approve-risk.sh refuses under a Claude Code process even with CLAUDECODE unset" "exit $status: $out"
+fi
+rm -rf "$fake"
 lines_before=$(wc -l < "$repo/.git/donedonedone/approvals.jsonl")
 status=0; out=$(cd "$repo" && echo S002 | env -u CLAUDECODE "$APPROVE" merge S002 2>&1) || status=$?
-if [ "$status" -eq 1 ] && echo "$out" | grep -q "interactive terminal" && [ "$(wc -l < "$repo/.git/donedonedone/approvals.jsonl")" -eq "$lines_before" ]; then
+if [ "$status" -eq 1 ] && echo "$out" | grep -qE "$refusal_ok" && [ "$(wc -l < "$repo/.git/donedonedone/approvals.jsonl")" -eq "$lines_before" ]; then
   ok "approve-risk.sh refuses piped input and writes nothing"
 else
   bad "approve-risk.sh refuses piped input and writes nothing" "exit $status: $out"
@@ -2086,7 +2130,7 @@ sys.stdout.write(out.decode(errors="replace"))
 sys.exit(os.WEXITSTATUS(status))
 ' "$@"
 }
-if command -v python3 >/dev/null 2>&1 && python3 -c 'import os, pty; os.forkpty' >/dev/null 2>&1; then
+if ! under_claude && command -v python3 >/dev/null 2>&1 && python3 -c 'import os, pty; os.forkpty' >/dev/null 2>&1; then
   printf '# P\n## Gate\n- gate.test: true\n- gate.mutation: echo no-mutants\n' > "$repo/vault/project.md"
   status=0; out=$(cd "$repo" && pty_run "nope" env -u CLAUDECODE "$APPROVE" merge S002 2>&1) || status=$?
   if [ "$status" -eq 1 ] && tail -1 "$repo/.git/donedonedone/approvals.jsonl" | jq -e '.decision == "deny" and .approver == "test@test"' >/dev/null \
@@ -2103,7 +2147,7 @@ if command -v python3 >/dev/null 2>&1 && python3 -c 'import os, pty; os.forkpty'
     bad "a human at a real terminal approves the merge, bound to its patch_id" "exit $status: $(echo "$out" | tail -3)"
   fi
 else
-  echo "  SKIP  approve-risk.sh pty tests (no python3 pty on this platform)"
+  echo "  SKIP  approve-risk.sh pty tests (no python3 pty on this platform, or run under Claude Code, which approve-risk.sh refuses)"
 fi
 rm -rf "$repo"
 
@@ -2120,6 +2164,15 @@ if [ "$status" -eq 2 ] && echo "$out" | grep -q "human-only" && ! grep -q forged
 else
   bad "an approval forged during the Director's own tool call is undone" "exit $status: $out"
 fi
+vg "$repo" PreToolUse "" Bash 'ls' >/dev/null; vg "$repo" PostToolUse "" Bash 'ls' >/dev/null
+echo '{"slice":"S004","decision":"approve","late":true}' >> "$repo/.git/donedonedone/approvals.jsonl"
+status=0; out=$(vg "$repo" PreToolUse "" Bash 'ls') || status=$?
+if [ "$status" -eq 2 ] && echo "$out" | grep -q "between tool calls" && ! grep -q late "$repo/.git/donedonedone/approvals.jsonl"; then
+  ok "an approval a background job writes between tool calls is undone at the next call"
+else
+  bad "an approval a background job writes between tool calls is undone at the next call" "exit $status: $out"
+fi
+vg "$repo" PostToolUse "" Bash 'ls' >/dev/null
 echo '{"thresholds":{"high":99,"critical":100}}' > "$repo/vault/risk-policy.json"
 status=0; vg "$repo" PostToolUse builder >/dev/null || status=$?
 if [ "$status" -eq 2 ] && [ ! -e "$repo/vault/risk-policy.json" ]; then ok "a risk policy a subagent writes is removed"; else bad "a risk policy a subagent writes is removed" "exit $status"; fi

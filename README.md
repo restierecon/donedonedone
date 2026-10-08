@@ -527,7 +527,9 @@ jq is missing, the payload isn't JSON, or a field has the wrong type).
   destructive git command whose arguments contain a `$variable`.
 - Secret files (`.env*` except `.example/.sample/.template/.dist`, `*.pem`, `*.key`, ssh
   keys, `secrets/`) are blocked for every tool and in shell commands, including Cursor's
-  `beforeReadFile`. `cp .env.example .env` and `.gitignore` edits stay allowed.
+  `beforeReadFile`, and so are shell globs that could reach one (`.env*`, `.en?`,
+  `config/.e*`; a plain `*` skips dotfiles and stays allowed). `cp .env.example .env`
+  and `.gitignore` edits stay allowed.
 - Subagents (identified by the hook's `agent_id`) can't Write/Edit/NotebookEdit
   task-tree.json or log.jsonl; matching is
   case-insensitive, for macOS and Windows. A subagent shell command that mentions vault/
@@ -541,8 +543,17 @@ jq is missing, the payload isn't JSON, or a field has the wrong type).
   STANDING must name the harden-diff skill; a slice without the field fails closed.
 - The risk gate (see Risk gate): builder spawns and every git route that lands a
   `slice/<ID>` on main run `risk-gate.sh check`. No agent may write
-  `.git/donedonedone/approvals.jsonl` or `vault/risk-policy.json`, or run
-  `approve-risk.sh`, `approve-ui.sh` or `vault-guard.sh`. Subagents may not run `risk-gate.sh`.
+  `.git/donedonedone/approvals.jsonl`, `vault/risk-policy.json` or vault-guard's snapshot
+  store (`.git/skeletoncrew-vault-guard/`), or run `approve-risk.sh`, `approve-ui.sh` or
+  `vault-guard.sh`. Subagents may not run `risk-gate.sh`.
+  A file tool's path is checked as given and again with `.`, `..`, doubled slashes and
+  symlinks resolved; a shell word is resolved against the hook's cwd (following any
+  `cd` in the command) and globs are matched per path component, so
+  `.git/donedone*/approvals?jsonl`, `cd .git && tee -a donedonedone/app*` and a
+  symlink to `.git` are all refused. In a vault project an agent may also not allocate
+  a pseudo-terminal or scrub its environment (`script`, `expect`, `unbuffer`, `socat`,
+  python `pty`, `pexpect`, any mention of `CLAUDECODE`, `env -i`): those are how a
+  process passes for a human at approve-risk.sh.
 - The reviewer's Chrome tools (claude-in-chrome navigate and tabs_create) may only open
   http(s) on localhost, 127.0.0.1, [::1], *.local, *.localhost or *.test; userinfo,
   numeric-IP spellings, non-ASCII hosts and whitespace or control characters are refused.
@@ -550,8 +561,12 @@ jq is missing, the payload isn't JSON, or a field has the wrong type).
 
 **2. vault-guard.sh — undoes what got through, by content, not by syntax.** Human-only
 files (the approvals ledger and `vault/risk-policy.json`) are restored after any tool
-call that changed them, the Director's included. A human's edits between calls are
-kept, and approve-risk.sh and approve-ui.sh re-snapshot the ledger after they write. It also snapshots
+call that changed them, the Director's included. A human's edits to the risk policy
+between calls are kept. The ledger is stricter: only approve-risk.sh and approve-ui.sh
+move its snapshot, so a line that turns up between calls (a background job finishing
+after its tool call returned) is undone before the next call runs, and the Director is
+told. A human who edits the ledger by hand runs `vault-guard.sh --human-snapshot` in
+their own terminal afterwards. It also snapshots
 the main checkout's task-tree.json and log.jsonl (in `.git/`, at
 session start and after each Director call that may touch them). After every subagent
 tool call, and when a subagent stops, any change to those files is restored from the
@@ -560,9 +575,15 @@ change that turns up during a Director call that shouldn't touch vault/ is repor
 the Director and then accepted as theirs. gate.sh adds the worktree case: a slice branch
 that changes those files fails the gate before a squash-merge carries it into main.
 
+approve-risk.sh and approve-ui.sh refuse when CLAUDECODE is set, when stdin/stdout
+aren't a terminal, and when any ancestor process is Claude Code (checked with `ps`;
+skipped where `ps -o` is unavailable, as in Git Bash).
+
 What this still doesn't stop: code the agent writes to a file and then runs (a script or
-a test can do anything the user can — including allocating a pseudo-terminal, unsetting
-CLAUDECODE and driving approve-risk.sh), and the narrow window where a subagent's write
+a test can do anything the user can — including detaching from Claude Code's process
+tree, allocating a pseudo-terminal, unsetting CLAUDECODE and driving approve-risk.sh, or
+rewriting vault-guard's snapshot together with the file it guards), a path built at run
+time from `$variables`, and the narrow window where a subagent's write
 lands while a Director call that touches vault/ is in flight. A human approval is
 therefore as strong as the sandbox it runs in. Every approval in the ledger names the
 approver's git email, so read the ledger (`risk-gate.sh audit <ID>`) before trusting a

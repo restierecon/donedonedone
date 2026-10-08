@@ -9,10 +9,24 @@ usage() {
 }
 refuse() { echo "approve-ui.sh: $1" >&2; exit 1; }
 
+under_agent() {
+  local pid="$PPID" n=0 comm args
+  while [ "${pid:-0}" -gt 1 ] && [ "$n" -lt 64 ]; do
+    comm=$(ps -o comm= -p "$pid" 2>/dev/null) || return 1
+    args=$(ps -o args= -p "$pid" 2>/dev/null)
+    case "${comm##*/}" in claude|claude.exe) return 0 ;; esac
+    case "$args" in *@anthropic-ai/claude-code*|*/claude-code/cli.js*) return 0 ;; esac
+    pid=$(ps -o ppid= -p "$pid" 2>/dev/null | tr -d ' ') || return 1
+    n=$((n + 1))
+  done
+  return 1
+}
+
 [ $# -eq 1 ] || usage
 contract="$1"
 
 [ -z "${CLAUDECODE:-}" ] || refuse "refusing inside an agent's shell (CLAUDECODE is set). Approval is a human decision: run this yourself in your own terminal."
+under_agent && refuse "refusing inside an agent's shell (a Claude Code process started this one). Approval is a human decision: run this yourself in your own terminal."
 { [ -t 0 ] && [ -t 1 ]; } || refuse "needs an interactive terminal. Run it yourself, outside any agent: approval is a human decision."
 { : </dev/tty; } 2>/dev/null || refuse "cannot open /dev/tty. Run it yourself in an interactive terminal."
 command -v jq >/dev/null 2>&1 || refuse "jq is required (brew install jq · winget install jqlang.jq · apt install jq)"
