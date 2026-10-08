@@ -2155,10 +2155,14 @@ expect_block "a dot segment doesn't hide the risk policy from Write" guard_file 
 expect_block "a doubled slash doesn't hide the ledger from Edit"   guard_file Edit '/repo/.git//donedonedone/approvals.jsonl'
 expect_block "a .. detour doesn't hide the ledger from Write"      guard_file Write '/repo/.git/hooks/../donedonedone/approvals.jsonl'
 expect_block "vault-guard's snapshot store is human-only"          guard_file Write '/repo/.git/skeletoncrew-vault-guard/vault_risk-policy.json'
-ln -s "$repo/.git" "$repo/gl"
-expect_block "a symlinked directory doesn't hide the ledger from Write" guard_file Write "$repo/gl/donedonedone/approvals.jsonl"
-expect_block "a symlinked directory doesn't hide the ledger from a glob" guard_in "$repo" 'cp forged gl/d*/a*'
-rm -f "$repo/gl"
+MSYS=winsymlinks:nativestrict ln -s "$repo/.git" "$repo/gl" 2>/dev/null
+if [ -L "$repo/gl" ]; then
+  expect_block "a symlinked directory doesn't hide the ledger from Write" guard_file Write "$repo/gl/donedonedone/approvals.jsonl"
+  expect_block "a symlinked directory doesn't hide the ledger from a glob" guard_in "$repo" 'cp forged gl/d*/a*'
+else
+  echo "  SKIP  symlinked-directory ledger tests (this machine can't create a symlink: Git Bash without native symlink rights copies the directory instead)"
+fi
+rm -rf "$repo/gl"
 expect_block "a glob doesn't hide the ledger from shell"           guard_in "$repo" 'echo x >> .git/donedone*/approvals?jsonl'
 expect_block "a cd into .git doesn't hide the ledger"              guard_in "$repo" 'cd .git && cd done* && tee -a app*'
 expect_block "the snapshot store is human-only in shell"           guard_in "$repo" 'cp forged .git/skeletoncrew-vault-guard/x'
@@ -2182,8 +2186,10 @@ status=0; out=$(cd "$repo" && CLAUDECODE=1 "$APPROVE" merge S002 2>&1) || status
 if [ "$status" -eq 1 ] && echo "$out" | grep -q "agent's shell"; then ok "approve-risk.sh refuses inside an agent's shell"; else bad "approve-risk.sh refuses inside an agent's shell" "exit $status: $out"; fi
 fake=$(mktemp -d); ln -s "$(command -v bash)" "$fake/claude"
 lines_before=$(wc -l < "$repo/.git/donedonedone/approvals.jsonl")
+ancestor_refusal="agent's shell"
+ps -o comm= -p $$ >/dev/null 2>&1 || ancestor_refusal="agent's shell|interactive terminal"
 status=0; out=$(cd "$repo" && env -u CLAUDECODE "$fake/claude" -c "\"\$0\" merge S002; exit \$?" "$APPROVE" 2>&1) || status=$?
-if [ "$status" -eq 1 ] && echo "$out" | grep -q "agent's shell" && [ "$(wc -l < "$repo/.git/donedonedone/approvals.jsonl")" -eq "$lines_before" ]; then
+if [ "$status" -eq 1 ] && echo "$out" | grep -qE "$ancestor_refusal" && [ "$(wc -l < "$repo/.git/donedonedone/approvals.jsonl")" -eq "$lines_before" ]; then
   ok "approve-risk.sh refuses under a Claude Code process even with CLAUDECODE unset"
 else
   bad "approve-risk.sh refuses under a Claude Code process even with CLAUDECODE unset" "exit $status: $out"
