@@ -45,10 +45,10 @@ builds. Nothing after the grill should need you unless a slice escalates.
 |---|---|
 | CLAUDE.md | Global protocol — the main session IS the Director |
 | agents/ | planner · builder · reviewer · auditor · retro (least-privilege tools, model-per-agent) |
-| skills/ | protocol-native: grill · ui-prototype · slice-planning · risk-gate · parallel-dispatch · architecture-review · learning-loop · test-speed · crap-hotspots · mutation-survivors · clean-diff · harden-diff · blast-radius · `/codebase-map` · brief-contract · `/init-codebase` · `/harvest` · `/create-verification-skill` · `/maintain-verification-skill` (opt-in, `/`-only: a project-local `verify-*` skill that lets the reviewer reach live-verified evidence) — plus a general engineering-practice library, a principles index (19 pstack principles, read on demand) and pstack's prose skills: unslop · technical-writing (docs/README/ADR work) (see Credits) |
+| skills/ | protocol-native: grill · ui-prototype · slice-planning · risk-gate · parallel-dispatch · architecture-review · learning-loop · configure-gates · test-speed · crap-hotspots · mutation-survivors · clean-diff · harden-diff · blast-radius · `/codebase-map` · brief-contract · `/init-codebase` · `/harvest` · `/create-verification-skill` · `/maintain-verification-skill` (opt-in, `/`-only: a project-local `verify-*` skill that lets the reviewer reach live-verified evidence) — plus a general engineering-practice library, a principles index (19 pstack principles, read on demand) and pstack's prose skills: unslop · technical-writing (docs/README/ADR work) (see Credits) |
 | settings.json | Permission deny/ask lists + hooks on 6 events + env that keeps Claude Code on Windows in Git Bash |
 | context-firewall/ | `ddd` — the context firewall: artifact store, per-type compressors, retrieval, ranking, stats (Python 3.8+ stdlib, installed to `~/.claude/context-firewall/`) |
-| scripts/ | ddd (the firewall's bash entry point, `PreToolUse` rewrite and `PostToolUse` hook) · guard.sh (PreToolUse) · vault-guard.sh (Pre/PostToolUse, SubagentStop — restores Director-only files) · lint.sh (PostToolUse) · checkpoint.sh (Stop) · session-start.sh (SessionStart) · codebase-graph.py + codemap/ + graph-viewer.html (code and workflow map of any repo, change impact, `arch` fitness check, drill-down HTML) · crap-score.py (lizard + coverage report → CRAP lines for `gate.crap`) · mutation-report.py (mutation tool report → mutant lines for `gate.mutation`) · gate.sh (quiet lint/types/test/build/a11y runner + diff-scoped CRAP, mutation, TODO/FIXME, no-comments and architecture-rule checks) · find-comments.sh (the comment detector behind that check) · log-event.sh (the Director's structured log.jsonl writer) · risk-gate.sh (scores each slice's risk, judges builder spawns and merges) · approve-risk.sh (the human's approval command — refuses inside an agent) · check-plan.sh (the Director's lint for a planner draft: fields, "Actor can" titles, resolvable acyclic `depends_on`, `auditor_triggers` from a fixed list, every `ui_contract` an approved contract, gates as a verdict or `skip: <reason>`) · generate-agents.sh (Copilot/Cursor agents, install-time) · fetch-jq.sh (checksum-pinned jq into ~/.claude/bin when jq is missing, install-time) · agents-md.sh (protocol block in a project's AGENTS.md, for Cursor/Copilot) |
+| scripts/ | ddd (the firewall's bash entry point, `PreToolUse` rewrite and `PostToolUse` hook) · guard.sh (PreToolUse) · vault-guard.sh (Pre/PostToolUse, SubagentStop — restores Director-only files) · lint.sh (PostToolUse) · checkpoint.sh (Stop) · session-start.sh (SessionStart) · codebase-graph.py + codemap/ + graph-viewer.html (code and workflow map of any repo, change impact, `arch` fitness check, drill-down HTML) · crap-score.py (lizard + coverage report → CRAP lines for `gate.crap`) · mutation-report.py (mutation tool report → mutant lines for `gate.mutation`) · detect-gates.py (reads a repo's manifests → the gate lines it supports today, and what each missing one needs) · gate.sh (quiet lint/types/test/build/a11y runner + diff-scoped CRAP, mutation, TODO/FIXME, no-comments and architecture-rule checks) · find-comments.sh (the comment detector behind that check) · log-event.sh (the Director's structured log.jsonl writer) · risk-gate.sh (scores each slice's risk, judges builder spawns and merges) · approve-risk.sh (the human's approval command — refuses inside an agent) · check-plan.sh (the Director's lint for a planner draft: fields, "Actor can" titles, resolvable acyclic `depends_on`, `auditor_triggers` from a fixed list, every `ui_contract` an approved contract, gates as a verdict or `skip: <reason>`) · generate-agents.sh (Copilot/Cursor agents, install-time) · fetch-jq.sh (checksum-pinned jq into ~/.claude/bin when jq is missing, install-time) · agents-md.sh (protocol block in a project's AGENTS.md, for Cursor/Copilot) |
 | workflow.json | This setup's stage order for the workflow map; verified by the map's build and CI |
 | tests/ | Test harness for the hook scripts — run after any script edit; CI runs it too |
 | evals/ | 16-task benchmark + scorecard — run before trusting, re-run after any manifest edit |
@@ -177,7 +177,8 @@ Promotion past supervised needs a 10-slice clean streak *and* a dated passing
 scorecard in `evals/` — see the promotion rule in `evals/README.md`.
 
 ## Gate commands
-`gate.sh` reads one line per step from `vault/project.md` (`/init-codebase` writes them):
+`gate.sh` reads one line per step from `vault/project.md` (the configure-gates skill
+writes them; see [Configured for you](#configured-for-you)):
 
 ```markdown
 ## Gate
@@ -219,6 +220,40 @@ describes that SHA. The patch-id hashes the diff against the base outside `vault
 (`none` when the diff is empty or the base is missing): a clean rebase keeps it, so
 verdicts survive; any content change moves it, so verdicts go stale;
 `GATE_ALLOW_DIRTY=1` overrides it for a local look.
+
+### Configured for you
+The Director sets the gate up itself. It runs the configure-gates skill at
+`/init-codebase`, and again the first time a gate run prints `SKIP (no gate.<step> …)`.
+`scripts/detect-gates.py` reads the repo's manifests and config (pyproject.toml,
+requirements, package.json and its lockfile, pom.xml, build.gradle, go.mod,
+Cargo.toml) and labels each step:
+
+```text
+STACK: node (package.json, pnpm-lock.yaml)
+READY  - gate.test: pnpm exec vitest run --coverage
+READY  - gate.crap: python3 ~/.claude/scripts/crap-score.py coverage/lcov.info -x '*.test.*' -x '*.spec.*' src
+N/A    gate.types — plain JavaScript (no typescript with a tsconfig.json)
+SLICE  gate.a11y — UI (react) without an accessibility check; add @playwright/test and @axe-core/playwright, … ⇒ - gate.a11y: …
+SLICE  gate.mutation — add @stryker-mutator/core and @stryker-mutator/vitest-runner ⇒ - gate.mutation: …
+IGNORE dist/ coverage/
+```
+
+- **READY** lines need nothing new: the repo already declares the tool. `--apply`
+  writes them, plus `none` for steps that don't apply (`N/A`) and the `.gitignore`
+  entries their output needs. The Director commits, runs the gate on main, and keeps
+  only the lines that pass there. A line that finds real problems on main is dropped
+  and becomes a cleanup card, so main stays green.
+- **SLICE** lines need a dev dependency, config or tests in the project. They go
+  through `/grill` as one tooling feature, since the Director never adds dependencies
+  itself. **TOOL** lines need a machine tool (cargo-mutants, gremlins,
+  gocover-cobertura, cargo-llvm-cov), with the install command. **ASK** lines are
+  judgment calls, such as which stack `gate.crap` follows when there are two.
+- It never changes a line a human wrote. A step you decline becomes
+  `- gate.<step>: none`, and it never asks again.
+- Coverage reports go into `.gate/` wherever the tool allows it (coverage.py,
+  pytest-cov, Jest, Go, Rust), so they need no `.gitignore` entry. CI runs the
+  detected Python lines through the real gate (`tests/crap-stacks.sh`); the detector's
+  rules for every stack are tested from sample manifests (`tests/detect-gates.sh`).
 
 ## Test speed
 A slow suite costs every slice twice, since the builder and the Director each run it
@@ -830,6 +865,7 @@ end to end); codebase-graph.py's in `tests/codebase-graph.sh`.
 | session-start.sh | SessionStart hook | Injects live slices, slices the risk gate is holding, git status and leftover worktrees (plus a one-line migration hint while vault/memory or vault/handoffs exists; deletes nothing); plain text, or `{"additional_context": ...}` for Cursor. Refreshes the AGENTS.md protocol block. |
 | agents-md.sh | `agents-md.sh [project-dir]` | Writes the protocol into the project's AGENTS.md between its markers; leaves everything else in the file alone. |
 | generate-agents.sh | `generate-agents.sh <copilot\|cursor> [dest]` | Emits derived agents (always overwritten, never hand-edit). Copilot gets an `orchestrator` whose roster is every agent in `agents/`; it isn't called "director" because that name means the main Claude Code session. |
+| detect-gates.py | `detect-gates.py [--apply] [repo root]` | Prints the repo's stacks and one line per gate step: SET, READY, N/A, ASK, SLICE or TOOL, with the proposed command. `--apply` appends READY lines (and `none` for N/A) to the Gate section of vault/project.md and the needed entries to .gitignore. It never edits an existing line, and a second run changes nothing. Exit 1 when `--apply` finds no vault/project.md. |
 | fetch-jq.sh | `fetch-jq.sh <dest-dir> [--url U --sha256 HEX]` | Downloads the official jq 1.8.1 binary for this OS into `<dest-dir>`, installs it only when its SHA-256 matches the pinned one (or the one given with `--url`) and it runs, and prints its path. Exit 1 with nothing installed otherwise. `install.sh` runs it when jq is missing. |
 | validate-manifests.sh | `validate-manifests.sh` | Checks agent and skill frontmatter, and that CLAUDE.md's Agents table matches `agents/`. |
 
