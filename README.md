@@ -18,6 +18,10 @@ cd ~/claude-setup && ./install.sh
 brew install jq gitleaks semgrep   # guardrail dependencies; on Linux, your package manager
 ```
 
+No jq and no admin rights? `install.sh` fetches the official jq 1.8.1 binary into
+`~/.claude/bin`, checks it against a pinned SHA-256, and the hook scripts find it
+there (see [jq without admin rights](#jq-without-admin-rights)).
+
 Windows: install [Git for Windows](https://git-scm.com/downloads/win), then run the same
 clone and `./install.sh` in **Git Bash**, or work inside WSL, which is Linux. Guardrail
 dependencies: `winget install jqlang.jq` and `winget install Gitleaks.Gitleaks`. Each
@@ -44,7 +48,7 @@ builds. Nothing after the grill should need you unless a slice escalates.
 | skills/ | protocol-native: grill · ui-prototype · slice-planning · risk-gate · parallel-dispatch · architecture-review · learning-loop · configure-gates · test-speed · crap-hotspots · mutation-survivors · clean-diff · harden-diff · blast-radius · `/codebase-map` · brief-contract · `/init-codebase` · `/harvest` · `/create-verification-skill` · `/maintain-verification-skill` (opt-in, `/`-only: a project-local `verify-*` skill that lets the reviewer reach live-verified evidence) — plus a general engineering-practice library, a principles index (19 pstack principles, read on demand) and pstack's prose skills: unslop · technical-writing (docs/README/ADR work) (see Credits) |
 | settings.json | Permission deny/ask lists + hooks on 6 events + env that keeps Claude Code on Windows in Git Bash |
 | context-firewall/ | `ddd` — the context firewall: artifact store, per-type compressors, retrieval, ranking, stats (Python 3.8+ stdlib, installed to `~/.claude/context-firewall/`) |
-| scripts/ | ddd (the firewall's bash entry point, `PreToolUse` rewrite and `PostToolUse` hook) · guard.sh (PreToolUse) · vault-guard.sh (Pre/PostToolUse, SubagentStop — restores Director-only files) · lint.sh (PostToolUse) · checkpoint.sh (Stop) · session-start.sh (SessionStart) · codebase-graph.py + codemap/ + graph-viewer.html (code and workflow map of any repo, change impact, `arch` fitness check, drill-down HTML) · crap-score.py (lizard + coverage report → CRAP lines for `gate.crap`) · mutation-report.py (mutation tool report → mutant lines for `gate.mutation`) · detect-gates.py (reads a repo's manifests → the gate lines it supports today, and what each missing one needs) · gate.sh (quiet lint/types/test/build/a11y runner + diff-scoped CRAP, mutation, TODO/FIXME, no-comments and architecture-rule checks) · find-comments.sh (the comment detector behind that check) · log-event.sh (the Director's structured log.jsonl writer) · risk-gate.sh (scores each slice's risk, judges builder spawns and merges) · approve-risk.sh (the human's approval command — refuses inside an agent) · check-plan.sh (the Director's lint for a planner draft: fields, "Actor can" titles, resolvable acyclic `depends_on`, `auditor_triggers` from a fixed list, every `ui_contract` an approved contract, gates as a verdict or `skip: <reason>`) · generate-agents.sh (Copilot/Cursor agents, install-time) · agents-md.sh (protocol block in a project's AGENTS.md, for Cursor/Copilot) |
+| scripts/ | ddd (the firewall's bash entry point, `PreToolUse` rewrite and `PostToolUse` hook) · guard.sh (PreToolUse) · vault-guard.sh (Pre/PostToolUse, SubagentStop — restores Director-only files) · lint.sh (PostToolUse) · checkpoint.sh (Stop) · session-start.sh (SessionStart) · codebase-graph.py + codemap/ + graph-viewer.html (code and workflow map of any repo, change impact, `arch` fitness check, drill-down HTML) · crap-score.py (lizard + coverage report → CRAP lines for `gate.crap`) · mutation-report.py (mutation tool report → mutant lines for `gate.mutation`) · detect-gates.py (reads a repo's manifests → the gate lines it supports today, and what each missing one needs) · gate.sh (quiet lint/types/test/build/a11y runner + diff-scoped CRAP, mutation, TODO/FIXME, no-comments and architecture-rule checks) · find-comments.sh (the comment detector behind that check) · log-event.sh (the Director's structured log.jsonl writer) · risk-gate.sh (scores each slice's risk, judges builder spawns and merges) · approve-risk.sh (the human's approval command — refuses inside an agent) · check-plan.sh (the Director's lint for a planner draft: fields, "Actor can" titles, resolvable acyclic `depends_on`, `auditor_triggers` from a fixed list, every `ui_contract` an approved contract, gates as a verdict or `skip: <reason>`) · generate-agents.sh (Copilot/Cursor agents, install-time) · fetch-jq.sh (checksum-pinned jq into ~/.claude/bin when jq is missing, install-time) · agents-md.sh (protocol block in a project's AGENTS.md, for Cursor/Copilot) |
 | workflow.json | This setup's stage order for the workflow map; verified by the map's build and CI |
 | tests/ | Test harness for the hook scripts — run after any script edit; CI runs it too |
 | evals/ | 16-task benchmark + scorecard — run before trusting, re-run after any manifest edit |
@@ -774,6 +778,8 @@ nothing below. CI runs the whole test harness on Windows (Git Bash) and macOS
 - **jq** from winget is a native `jq.exe`, which ends every output line with `\r\n`.
   `scripts/jq-text.sh` detects that once per script and strips the `\r`, so IDs,
   hashes, patch-ids and paths from jq compare equal (it keeps jq's exit status).
+- **No admin rights, or winget blocked:** see
+  [jq without admin rights](#jq-without-admin-rights); `install.sh` does it for you.
 - **Claude Code** uses Git Bash for its Bash tool when Git for Windows is installed. Set
   the path explicitly, since hooks have been reported to fall back to cmd.exe without it.
   In `~/.claude/settings.json`:
@@ -800,6 +806,17 @@ Known gaps on Windows:
 - **guard.sh reads bash, not PowerShell or cmd.** It knows `rm.exe` and `rm -rf C:/`,
   but not `Remove-Item -Recurse` or `rd /s`. Under Claude Code, keeping the PowerShell
   tool off covers this; under Cursor and Copilot there are no hooks to begin with.
+
+### jq without admin rights
+Every hook script sources `scripts/jq-text.sh`, which looks in `~/.claude/bin` when no
+jq is on `PATH`. A jq already on `PATH` always wins, so a package-manager jq takes
+over as soon as you install one. `install.sh` fills that folder when jq is missing:
+`scripts/fetch-jq.sh` downloads the official jq 1.8.1 release for Linux, macOS (amd64,
+arm64) or Windows (amd64), refuses it unless its SHA-256 matches the one pinned in the
+script and it runs, and saves it as `~/.claude/bin/jq` (`jq.exe` on Windows). Behind a
+proxy that blocks GitHub, download the matching file from
+github.com/jqlang/jq/releases yourself, save it under that name, and re-run
+`install.sh` so it writes the Copilot and Cursor hook files that need jq.
 
 ## AGENTS.md (Cursor and Copilot)
 Cursor and GitHub Copilot both read a project's `AGENTS.md`; Claude Code reads the
@@ -849,6 +866,7 @@ end to end); codebase-graph.py's in `tests/codebase-graph.sh`.
 | agents-md.sh | `agents-md.sh [project-dir]` | Writes the protocol into the project's AGENTS.md between its markers; leaves everything else in the file alone. |
 | generate-agents.sh | `generate-agents.sh <copilot\|cursor> [dest]` | Emits derived agents (always overwritten, never hand-edit). Copilot gets an `orchestrator` whose roster is every agent in `agents/`; it isn't called "director" because that name means the main Claude Code session. |
 | detect-gates.py | `detect-gates.py [--apply] [repo root]` | Prints the repo's stacks and one line per gate step: SET, READY, N/A, ASK, SLICE or TOOL, with the proposed command. `--apply` appends READY lines (and `none` for N/A) to the Gate section of vault/project.md and the needed entries to .gitignore. It never edits an existing line, and a second run changes nothing. Exit 1 when `--apply` finds no vault/project.md. |
+| fetch-jq.sh | `fetch-jq.sh <dest-dir> [--url U --sha256 HEX]` | Downloads the official jq 1.8.1 binary for this OS into `<dest-dir>`, installs it only when its SHA-256 matches the pinned one (or the one given with `--url`) and it runs, and prints its path. Exit 1 with nothing installed otherwise. `install.sh` runs it when jq is missing. |
 | validate-manifests.sh | `validate-manifests.sh` | Checks agent and skill frontmatter, and that CLAUDE.md's Agents table matches `agents/`. |
 
 ## Iterating

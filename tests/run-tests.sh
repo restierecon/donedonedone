@@ -144,8 +144,13 @@ echo "== guard.sh — fail closed without jq =="
 fakebin=$(mktemp -d)
 status=0
 echo '{"tool_name":"Bash","tool_input":{"command":"ls"}}' \
-  | env PATH="$fakebin" "$(command -v bash)" "$GUARD" 2>/dev/null || status=$?
+  | env HOME="$fakebin" PATH="$fakebin" "$(command -v bash)" "$GUARD" 2>/dev/null || status=$?
 if [ "$status" -eq 2 ]; then ok "blocks when jq is missing"; else bad "blocks when jq is missing" "exit $status, expected 2"; fi
+mkdir -p "$fakebin/.claude/bin"
+status=0
+echo '{"tool_name":"Bash","tool_input":{"command":"ls"}}' \
+  | env HOME="$fakebin" PATH="$fakebin" "$(command -v bash)" "$GUARD" 2>/dev/null || status=$?
+if [ "$status" -eq 2 ]; then ok "still blocks when ~/.claude/bin exists but holds no jq"; else bad "still blocks when ~/.claude/bin exists but holds no jq" "exit $status, expected 2"; fi
 rm -rf "$fakebin"
 
 echo "== guard.sh — vault integrity (gate files are Director-only) =="
@@ -947,6 +952,95 @@ else
   bad "log-event.sh writes a clean LF line even when jq writes CRLF" "$(od -c "$repo/vault/log.jsonl" | tail -3)"
 fi
 rm -rf "$repo" "$crlf_bin" "$lf_bin"
+
+echo "== jq without admin rights — ~/.claude/bin and fetch-jq.sh =="
+FETCH_JQ="$ROOT/scripts/fetch-jq.sh"
+jq_name=jq
+case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) jq_name=jq.exe ;; esac
+file_url() { if command -v cygpath >/dev/null 2>&1; then echo "file:///$(cygpath -m "$1")"; else echo "file://$1"; fi; }
+sha256_of() { if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1"; else shasum -a 256 "$1"; fi | cut -d' ' -f1 | tr -d '*'; }
+nojq_home=$(mktemp -d)
+nojq_path=$(mktemp -d)
+mkdir -p "$nojq_home/.claude/bin"
+# shellcheck disable=SC2016
+printf '#!/bin/bash\nexec "%s" "$@"\n' "$real_jq" > "$nojq_home/.claude/bin/jq"
+chmod +x "$nojq_home/.claude/bin/jq"
+# shellcheck disable=SC2016
+got=$(env HOME="$nojq_home" PATH="$nojq_path" "$(command -v bash)" -c '. "$1"; jq -rn "\"S001\""' _ "$ROOT/scripts/jq-text.sh" 2>/dev/null | tr -d '\r')
+if [ "$got" = "S001" ]; then ok "with no jq on PATH, the helper finds the one in ~/.claude/bin"; else bad "with no jq on PATH, the helper finds the one in ~/.claude/bin" "got: $got"; fi
+got=$(HOME="$nojq_home" bash -c '. "$1"; type -P jq' _ "$ROOT/scripts/jq-text.sh")
+if [ "$got" = "$real_jq" ]; then ok "a jq already on PATH wins over ~/.claude/bin"; else bad "a jq already on PATH wins over ~/.claude/bin" "got: $got"; fi
+case "$(uname -s)" in
+  MINGW*|MSYS*|CYGWIN*) ;;
+  *)
+    shadows=() nojq_dirs=""
+    IFS=: read -ra path_dirs <<< "$PATH"
+    for d in "${path_dirs[@]}"; do
+      if [ -e "$d/jq" ]; then
+        s=$(mktemp -d); ln -s "$d"/* "$s/" 2>/dev/null; rm -f "$s/jq"; shadows+=("$s"); d=$s
+      fi
+      nojq_dirs="${nojq_dirs:+$nojq_dirs:}$d"
+    done
+    status=0
+    echo '{"tool_name":"Bash","tool_input":{"command":"git push --force origin main"}}' \
+      | env HOME="$nojq_home" PATH="$nojq_dirs" bash "$GUARD" >/dev/null 2>&1 || status=$?
+    allow=0
+    echo '{"tool_name":"Bash","tool_input":{"command":"ls"}}' \
+      | env HOME="$nojq_home" PATH="$nojq_dirs" bash "$GUARD" >/dev/null 2>&1 || allow=$?
+    leaked=$(env PATH="$nojq_dirs" bash -c 'command -v jq')
+    if [ -n "$leaked" ]; then
+      bad "guard.sh enforces its rules with only the ~/.claude/bin jq" "could not hide the system jq: $leaked"
+    elif [ "$status" -eq 2 ] && [ "$allow" -eq 0 ]; then
+      ok "guard.sh enforces its rules with only the ~/.claude/bin jq"
+    else
+      bad "guard.sh enforces its rules with only the ~/.claude/bin jq" "force-push exit $status (want 2), ls exit $allow (want 0)"
+    fi
+    rm -rf "${shadows[@]}" ;;
+esac
+rm -rf "$nojq_home" "$nojq_path"
+
+src=$(mktemp -d)
+cp "$real_jq" "$src/release-jq"
+cp "$real_jq" "$src/probe-$jq_name"
+dest=$(mktemp -d)
+if ! "$src/probe-$jq_name" --version >/dev/null 2>&1; then
+  echo "  SKIP  fetch-jq.sh installs a download whose checksum matches (this machine's jq at $real_jq doesn't run once copied, e.g. a package-manager shim)"
+else
+  status=0; out=$("$FETCH_JQ" "$dest/bin" --url "$(file_url "$src/release-jq")" --sha256 "$(sha256_of "$src/release-jq")" 2>&1) || status=$?
+  if [ "$status" -eq 0 ] && [ "$out" = "$dest/bin/$jq_name" ] && [ "$("$dest/bin/$jq_name" -rn '"ok"' | tr -d '\r')" = "ok" ]; then
+    ok "fetch-jq.sh installs a download whose checksum matches, and prints where"
+  else
+    bad "fetch-jq.sh installs a download whose checksum matches, and prints where" "exit $status: $out"
+  fi
+fi
+rm -rf "$dest"; dest=$(mktemp -d)
+status=0; out=$("$FETCH_JQ" "$dest/bin" --url "$(file_url "$src/release-jq")" --sha256 0000000000000000000000000000000000000000000000000000000000000000 2>&1) || status=$?
+if [ "$status" -ne 0 ] && echo "$out" | grep -q "checksum mismatch" && [ -z "$(ls -A "$dest/bin" 2>/dev/null)" ]; then
+  ok "fetch-jq.sh refuses a download whose checksum doesn't match and leaves nothing behind"
+else
+  bad "fetch-jq.sh refuses a download whose checksum doesn't match and leaves nothing behind" "exit $status: $out; left: $(ls -A "$dest/bin" 2>/dev/null)"
+fi
+printf 'not a program\n' > "$src/broken"
+status=0; out=$("$FETCH_JQ" "$dest/bin" --url "$(file_url "$src/broken")" --sha256 "$(sha256_of "$src/broken")" 2>&1) || status=$?
+if [ "$status" -ne 0 ] && echo "$out" | grep -q "doesn't run" && [ -z "$(ls -A "$dest/bin" 2>/dev/null)" ]; then
+  ok "fetch-jq.sh refuses a download that doesn't run, even with a matching checksum"
+else
+  bad "fetch-jq.sh refuses a download that doesn't run, even with a matching checksum" "exit $status: $out"
+fi
+status=0; out=$("$FETCH_JQ" "$dest/bin" --url "$(file_url "$src/release-jq")" 2>&1) || status=$?
+if [ "$status" -ne 0 ] && echo "$out" | grep -q "go together"; then
+  ok "fetch-jq.sh never takes a custom URL without its checksum"
+else
+  bad "fetch-jq.sh never takes a custom URL without its checksum" "exit $status: $out"
+fi
+rm -rf "$src" "$dest"
+pinned=$(grep -cE '^    jq-(linux|macos)-(amd64|arm64)\) +sum=[0-9a-f]{64} ;;$|^    jq-windows-amd64\.exe\) sum=[0-9a-f]{64} ;;$' "$FETCH_JQ")
+# shellcheck disable=SC2016
+if [ "$pinned" -eq 5 ] && grep -q '"\$SRC/scripts/fetch-jq.sh" "\$DEST/bin"' "$INSTALL"; then
+  ok "install.sh fetches a jq pinned by SHA-256 for every platform it supports"
+else
+  bad "install.sh fetches a jq pinned by SHA-256 for every platform it supports" "$pinned pinned checksums"
+fi
 
 echo "== log-event.sh — structured, append-only log =="
 repo=$(make_repo)
