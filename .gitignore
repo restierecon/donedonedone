@@ -4,3 +4,6 @@
 .worktrees/
 .ddd/
 __pycache__/
+.env
+.env.*
+vault/plan-draft.json
