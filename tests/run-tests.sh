@@ -730,7 +730,7 @@ else
 fi
 sleep 30 & live=$!
 mkdir -p "$hw/gates" && : > "$hw/gates/$live" && : > "$hw/gates/999999999"
-out=$(cd "$repo" && GATE_WORKERS= GATE_WORKERS_DIR="$hw/gates" "$GATE" test 2>&1)
+out=$(cd "$repo" && GATE_WORKERS='' GATE_WORKERS_DIR="$hw/gates" "$GATE" test 2>&1)
 left=$(ls "$hw/gates")
 kill "$live" 2>/dev/null; wait "$live" 2>/dev/null
 if echo "$out" | grep -q "^workers [0-9]* (.*2 gate(s) running)" && [ "$left" = "$live" ]; then
@@ -740,7 +740,7 @@ else
 fi
 rm -rf "$repo"
 repo=$(make_gate_repo '- gate.test: echo ok')
-out=$(cd "$repo" && GATE_WORKERS= GATE_WORKERS_DIR="$hw/gates" "$GATE" test 2>&1)
+out=$(cd "$repo" && GATE_WORKERS='' GATE_WORKERS_DIR="$hw/gates" "$GATE" test 2>&1)
 if ! echo "$out" | grep -q "^workers"; then ok "a command without {workers} prints no workers line"; else bad "a command without {workers} prints no workers line" "$out"; fi
 rm -rf "$repo"
 repo=$(make_gate_repo '- gate.test: touch full-suite-ran

@@ -19,7 +19,7 @@ done
 for v in "$per_worker_mb" "$share" "$reserve_mb" ${max:+"$max"}; do
   case "$v" in ''|*[!0-9]*) usage ;; esac
 done
-[ "$per_worker_mb" -ge 1 ] && [ "$share" -ge 1 ] || usage
+if [ "$per_worker_mb" -lt 1 ] || [ "$share" -lt 1 ]; then usage; fi
 
 PROC="${TEST_WORKERS_PROC:-/proc}"
 CGROUP="${TEST_WORKERS_CGROUP:-/sys/fs/cgroup}"
@@ -71,7 +71,8 @@ cpu_quota() {
   for p in $(cgroup_paths cpu); do
     q=$(read_num "$CGROUP/cpu$p/cpu.cfs_quota_us") || q=$(read_num "$CGROUP/cpu,cpuacct$p/cpu.cfs_quota_us") || continue
     period=$(read_num "$CGROUP/cpu$p/cpu.cfs_period_us") || period=$(read_num "$CGROUP/cpu,cpuacct$p/cpu.cfs_period_us") || continue
-    [ "$q" -gt 0 ] && [ "$period" -gt 0 ] || continue
+    [ "$q" -gt 0 ] || continue
+    [ "$period" -gt 0 ] || continue
     n=$(( (q + period - 1) / period ))
     { [ -z "$best" ] || [ "$n" -lt "$best" ]; } && best=$n
   done
@@ -142,16 +143,17 @@ bsd_mem() {
 }
 
 windows_mem() {
-  local out
+  local out total free
   if [ -r "$PROC/meminfo" ]; then
     consider "$(meminfo_kb MemTotal)" "$(meminfo_kb MemFree)"
     return 0
   fi
+  # shellcheck disable=SC2016
   out=$(powershell.exe -NoProfile -NonInteractive -Command \
     '$o = Get-CimInstance Win32_OperatingSystem; "$($o.TotalVisibleMemorySize) $($o.FreePhysicalMemory)"' 2>/dev/null | tr -d '\r')
-  set -- $out
-  case "${1:-}${2:-}" in ''|*[!0-9]*) return 0 ;; esac
-  consider "$1" "$2"
+  read -r total free <<< "$out"
+  case "${total:-}${free:-}" in ''|*[!0-9]*) return 0 ;; esac
+  consider "$total" "$free"
 }
 
 os="${TEST_WORKERS_OS:-$(uname -s 2>/dev/null)}"
