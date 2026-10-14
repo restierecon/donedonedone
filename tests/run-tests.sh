@@ -656,7 +656,7 @@ mkdir -p "$hw/bin" "$hw/proc/self" "$hw/cg"
 printf '#!/bin/sh\necho 16\n' > "$hw/bin/nproc"
 chmod +x "$hw/bin/nproc"
 fake_mem() { printf 'MemTotal: %s kB\nMemFree: 1 kB\nMemAvailable: %s kB\n' "$1" "$2" > "$hw/proc/meminfo"; }
-workers_on() { PATH="$hw/bin:$PATH" TEST_WORKERS_PROC="$hw/proc" TEST_WORKERS_CGROUP="$hw/cg" "$WORKERS" "$@"; }
+workers_on() { PATH="$hw/bin:$PATH" TEST_WORKERS_OS="${os:-Linux}" TEST_WORKERS_PROC="$hw/proc" TEST_WORKERS_CGROUP="$hw/cg" "$WORKERS" "$@"; }
 fake_mem 8388608 6291456
 echo '0::/' > "$hw/proc/self/cgroup"
 out=$(workers_on)
@@ -693,6 +693,31 @@ out=$(workers_on --share 3)
 if [ "$out" = "1" ]; then ok "a starved machine still gets one worker, never zero"; else bad "a starved machine still gets one worker, never zero" "got $out"; fi
 status=0; workers_on --mb 1g >/dev/null 2>&1 || status=$?
 if [ "$status" -eq 2 ]; then ok "a non-numeric worker size is a usage error"; else bad "a non-numeric worker size is a usage error" "exit $status"; fi
+rm -f "$hw/proc/meminfo"
+# shellcheck disable=SC2016
+printf '%s\n' '#!/bin/sh' 'case "$2" in' 'hw.memsize) echo 17179869184 ;; hw.physmem) echo 8589934592 ;; hw.pagesize) echo 16384 ;;' \
+  'vm.stats.vm.v_free_count) echo 131072 ;; vm.stats.vm.v_inactive_count) echo 65536 ;; *) exit 1 ;;' 'esac' > "$hw/bin/sysctl"
+printf '%s\n' '#!/bin/sh' 'echo "Mach Virtual Memory Statistics: (page size of 16384 bytes)"' 'echo "Pages free:          65536."' \
+  'echo "Pages active:       500000."' 'echo "Pages inactive:     131072."' 'echo "Pages purgeable:    100000."' > "$hw/bin/vm_stat"
+printf '%s\n' '#!/bin/sh' 'printf "16777216 7340032\r\n"' > "$hw/bin/powershell.exe"
+chmod +x "$hw/bin/sysctl" "$hw/bin/vm_stat" "$hw/bin/powershell.exe"
+out=$(os=Darwin workers_on --explain)
+if [ "${out%% *}" = "2" ] && echo "$out" | grep -q "3072 MiB free of 16384"; then ok "macOS: hw.memsize and vm_stat free + inactive pages, purgeable not double-counted"; else bad "macOS: hw.memsize and vm_stat free + inactive pages, purgeable not double-counted" "got $out"; fi
+out=$(os=FreeBSD workers_on --explain)
+if [ "${out%% *}" = "2" ] && echo "$out" | grep -q "3072 MiB free of 8192"; then ok "FreeBSD: hw.physmem and the vm.stats free + inactive page counts"; else bad "FreeBSD: hw.physmem and the vm.stats free + inactive page counts" "got $out"; fi
+out=$(os=MINGW64_NT-10.0 workers_on --explain)
+if [ "${out%% *}" = "6" ] && echo "$out" | grep -q "7168 MiB free of 16384"; then ok "Windows without /proc/meminfo: PowerShell's Win32_OperatingSystem, CRLF and all"; else bad "Windows without /proc/meminfo: PowerShell's Win32_OperatingSystem, CRLF and all" "got $out"; fi
+printf 'MemTotal:       16777216 kB\nMemFree:         4194304 kB\nHighTotal:             0 kB\n' > "$hw/proc/meminfo"
+out=$(os=CYGWIN_NT-10.0 workers_on)
+if [ "$out" = "3" ]; then ok "Git Bash/Cygwin /proc/meminfo has no MemAvailable: MemFree is used"; else bad "Git Bash/Cygwin /proc/meminfo has no MemAvailable: MemFree is used" "got $out"; fi
+echo '0::/ci' > "$hw/proc/self/cgroup"
+echo '100000 100000' > "$hw/cg/ci/cpu.max"
+out=$(os=Darwin workers_on --explain)
+if echo "$out" | grep -q "(16 CPUs"; then ok "cgroup quotas are read on Linux only"; else bad "cgroup quotas are read on Linux only" "got $out"; fi
+rm -f "$hw/bin/sysctl" "$hw/bin/powershell.exe" "$hw/cg/ci/cpu.max" "$hw/proc/meminfo"
+out=$(os=OpenBSD workers_on --explain)
+if [ "${out%% *}" = "8" ] && echo "$out" | grep -q "memory unknown"; then ok "an OS with no memory source falls back to half the CPUs"; else bad "an OS with no memory source falls back to half the CPUs" "got $out"; fi
+os=
 
 # shellcheck disable=SC2016
 repo=$(make_gate_repo '- gate.test: echo "n={workers} xdist=$PYTEST_XDIST_AUTO_NUM_WORKERS env=$GATE_WORKERS"')

@@ -247,9 +247,16 @@ jest's default) runs once per gate and can exhaust memory. Before any step runs,
 `gate.sh` sets a worker budget with `scripts/test-workers.sh`: the CPU count (capped by
 any cgroup CPU quota), and the memory left after a 1 GiB reserve, at
 `gate.workers.mb` per worker. The lower of the two wins, split evenly across the gates
-running on the machine at that moment. Memory is the lower of the host's free memory
-and any cgroup v1/v2 limit, so containers and CI runners are sized by their own limit,
-not the host's. The budget is never below 1.
+running on the machine at that moment. The budget is never below 1. Memory comes from
+the OS's own source:
+
+| OS (`uname -s`) | Free memory | Limits also honored |
+|---|---|---|
+| Linux, WSL | `/proc/meminfo` MemAvailable | cgroup v1/v2 memory limit and CPU quota, so containers and CI runners are sized by their own limit, not the host's |
+| macOS | `hw.memsize`, `vm_stat` free + inactive pages | |
+| FreeBSD, DragonFly | `hw.physmem`, `vm.stats.vm` free + inactive + cache pages | |
+| Windows (Git Bash, MSYS2, Cygwin) | `/proc/meminfo` MemFree, else PowerShell `Win32_OperatingSystem` | |
+| anything else | `/proc/meminfo` if present, else half the CPUs | |
 
 ```markdown
 - gate.test: python -m pytest -q -n {workers}

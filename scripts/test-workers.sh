@@ -92,33 +92,80 @@ consider() {
   return 0
 }
 
-unlimited_kb=$(( 1 << 42 ))
-if [ -r "$PROC/meminfo" ]; then
-  avail=$(meminfo_kb MemAvailable)
-  [ -n "$avail" ] || avail=$(( $(meminfo_kb MemFree || true) + 0 ))
-  consider "$(meminfo_kb MemTotal)" "$avail"
-elif total_b=$(sysctl -n hw.memsize 2>/dev/null); then
-  page=$(sysctl -n hw.pagesize 2>/dev/null || echo 4096)
-  pages=$(vm_stat 2>/dev/null | awk '/Pages (free|inactive|speculative|purgeable)/ { gsub(/\./, "", $NF); n += $NF } END { print n + 0 }')
-  consider $(( total_b / 1024 )) $(( pages * page / 1024 ))
-fi
-for p in $(cgroup_paths v2); do
-  limit=$(cat "$CGROUP$p/memory.max" 2>/dev/null | tr -d ' \r\n')
-  case "$limit" in ''|max|*[!0-9]*) continue ;; esac
-  used=$(read_num "$CGROUP$p/memory.current") || used=0
-  inactive=$(awk '$1 == "inactive_file" { print $2; exit }' "$CGROUP$p/memory.stat" 2>/dev/null)
-  consider $(( limit / 1024 )) $(( (limit - used + ${inactive:-0}) / 1024 ))
-done
-for p in $(cgroup_paths memory); do
-  limit=$(read_num "$CGROUP/memory$p/memory.limit_in_bytes") || continue
-  [ $(( limit / 1024 )) -lt "$unlimited_kb" ] || continue
-  used=$(read_num "$CGROUP/memory$p/memory.usage_in_bytes") || used=0
-  inactive=$(awk '$1 == "total_inactive_file" { print $2; exit }' "$CGROUP/memory$p/memory.stat" 2>/dev/null)
-  consider $(( limit / 1024 )) $(( (limit - used + ${inactive:-0}) / 1024 ))
-done
+sysctl_num() {
+  local v
+  v=$(sysctl -n "$1" 2>/dev/null | tr -d ' \r\n')
+  case "$v" in ''|*[!0-9]*) return 1 ;; esac
+  printf '%s\n' "$v"
+}
+
+linux_mem() {
+  local avail p limit used inactive unlimited_kb=$(( 1 << 42 ))
+  if [ -r "$PROC/meminfo" ]; then
+    avail=$(meminfo_kb MemAvailable)
+    [ -n "$avail" ] || avail=$(meminfo_kb MemFree)
+    consider "$(meminfo_kb MemTotal)" "${avail:-0}"
+  fi
+  for p in $(cgroup_paths v2); do
+    [ -r "$CGROUP$p/memory.max" ] || continue
+    limit=$(tr -d ' \r\n' < "$CGROUP$p/memory.max")
+    case "$limit" in ''|max|*[!0-9]*) continue ;; esac
+    used=$(read_num "$CGROUP$p/memory.current") || used=0
+    inactive=$(awk '$1 == "inactive_file" { print $2; exit }' "$CGROUP$p/memory.stat" 2>/dev/null)
+    consider $(( limit / 1024 )) $(( (limit - used + ${inactive:-0}) / 1024 ))
+  done
+  for p in $(cgroup_paths memory); do
+    limit=$(read_num "$CGROUP/memory$p/memory.limit_in_bytes") || continue
+    [ $(( limit / 1024 )) -lt "$unlimited_kb" ] || continue
+    used=$(read_num "$CGROUP/memory$p/memory.usage_in_bytes") || used=0
+    inactive=$(awk '$1 == "total_inactive_file" { print $2; exit }' "$CGROUP/memory$p/memory.stat" 2>/dev/null)
+    consider $(( limit / 1024 )) $(( (limit - used + ${inactive:-0}) / 1024 ))
+  done
+}
+
+darwin_mem() {
+  local total page pages
+  total=$(sysctl_num hw.memsize) || return 0
+  page=$(sysctl_num hw.pagesize) || page=4096
+  pages=$(vm_stat 2>/dev/null | awk '/^Pages (free|inactive):/ { gsub(/\./, "", $NF); n += $NF } END { print n + 0 }')
+  consider $(( total / 1024 )) $(( pages * page / 1024 ))
+}
+
+bsd_mem() {
+  local total page free inactive cache
+  total=$(sysctl_num hw.physmem) || return 0
+  page=$(sysctl_num hw.pagesize) || page=4096
+  free=$(sysctl_num vm.stats.vm.v_free_count) || return 0
+  inactive=$(sysctl_num vm.stats.vm.v_inactive_count) || inactive=0
+  cache=$(sysctl_num vm.stats.vm.v_cache_count) || cache=0
+  consider $(( total / 1024 )) $(( (free + inactive + cache) * page / 1024 ))
+}
+
+windows_mem() {
+  local out
+  if [ -r "$PROC/meminfo" ]; then
+    consider "$(meminfo_kb MemTotal)" "$(meminfo_kb MemFree)"
+    return 0
+  fi
+  out=$(powershell.exe -NoProfile -NonInteractive -Command \
+    '$o = Get-CimInstance Win32_OperatingSystem; "$($o.TotalVisibleMemorySize) $($o.FreePhysicalMemory)"' 2>/dev/null | tr -d '\r')
+  set -- $out
+  case "${1:-}${2:-}" in ''|*[!0-9]*) return 0 ;; esac
+  consider "$1" "$2"
+}
+
+os="${TEST_WORKERS_OS:-$(uname -s 2>/dev/null)}"
+case "$os" in
+  Darwin) darwin_mem ;;
+  FreeBSD|DragonFly) bsd_mem ;;
+  MINGW*|MSYS*|CYGWIN*|Windows_NT) windows_mem ;;
+  *) linux_mem ;;
+esac
 
 cpus=$(cpu_count)
-quota=$(cpu_quota) && [ "$quota" -lt "$cpus" ] && cpus=$quota
+case "$os" in
+  Linux|'') quota=$(cpu_quota) && [ "$quota" -lt "$cpus" ] && cpus=$quota ;;
+esac
 by_cpu=$(( cpus / share ))
 
 reserve_kb=$(( reserve_mb * 1024 ))
