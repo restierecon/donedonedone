@@ -82,6 +82,12 @@ if [ "$focused" -eq 0 ]; then
   [ "$mutation_min" -le 100 ] || { echo "gate.sh: gate.mutation.min must be a whole percent 0-100, not '$mutation_min'" >&2; exit 1; }
 fi
 
+worker_mb=$(setting 'workers\.mb')
+worker_max=$(setting 'workers\.max')
+case "$worker_mb$worker_max${GATE_WORKERS:-}" in
+  *[!0-9]*) echo "gate.sh: gate.workers.mb, gate.workers.max and GATE_WORKERS must be whole numbers" >&2; exit 1 ;;
+esac
+
 dirty=""
 [ "$focused" -eq 0 ] && dirty=$(git -C "$top" status --porcelain -- . ':(exclude)vault' ':(exclude).gate')
 if [ -n "$dirty" ] && [ "${GATE_ALLOW_DIRTY:-}" != "1" ]; then
@@ -104,6 +110,36 @@ fi
 logdir="$top/.gate"
 mkdir -p "$logdir"
 failed=()
+
+gates_dir="${GATE_WORKERS_DIR:-${TMPDIR:-/tmp}/ddd-gates-$(id -u)}"
+mkdir -p "$gates_dir" 2>/dev/null && : > "$gates_dir/$$" 2>/dev/null && trap 'rm -f "$gates_dir/$$"' EXIT
+running=0
+for f in "$gates_dir"/*; do
+  [ -e "$f" ] || continue
+  if kill -0 "${f##*/}" 2>/dev/null; then running=$((running + 1)); else rm -f "$f"; fi
+done
+[ "$running" -lt 1 ] && running=1
+if [ -n "${GATE_WORKERS:-}" ] && [ "$GATE_WORKERS" -ge 1 ]; then
+  workers_note="$GATE_WORKERS (GATE_WORKERS)"
+else
+  workers_note=$("$GATE_DIR/test-workers.sh" --share "$running" --mb "${worker_mb:-1024}" ${worker_max:+--max "$worker_max"} --explain 2>/dev/null) || workers_note="1 (test-workers.sh failed)"
+fi
+workers="${workers_note%% *}"
+export GATE_WORKERS="$workers"
+export PYTEST_XDIST_AUTO_NUM_WORKERS="${PYTEST_XDIST_AUTO_NUM_WORKERS:-$workers}"
+export RUST_TEST_THREADS="${RUST_TEST_THREADS:-$workers}"
+export NEXTEST_TEST_THREADS="${NEXTEST_TEST_THREADS:-$workers}"
+export CARGO_BUILD_JOBS="${CARGO_BUILD_JOBS:-$workers}"
+case " ${GOFLAGS:-} " in *" -p="*) ;; *) export GOFLAGS="${GOFLAGS:+$GOFLAGS }-p=$workers" ;; esac
+workers_shown=0
+
+with_workers() {
+  run_cmd="$1"
+  case "$1" in *'{workers}'*) ;; *) return ;; esac
+  run_cmd="${1//\{workers\}/$workers}"
+  [ "$workers_shown" -eq 0 ] && echo "workers $workers_note"
+  workers_shown=1
+}
 
 added_markers() {
   git -C "$top" diff -U0 "$1...HEAD" -- . ':(exclude)vault' | awk '
@@ -280,7 +316,8 @@ for step in "${steps[@]}"; do
     esac
     log="$logdir/crap.log"
     start=$(date +%s)
-    (cd "$top" && bash -c "$cmd") >"$log" 2>&1
+    with_workers "$cmd"
+    (cd "$top" && bash -c "$run_cmd") >"$log" 2>&1
     status=$?
     secs=$(( $(date +%s) - start ))
     if [ "$status" -ne 0 ]; then
@@ -333,7 +370,8 @@ for step in "${steps[@]}"; do
     sed 's/:[0-9]*$//' "$logdir/mutation.touched" | sort -u > "$logdir/mutation.files"
     log="$logdir/mutation.log"
     start=$(date +%s)
-    (cd "$top" && GATE_BASE="$base" GATE_MUTATION_FILES="$logdir/mutation.files" bash -c "$cmd") >"$log" 2>&1
+    with_workers "$cmd"
+    (cd "$top" && GATE_BASE="$base" GATE_MUTATION_FILES="$logdir/mutation.files" bash -c "$run_cmd") >"$log" 2>&1
     status=$?
     secs=$(( $(date +%s) - start ))
     if [ "$status" -ne 0 ]; then
@@ -385,7 +423,8 @@ for step in "${steps[@]}"; do
   fi
   log="$logdir/$step.log"
   start=$(date +%s)
-  (cd "$top" && bash -c "$cmd") >"$log" 2>&1
+  with_workers "$cmd"
+  (cd "$top" && bash -c "$run_cmd") >"$log" 2>&1
   status=$?
   secs=$(( $(date +%s) - start ))
   if [ "$status" -eq 0 ] && [ "$step" = "test" ] && [ -n "$budget" ] && [ "$secs" -gt "$budget" ]; then

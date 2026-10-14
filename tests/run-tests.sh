@@ -649,6 +649,110 @@ else
 fi
 rm -rf "$repo"
 
+echo "== test-workers.sh — worker budget from CPUs, memory and running gates =="
+WORKERS="$ROOT/scripts/test-workers.sh"
+hw=$(mktemp -d)
+mkdir -p "$hw/bin" "$hw/proc/self" "$hw/cg"
+printf '#!/bin/sh\necho 16\n' > "$hw/bin/nproc"
+chmod +x "$hw/bin/nproc"
+fake_mem() { printf 'MemTotal: %s kB\nMemFree: 1 kB\nMemAvailable: %s kB\n' "$1" "$2" > "$hw/proc/meminfo"; }
+workers_on() { PATH="$hw/bin:$PATH" TEST_WORKERS_OS="${os:-Linux}" TEST_WORKERS_PROC="$hw/proc" TEST_WORKERS_CGROUP="$hw/cg" "$WORKERS" "$@"; }
+fake_mem 8388608 6291456
+echo '0::/' > "$hw/proc/self/cgroup"
+out=$(workers_on)
+if [ "$out" = "5" ]; then ok "free memory, not CPU count, caps workers (16 CPUs, 6 GiB free − 1 GiB reserve → 5)"; else bad "free memory, not CPU count, caps workers (16 CPUs, 6 GiB free − 1 GiB reserve → 5)" "got $out"; fi
+out=$(workers_on --share 2)
+if [ "$out" = "3" ]; then ok "two running gates split the machine: half the memory each"; else bad "two running gates split the machine: half the memory each" "got $out"; fi
+out=$(workers_on --mb 2048)
+if [ "$out" = "2" ]; then ok "gate.workers.mb sizes each worker"; else bad "gate.workers.mb sizes each worker" "got $out"; fi
+out=$(workers_on --max 2)
+if [ "$out" = "2" ]; then ok "gate.workers.max caps the count"; else bad "gate.workers.max caps the count" "got $out"; fi
+fake_mem 67108864 67108864
+echo '0::/ci/job' > "$hw/proc/self/cgroup"
+mkdir -p "$hw/cg/ci/job"
+echo max > "$hw/cg/ci/memory.max"
+echo 4294967296 > "$hw/cg/ci/job/memory.max"
+echo 1073741824 > "$hw/cg/ci/job/memory.current"
+out=$(workers_on)
+if [ "$out" = "2" ]; then ok "a cgroup v2 memory limit beats the host's free memory (4 GiB limit, 1 GiB used → 2)"; else bad "a cgroup v2 memory limit beats the host's free memory (4 GiB limit, 1 GiB used → 2)" "got $out"; fi
+rm -f "$hw/cg/ci/job/memory.max" "$hw/cg/ci/job/memory.current"
+echo '300000 100000' > "$hw/cg/ci/cpu.max"
+out=$(workers_on)
+if [ "$out" = "3" ]; then ok "a cgroup CPU quota beats nproc (3 CPUs of quota on a 16-core host)"; else bad "a cgroup CPU quota beats nproc (3 CPUs of quota on a 16-core host)" "got $out"; fi
+rm -f "$hw/cg/ci/cpu.max"
+printf '4:memory:/runner\n0::/\n' > "$hw/proc/self/cgroup"
+mkdir -p "$hw/cg/memory/runner"
+echo 9223372036854771712 > "$hw/cg/memory/memory.limit_in_bytes"
+echo 3221225472 > "$hw/cg/memory/runner/memory.limit_in_bytes"
+echo 0 > "$hw/cg/memory/runner/memory.usage_in_bytes"
+out=$(workers_on)
+if [ "$out" = "2" ]; then ok "a cgroup v1 memory limit counts, and v1's unlimited sentinel doesn't"; else bad "a cgroup v1 memory limit counts, and v1's unlimited sentinel doesn't" "got $out"; fi
+echo '0::/' > "$hw/proc/self/cgroup"
+fake_mem 1048576 524288
+out=$(workers_on --share 3)
+if [ "$out" = "1" ]; then ok "a starved machine still gets one worker, never zero"; else bad "a starved machine still gets one worker, never zero" "got $out"; fi
+status=0; workers_on --mb 1g >/dev/null 2>&1 || status=$?
+if [ "$status" -eq 2 ]; then ok "a non-numeric worker size is a usage error"; else bad "a non-numeric worker size is a usage error" "exit $status"; fi
+rm -f "$hw/proc/meminfo"
+# shellcheck disable=SC2016
+printf '%s\n' '#!/bin/sh' 'case "$2" in' 'hw.memsize) echo 17179869184 ;; hw.physmem) echo 8589934592 ;; hw.pagesize) echo 16384 ;;' \
+  'vm.stats.vm.v_free_count) echo 131072 ;; vm.stats.vm.v_inactive_count) echo 65536 ;; *) exit 1 ;;' 'esac' > "$hw/bin/sysctl"
+printf '%s\n' '#!/bin/sh' 'echo "Mach Virtual Memory Statistics: (page size of 16384 bytes)"' 'echo "Pages free:          65536."' \
+  'echo "Pages active:       500000."' 'echo "Pages inactive:     131072."' 'echo "Pages purgeable:    100000."' > "$hw/bin/vm_stat"
+printf '%s\n' '#!/bin/sh' 'printf "16777216 7340032\r\n"' > "$hw/bin/powershell.exe"
+chmod +x "$hw/bin/sysctl" "$hw/bin/vm_stat" "$hw/bin/powershell.exe"
+out=$(os=Darwin workers_on --explain)
+if [ "${out%% *}" = "2" ] && echo "$out" | grep -q "3072 MiB free of 16384"; then ok "macOS: hw.memsize and vm_stat free + inactive pages, purgeable not double-counted"; else bad "macOS: hw.memsize and vm_stat free + inactive pages, purgeable not double-counted" "got $out"; fi
+out=$(os=FreeBSD workers_on --explain)
+if [ "${out%% *}" = "2" ] && echo "$out" | grep -q "3072 MiB free of 8192"; then ok "FreeBSD: hw.physmem and the vm.stats free + inactive page counts"; else bad "FreeBSD: hw.physmem and the vm.stats free + inactive page counts" "got $out"; fi
+out=$(os=MINGW64_NT-10.0 workers_on --explain)
+if [ "${out%% *}" = "6" ] && echo "$out" | grep -q "7168 MiB free of 16384"; then ok "Windows without /proc/meminfo: PowerShell's Win32_OperatingSystem, CRLF and all"; else bad "Windows without /proc/meminfo: PowerShell's Win32_OperatingSystem, CRLF and all" "got $out"; fi
+printf 'MemTotal:       16777216 kB\nMemFree:         4194304 kB\nHighTotal:             0 kB\n' > "$hw/proc/meminfo"
+out=$(os=CYGWIN_NT-10.0 workers_on)
+if [ "$out" = "3" ]; then ok "Git Bash/Cygwin /proc/meminfo has no MemAvailable: MemFree is used"; else bad "Git Bash/Cygwin /proc/meminfo has no MemAvailable: MemFree is used" "got $out"; fi
+echo '0::/ci' > "$hw/proc/self/cgroup"
+echo '100000 100000' > "$hw/cg/ci/cpu.max"
+out=$(os=Darwin workers_on --explain)
+if echo "$out" | grep -q "(16 CPUs"; then ok "cgroup quotas are read on Linux only"; else bad "cgroup quotas are read on Linux only" "got $out"; fi
+rm -f "$hw/bin/sysctl" "$hw/bin/powershell.exe" "$hw/cg/ci/cpu.max" "$hw/proc/meminfo"
+out=$(os=OpenBSD workers_on --explain)
+if [ "${out%% *}" = "8" ] && echo "$out" | grep -q "memory unknown"; then ok "an OS with no memory source falls back to half the CPUs"; else bad "an OS with no memory source falls back to half the CPUs" "got $out"; fi
+os=
+
+# shellcheck disable=SC2016
+repo=$(make_gate_repo '- gate.test: echo "n={workers} xdist=$PYTEST_XDIST_AUTO_NUM_WORKERS env=$GATE_WORKERS"')
+status=0; out=$(cd "$repo" && GATE_WORKERS=3 GATE_WORKERS_DIR="$hw/gates" "$GATE" test 2>&1) || status=$?
+if [ "$status" -eq 0 ] && echo "$out" | grep -qx "workers 3 (GATE_WORKERS)" \
+   && [ "$(cat "$repo/.gate/test.log")" = "n=3 xdist=3 env=3" ]; then
+  ok "gate.sh fills {workers} and exports the count to the runners' own knobs"
+else
+  bad "gate.sh fills {workers} and exports the count to the runners' own knobs" "exit $status: $out / $(cat "$repo/.gate/test.log")"
+fi
+sleep 30 & live=$!
+mkdir -p "$hw/gates" && : > "$hw/gates/$live" && : > "$hw/gates/999999999"
+out=$(cd "$repo" && GATE_WORKERS='' GATE_WORKERS_DIR="$hw/gates" "$GATE" test 2>&1)
+left=$(ls "$hw/gates")
+kill "$live" 2>/dev/null; wait "$live" 2>/dev/null
+if echo "$out" | grep -q "^workers [0-9]* (.*2 gate(s) running)" && [ "$left" = "$live" ]; then
+  ok "gate.sh counts live gates, drops dead ones, and deregisters on exit"
+else
+  bad "gate.sh counts live gates, drops dead ones, and deregisters on exit" "$out / $(ls "$hw/gates")"
+fi
+rm -rf "$repo"
+repo=$(make_gate_repo '- gate.test: echo ok')
+out=$(cd "$repo" && GATE_WORKERS='' GATE_WORKERS_DIR="$hw/gates" "$GATE" test 2>&1)
+if ! echo "$out" | grep -q "^workers"; then ok "a command without {workers} prints no workers line"; else bad "a command without {workers} prints no workers line" "$out"; fi
+rm -rf "$repo"
+repo=$(make_gate_repo '- gate.test: touch full-suite-ran
+- gate.workers.mb: 1g')
+status=0; out=$(cd "$repo" && GATE_WORKERS_DIR="$hw/gates" "$GATE" test 2>&1) || status=$?
+if [ "$status" -eq 1 ] && echo "$out" | grep -q "must be whole numbers" && [ ! -e "$repo/full-suite-ran" ]; then
+  ok "a gate.workers.mb that isn't whole MiB fails before the suite runs"
+else
+  bad "a gate.workers.mb that isn't whole MiB fails before the suite runs" "exit $status: $out"
+fi
+rm -rf "$repo" "$hw"
+
 echo "== gate.sh — built-in markers step =="
 repo=$(make_gate_repo '')
 git -C "$repo" checkout -q -b slice/S001

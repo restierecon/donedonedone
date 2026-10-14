@@ -52,6 +52,11 @@ only what is missing, and always run step 6 and the configure-gates skill (step 
    `- gate.test.focus: <cmd>` with `{}` where test files or ids go (`pytest -q {}`,
    `npx vitest run {}`, `go test {}`) — builders run only their own tests mid-loop ·
    `- gate.test.budget: <seconds>` — the gate flags a full suite slower than this ·
+   `{workers}` in any parallel runner's worker flag (`pytest -q -n {workers}`,
+   `npx jest --maxWorkers={workers}`, `npx vitest run --maxWorkers={workers}`,
+   `mvn -q -B test -T {workers}`) — never `-n auto` or a fixed count, so concurrent
+   slice gates can't run the machine out of memory · `- gate.workers.mb: <MiB>` when
+   one worker of this suite needs more than the default 1024 ·
    `- gate.crap: <cmd>` printing `<path>:<start>-<end> <score> <name>` per function,
    usually `~/.claude/scripts/crap-score.py <coverage report> <src dir>` reading the
    report `gate.test` writes (README → CRAP → Per-stack setup has Python, React and Java

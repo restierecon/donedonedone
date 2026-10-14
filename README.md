@@ -48,7 +48,7 @@ builds. Nothing after the grill should need you unless a slice escalates.
 | skills/ | protocol-native: grill · ui-prototype · slice-planning · risk-gate · parallel-dispatch · architecture-review · learning-loop · configure-gates · test-speed · crap-hotspots · mutation-survivors · clean-diff · harden-diff · blast-radius · `/codebase-map` · brief-contract · `/init-codebase` · `/harvest` · `/create-verification-skill` · `/maintain-verification-skill` (opt-in, `/`-only: a project-local `verify-*` skill that lets the reviewer reach live-verified evidence) — plus a general engineering-practice library, a principles index (19 pstack principles, read on demand) and pstack's prose skills: unslop · technical-writing (docs/README/ADR work) (see Credits) |
 | settings.json | Permission deny/ask lists + hooks on 6 events + env that keeps Claude Code on Windows in Git Bash |
 | context-firewall/ | `ddd` — the context firewall: artifact store, per-type compressors, retrieval, ranking, stats (Python 3.8+ stdlib, installed to `~/.claude/context-firewall/`) |
-| scripts/ | ddd (the firewall's bash entry point, `PreToolUse` rewrite and `PostToolUse` hook) · guard.sh (PreToolUse) · vault-guard.sh (Pre/PostToolUse, SubagentStop — restores Director-only files) · lint.sh (PostToolUse) · checkpoint.sh (Stop) · session-start.sh (SessionStart) · codebase-graph.py + codemap/ + graph-viewer.html (code and workflow map of any repo, change impact, `arch` fitness check, drill-down HTML) · crap-score.py (lizard + coverage report → CRAP lines for `gate.crap`) · mutation-report.py (mutation tool report → mutant lines for `gate.mutation`) · detect-gates.py (reads a repo's manifests → the gate lines it supports today, and what each missing one needs) · gate.sh (quiet lint/types/test/build/a11y runner + diff-scoped CRAP, mutation, TODO/FIXME, no-comments and architecture-rule checks) · find-comments.sh (the comment detector behind that check) · log-event.sh (the Director's structured log.jsonl writer) · risk-gate.sh (scores each slice's risk, judges builder spawns and merges) · approve-risk.sh (the human's approval command — refuses inside an agent) · check-plan.sh (the Director's lint for a planner draft: fields, "Actor can" titles, resolvable acyclic `depends_on`, `auditor_triggers` from a fixed list, every `ui_contract` an approved contract, gates as a verdict or `skip: <reason>`) · generate-agents.sh (Copilot/Cursor agents, install-time) · fetch-jq.sh (checksum-pinned jq into ~/.claude/bin when jq is missing, install-time) · agents-md.sh (protocol block in a project's AGENTS.md, for Cursor/Copilot) |
+| scripts/ | ddd (the firewall's bash entry point, `PreToolUse` rewrite and `PostToolUse` hook) · guard.sh (PreToolUse) · vault-guard.sh (Pre/PostToolUse, SubagentStop — restores Director-only files) · lint.sh (PostToolUse) · checkpoint.sh (Stop) · session-start.sh (SessionStart) · codebase-graph.py + codemap/ + graph-viewer.html (code and workflow map of any repo, change impact, `arch` fitness check, drill-down HTML) · crap-score.py (lizard + coverage report → CRAP lines for `gate.crap`) · mutation-report.py (mutation tool report → mutant lines for `gate.mutation`) · detect-gates.py (reads a repo's manifests → the gate lines it supports today, and what each missing one needs) · gate.sh (quiet lint/types/test/build/a11y runner + diff-scoped CRAP, mutation, TODO/FIXME, no-comments and architecture-rule checks) · test-workers.sh (the per-gate worker budget behind `{workers}`, from CPUs, free memory, cgroup limits and running gates) · find-comments.sh (the comment detector behind that check) · log-event.sh (the Director's structured log.jsonl writer) · risk-gate.sh (scores each slice's risk, judges builder spawns and merges) · approve-risk.sh (the human's approval command — refuses inside an agent) · check-plan.sh (the Director's lint for a planner draft: fields, "Actor can" titles, resolvable acyclic `depends_on`, `auditor_triggers` from a fixed list, every `ui_contract` an approved contract, gates as a verdict or `skip: <reason>`) · generate-agents.sh (Copilot/Cursor agents, install-time) · fetch-jq.sh (checksum-pinned jq into ~/.claude/bin when jq is missing, install-time) · agents-md.sh (protocol block in a project's AGENTS.md, for Cursor/Copilot) |
 | workflow.json | This setup's stage order for the workflow map; verified by the map's build and CI |
 | tests/ | Test harness for the hook scripts — run after any script edit; CI runs it too |
 | evals/ | 16-task benchmark + scorecard — run before trusting, re-run after any manifest edit |
@@ -275,6 +275,45 @@ in full, and every later slice too. Two optional lines keep that cost down:
   because the slice may not be what slowed the suite. The Director opens one
   pending-review entry and the `test-speed` skill takes it from there: measure,
   classify, grill, slice. A budget that isn't whole seconds fails before the suite runs.
+
+### Test workers
+Parallel slices each run their own gate, so a runner told to use every core (`-n auto`,
+jest's default) runs once per gate and can exhaust memory. Before any step runs,
+`gate.sh` sets a worker budget with `scripts/test-workers.sh`: the CPU count (capped by
+any cgroup CPU quota), and the memory left after a 1 GiB reserve, at
+`gate.workers.mb` per worker. The lower of the two wins, split evenly across the gates
+running on the machine at that moment. The budget is never below 1. Memory comes from
+the OS's own source:
+
+| OS (`uname -s`) | Free memory | Limits also honored |
+|---|---|---|
+| Linux, WSL | `/proc/meminfo` MemAvailable | cgroup v1/v2 memory limit and CPU quota, so containers and CI runners are sized by their own limit, not the host's |
+| macOS | `hw.memsize`, `vm_stat` free + inactive pages | |
+| FreeBSD, DragonFly | `hw.physmem`, `vm.stats.vm` free + inactive + cache pages | |
+| Windows (Git Bash, MSYS2, Cygwin) | `/proc/meminfo` MemFree, else PowerShell `Win32_OperatingSystem` | |
+| anything else | `/proc/meminfo` if present, else half the CPUs | |
+
+```markdown
+- gate.test: python -m pytest -q -n {workers}
+- gate.workers.mb: 1536
+- gate.workers.max: 8
+```
+
+- **`{workers}`** in any gate command (test, focus, build, crap, mutation, a11y)
+  becomes the count, and the gate prints `workers 3 (8 CPUs, 9120 MiB free of 15890,
+  1024 MiB/worker, 2 gate(s) running)` once. Use it in the runner's own flag: pytest-xdist
+  `-n {workers}`, Jest/Vitest `--maxWorkers={workers}`, Maven `-T {workers}`, Gradle
+  `--max-workers={workers}`, Stryker `--concurrency {workers}`, PIT `-Dthreads={workers}`.
+- The count is also exported as `GATE_WORKERS`, `PYTEST_XDIST_AUTO_NUM_WORKERS`
+  (so `-n auto` obeys it), `RUST_TEST_THREADS`, `NEXTEST_TEST_THREADS`,
+  `CARGO_BUILD_JOBS` and `-p=` in `GOFLAGS`, unless the variable is already set.
+- **`gate.workers.mb`** (default 1024) is what one worker of your suite peaks at; raise
+  it for a suite that boots a browser or app per worker. **`gate.workers.max`** caps
+  the count. `GATE_WORKERS=<n>` in the environment overrides the calculation, and
+  `GATE_WORKERS_RESERVE_MB` changes the reserve.
+- Running gates register a pid file in `$TMPDIR/ddd-gates-<uid>/`; dead entries are
+  dropped on the next run. The split is fixed when a gate starts, so a gate started
+  while two others run keeps its third after they finish.
 
 The builder's rules keep new tests fast: each criterion is proven at the lowest layer
 that can prove it, with at most one browser-driven test per slice; tests never wait on

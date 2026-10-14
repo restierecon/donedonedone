@@ -27,7 +27,8 @@ files, and setup vs call time where the runner splits them.
 | Per-test expensive setup | setup ≫ call; one fixture behind most slow tests | build once per run (session scope, template DB, one app or browser), reset per test (rollback, truncate) |
 | Proven at too high a layer | browser or out-of-process tests checking rules a module test could | prove the rule one layer down; keep one browser test for the path |
 | Real waiting | durations sit just above round numbers (1.0s, 2.0s, 5.0s) | inject the clock or fake timers; await the event |
-| Serial runner | one worker on a multi-core machine | parallel runner: pytest-xdist, Go `t.Parallel()`, jest/vitest workers (on unless `--runInBand`/single-thread) — a new plugin is a dependency (ADR) |
+| Serial runner | one worker on a multi-core machine | parallel runner: pytest-xdist, Go `t.Parallel()`, jest/vitest workers (on unless `--runInBand`/single-thread) — a new plugin is a dependency (ADR); its worker flag takes `{workers}` (README → Test workers) |
+| Workers starved or killed | gate prints `workers 1` on a big machine, or runs die with OOM / exit 137 / "worker crashed" | measure one worker's peak RSS and set `gate.workers.mb` to it plus headroom; replace `-n auto` or a fixed count with `{workers}` |
 | Shared state blocks parallelism | tests pass alone, fail together | per-test tmp dirs, ports, rows |
 | Real network or services | slow and flaky together | fake at the boundary |
 | Redundant proofs | one behavior tested at three layers | keep the lowest that proves it, plus the path test |
