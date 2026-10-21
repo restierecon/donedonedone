@@ -112,33 +112,209 @@ mkdir -p "$logdir"
 failed=()
 
 gates_dir="${GATE_WORKERS_DIR:-${TMPDIR:-/tmp}/ddd-gates-$(id -u)}"
-mkdir -p "$gates_dir" 2>/dev/null && : > "$gates_dir/$$" 2>/dev/null && trap 'rm -f "$gates_dir/$$"' EXIT
-running=0
+store="$(git -C "$top" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)/ddd-gate"
+sampler=""
+trap 'stop_sampler; rm -f "$gates_dir/$$"' EXIT
+
+can_ps=0
+ps -A -o pid= -o ppid= -o rss= >/dev/null 2>&1 && can_ps=1
+
+ps_table() { ps -A -o pid= -o ppid= -o rss= 2>/dev/null; }
+
+tree_rss_kb() {
+  awk -v root="$1" '
+    { pid[NR] = $1; parent[NR] = $2; rss[NR] = $3 }
+    END {
+      tree[root] = 1
+      do {
+        grew = 0
+        for (i = 1; i <= NR; i++) if (!(pid[i] in tree) && (parent[i] in tree)) { tree[pid[i]] = 1; grew = 1 }
+      } while (grew)
+      for (i = 1; i <= NR; i++) if (pid[i] in tree) sum += rss[i]
+      print sum + 0
+    }'
+}
+
+read_mb() { [ -r "$1" ] && tr -dc 0-9 < "$1"; }
+
+lock_gates() {
+  local tries=0
+  until mkdir "$gates_dir/.lock" 2>/dev/null; do
+    tries=$((tries + 1))
+    if [ "$tries" -ge 50 ]; then
+      rmdir "$gates_dir/.lock" 2>/dev/null
+      mkdir "$gates_dir/.lock" 2>/dev/null
+      return
+    fi
+    sleep 0.2
+  done
+}
+
+size_mb="${worker_mb:-1024}"
+size_note=""
+learned_mb=$(read_mb "$store/worker-mb")
+if [ -n "$learned_mb" ] && [ "$learned_mb" -gt "$size_mb" ]; then
+  size_mb="$learned_mb"
+  size_note=", size measured on earlier runs"
+fi
+
+mkdir -p "$gates_dir" 2>/dev/null
+[ -w "$gates_dir" ] && lock_gates
+running=1
+claimed_mb=0
+table=""
+[ "$can_ps" -eq 1 ] && table=$(ps_table)
 for f in "$gates_dir"/*; do
   [ -e "$f" ] || continue
-  if kill -0 "${f##*/}" 2>/dev/null; then running=$((running + 1)); else rm -f "$f"; fi
+  p="${f##*/}"
+  [ "$p" = "$$" ] && continue
+  if ! kill -0 "$p" 2>/dev/null; then rm -f "$f"; continue; fi
+  running=$((running + 1))
+  claim=$(read_mb "$f")
+  [ -n "$claim" ] || continue
+  used=0
+  [ -n "$table" ] && used=$(( $(printf '%s\n' "$table" | tree_rss_kb "$p") / 1024 ))
+  [ "$claim" -gt "$used" ] && claimed_mb=$((claimed_mb + claim - used))
 done
-[ "$running" -lt 1 ] && running=1
 if [ -n "${GATE_WORKERS:-}" ] && [ "$GATE_WORKERS" -ge 1 ]; then
   workers_note="$GATE_WORKERS (GATE_WORKERS)"
 else
-  workers_note=$("$GATE_DIR/test-workers.sh" --share "$running" --mb "${worker_mb:-1024}" ${worker_max:+--max "$worker_max"} --explain 2>/dev/null) || workers_note="1 (test-workers.sh failed)"
+  workers_note=$("$GATE_DIR/test-workers.sh" --share "$running" --mb "$size_mb" --claimed "$claimed_mb" ${worker_max:+--max "$worker_max"} --explain 2>/dev/null) || workers_note="1 (test-workers.sh failed)"
+  workers_note="${workers_note%)}$size_note)"
 fi
 workers="${workers_note%% *}"
-export GATE_WORKERS="$workers"
-export PYTEST_XDIST_AUTO_NUM_WORKERS="${PYTEST_XDIST_AUTO_NUM_WORKERS:-$workers}"
-export RUST_TEST_THREADS="${RUST_TEST_THREADS:-$workers}"
-export NEXTEST_TEST_THREADS="${NEXTEST_TEST_THREADS:-$workers}"
-export CARGO_BUILD_JOBS="${CARGO_BUILD_JOBS:-$workers}"
-case " ${GOFLAGS:-} " in *" -p="*) ;; *) export GOFLAGS="${GOFLAGS:+$GOFLAGS }-p=$workers" ;; esac
+echo $((workers * size_mb)) 2>/dev/null > "$gates_dir/$$"
+rmdir "$gates_dir/.lock" 2>/dev/null
+
+user_xdist="${PYTEST_XDIST_AUTO_NUM_WORKERS:-}" user_rust="${RUST_TEST_THREADS:-}" user_nextest="${NEXTEST_TEST_THREADS:-}"
+user_cargo="${CARGO_BUILD_JOBS:-}" user_goflags="${GOFLAGS:-}"
+set_workers() {
+  workers="$1"
+  export GATE_WORKERS="$1"
+  export PYTEST_XDIST_AUTO_NUM_WORKERS="${user_xdist:-$1}"
+  export RUST_TEST_THREADS="${user_rust:-$1}"
+  export NEXTEST_TEST_THREADS="${user_nextest:-$1}"
+  export CARGO_BUILD_JOBS="${user_cargo:-$1}"
+  case " $user_goflags " in *" -p="*) ;; *) export GOFLAGS="${user_goflags:+$user_goflags }-p=$1" ;; esac
+}
+set_workers "$workers"
 workers_shown=0
+
+runner_warning() {
+  local runner flag
+  case " $1 " in *--maxWorkers*|*--max-workers*|*--workers*|*--concurrency*|*--runInBand*|*" -w "*|*" -i "*) return ;; esac
+  case " $1 " in
+    *[[:space:]/]jest[[:space:]]*) runner=jest flag="--maxWorkers={workers}" ;;
+    *[[:space:]/]vitest[[:space:]]*) runner=vitest flag="--maxWorkers={workers} (vitest 1-3 also need --minWorkers=1)" ;;
+    *[[:space:]/]playwright[[:space:]]test[[:space:]]*) runner="playwright test" flag="--workers={workers}" ;;
+    *[[:space:]/]stryker[[:space:]]*) runner=stryker flag="--concurrency {workers}" ;;
+    *) return ;;
+  esac
+  echo "workers: gate.$2 runs $runner without {workers}, so it starts a worker per core whatever memory is free — add $flag"
+}
 
 with_workers() {
   run_cmd="$1"
-  case "$1" in *'{workers}'*) ;; *) return ;; esac
+  case "$1" in
+    *'{workers}'*) ;;
+    *) [ "${3:-1}" -eq 1 ] && runner_warning "$1" "$2"; return ;;
+  esac
   run_cmd="${1//\{workers\}/$workers}"
   [ "$workers_shown" -eq 0 ] && echo "workers $workers_note"
   workers_shown=1
+}
+
+start_sampler() {
+  [ "$can_ps" -eq 1 ] || return 0
+  : > "$1"
+  (
+    peak=0
+    while :; do
+      sleep 1 &
+      wait $!
+      now=$(ps_table | tree_rss_kb "$$")
+      if [ "$now" -gt "$peak" ]; then peak=$now; echo "$peak" > "$1"; fi
+    done
+  ) >/dev/null 2>&1 &
+  sampler=$!
+}
+
+stop_sampler() {
+  [ -n "$sampler" ] || return 0
+  kill "$sampler" 2>/dev/null
+  wait "$sampler" 2>/dev/null
+  sampler=""
+}
+
+oom_kills() {
+  local events="${GATE_MEMORY_EVENTS:-}" path
+  if [ -z "$events" ]; then
+    path=$(sed -n 's/^0:://p' /proc/self/cgroup 2>/dev/null | head -1)
+    [ -n "$path" ] && events="/sys/fs/cgroup${path%/}/memory.events"
+  fi
+  if [ -n "$events" ] && [ -r "$events" ]; then
+    awk '$1 == "oom_kill" { n = $2 } END { print n + 0 }' "$events"
+  else
+    echo 0
+  fi
+}
+
+looks_oom() {
+  [ "$1" -ne 0 ] || return 1
+  [ "$1" -eq 137 ] && return 0
+  [ "$3" -gt "$2" ] && return 0
+  grep -qE 'signal=SIGKILL|exit code 137|code 137([^0-9]|$)|Killed: 9' "$4" 2>/dev/null
+}
+
+remember_size() {
+  local old
+  old=$(read_mb "$store/worker-mb")
+  [ "$1" -ge 128 ] || return 0
+  [ -n "$old" ] && [ "$old" -ge "$1" ] && return 0
+  mkdir -p "$store" 2>/dev/null && echo "$1" > "$store/worker-mb"
+}
+
+learn_size() {
+  local per old next
+  per=$(( $1 * 5 / (1024 * 4 * workers) ))
+  old=$(read_mb "$store/worker-mb")
+  next=$(( ${old:-0} * 3 / 4 ))
+  [ "$per" -gt "$next" ] && next=$per
+  [ "$next" -ge 128 ] || return 0
+  mkdir -p "$store" 2>/dev/null && echo "$next" > "$store/worker-mb"
+}
+
+run_step() {
+  local step="$1" cmd="$2" log="$3" attempt=1 before after peak measure=0
+  shift 3
+  [ "$focused" -eq 0 ] && case "$step" in test|crap|mutation) measure=1 ;; esac
+  start=$(date +%s)
+  oom=""
+  while :; do
+    with_workers "$cmd" "$step" "$attempt"
+    before=$(oom_kills)
+    [ "$measure" -eq 1 ] && start_sampler "$log.peak"
+    (cd "$top" && env "$@" bash -c "$run_cmd") >"$log" 2>&1
+    status=$?
+    stop_sampler
+    after=$(oom_kills)
+    if looks_oom "$status" "$before" "$after" "$log"; then
+      remember_size $((size_mb * 2))
+      if [ "$attempt" -eq 1 ] && [ "$workers" -gt 1 ]; then
+        echo "$step OOM (exit $status) — killed for memory at $workers workers; re-running once with $((workers / 2))"
+        set_workers $((workers / 2))
+        attempt=2
+        continue
+      fi
+      oom=" — OOM: killed for memory at $workers worker(s), not a test verdict. Re-run when fewer gates are running; if it is killed again with the machine to itself, this diff needs far more memory than main"
+    elif [ "$measure" -eq 1 ]; then
+      peak=$(read_mb "$log.peak")
+      [ -n "$peak" ] && [ "$peak" -gt 0 ] && learn_size "$peak"
+    fi
+    rm -f "$log.peak"
+    break
+  done
+  secs=$(( $(date +%s) - start ))
 }
 
 added_markers() {
@@ -315,14 +491,10 @@ for step in "${steps[@]}"; do
       *" test "*) echo "crap SKIP (test failed — coverage is stale)"; continue ;;
     esac
     log="$logdir/crap.log"
-    start=$(date +%s)
-    with_workers "$cmd"
-    (cd "$top" && bash -c "$run_cmd") >"$log" 2>&1
-    status=$?
-    secs=$(( $(date +%s) - start ))
+    run_step crap "$cmd" "$log"
     if [ "$status" -ne 0 ]; then
       failed+=("crap")
-      echo "crap FAIL (exit $status, ${secs}s) — full log: .gate/crap.log"
+      echo "crap FAIL (exit $status, ${secs}s) — full log: .gate/crap.log$oom"
       tail -"$EXCERPT_LINES" "$log" | while IFS= read -r line; do echo "  $line"; done
       continue
     fi
@@ -369,14 +541,10 @@ for step in "${steps[@]}"; do
     added_lines "$base" > "$logdir/mutation.touched"
     sed 's/:[0-9]*$//' "$logdir/mutation.touched" | sort -u > "$logdir/mutation.files"
     log="$logdir/mutation.log"
-    start=$(date +%s)
-    with_workers "$cmd"
-    (cd "$top" && GATE_BASE="$base" GATE_MUTATION_FILES="$logdir/mutation.files" bash -c "$run_cmd") >"$log" 2>&1
-    status=$?
-    secs=$(( $(date +%s) - start ))
+    run_step mutation "$cmd" "$log" GATE_BASE="$base" GATE_MUTATION_FILES="$logdir/mutation.files"
     if [ "$status" -ne 0 ]; then
       failed+=("mutation")
-      echo "mutation FAIL (exit $status, ${secs}s) — full log: .gate/mutation.log"
+      echo "mutation FAIL (exit $status, ${secs}s) — full log: .gate/mutation.log$oom"
       tail -"$EXCERPT_LINES" "$log" | while IFS= read -r line; do echo "  $line"; done
       continue
     fi
@@ -422,18 +590,14 @@ for step in "${steps[@]}"; do
     continue
   fi
   log="$logdir/$step.log"
-  start=$(date +%s)
-  with_workers "$cmd"
-  (cd "$top" && bash -c "$run_cmd") >"$log" 2>&1
-  status=$?
-  secs=$(( $(date +%s) - start ))
+  run_step "$step" "$cmd" "$log"
   if [ "$status" -eq 0 ] && [ "$step" = "test" ] && [ -n "$budget" ] && [ "$secs" -gt "$budget" ]; then
     echo "$step PASS (${secs}s) — over gate.test.budget (${budget}s)"
   elif [ "$status" -eq 0 ]; then
     echo "$step PASS (${secs}s)"
   else
     failed+=("$step")
-    echo "$step FAIL (exit $status, ${secs}s) — full log: .gate/$step.log"
+    echo "$step FAIL (exit $status, ${secs}s) — full log: .gate/$step.log$oom"
     excerpt=$(firewall_excerpt "$step" "$cmd" "$log" "$status")
     [ -z "$excerpt" ] && excerpt=$(grep -nE -i 'error|fail|assert|exception|traceback|✗|✕' "$log" | head -"$EXCERPT_LINES")
     [ -z "$excerpt" ] && excerpt=$(tail -"$EXCERPT_LINES" "$log")

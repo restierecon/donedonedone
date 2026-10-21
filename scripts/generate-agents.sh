@@ -119,12 +119,14 @@ the builder. For CRAP hotspots or mutation survivors outside a slice's diff
 or ~/.claude/skills/mutation-survivors/SKILL.md. A builder brief starts with
 SLICE: <ID>; when that slice's auditor_triggers is non-empty, its STANDING orders the
 builder to follow ~/.claude/skills/harden-diff/SKILL.md (brief-contract skill). Every slice
-carries a risk assessment: run ~/.claude/scripts/risk-gate.sh assess <ID> before its
-builder and risk-gate.sh check <ID> merge before merging, and follow
+carries a risk assessment: adopt an approved plan with ~/.claude/scripts/adopt-plan.sh
+(it runs risk-gate.sh assess on each slice), and merge with
+~/.claude/scripts/land-slice.sh <ID> (it runs risk-gate.sh check <ID> merge first); follow
 ~/.claude/skills/risk-gate/SKILL.md for the controls each class needs. Human approvals
 come only from approve-risk.sh and approve-ui.sh run by a human in their own terminal;
-never run them or write their ledger. Record gate verdicts, vault/task-tree.json updates and
-vault/log.jsonl lines (through ~/.claude/scripts/log-event.sh) yourself; subagents
+never run them or write their ledger. Record each gate verdict yourself with
+~/.claude/scripts/record-gate.sh <ID> <gate> <verdict> (task-tree.json, log.jsonl and a
+commit in one call; other log lines through ~/.claude/scripts/log-event.sh); subagents
 report back as text only, never editing vault files directly.
 AGENT
   windows_note >> "$DEST/orchestrator.agent.md"

@@ -20,7 +20,7 @@
       "id": "risk",
       "label": "Risk gate",
       "description": "Score each slice 0-100; the class sets the controls. Critical slices wait for a human authorization.",
-      "uses": ["skill:risk-gate", "script:risk-gate.sh", "script:approve-risk.sh"],
+      "uses": ["skill:risk-gate", "script:adopt-plan.sh", "script:risk-gate.sh", "script:approve-risk.sh"],
       "next": ["dispatch"]
     },
     {
@@ -41,7 +41,7 @@
       "id": "gate",
       "label": "Gate",
       "description": "The Director runs gate.sh once at the builder's SHA: lint, types, tests, build, CRAP, mutation, markers, comments, scope, arch.",
-      "uses": ["script:gate.sh", "script:crap-score.py", "script:mutation-report.py", "script:find-comments.sh", "script:codebase-graph.py", "skill:test-speed", "skill:crap-hotspots", "skill:mutation-survivors"],
+      "uses": ["script:gate.sh", "script:record-gate.sh", "script:crap-score.py", "script:mutation-report.py", "script:find-comments.sh", "script:codebase-graph.py", "skill:test-speed", "skill:crap-hotspots", "skill:mutation-survivors"],
       "next": ["review", {"to": "build", "label": "FAIL → builder"}]
     },
     {
@@ -62,8 +62,8 @@
     {
       "id": "merge",
       "label": "Merge",
-      "description": "Risk check at the current patch-id (with any human approvals), squash-merge, tag, log the verdicts.",
-      "uses": ["script:risk-gate.sh", "script:log-event.sh", "skill:git-workflow-and-versioning"],
+      "description": "land-slice.sh: risk check at the current patch-id (with any human approvals), conflict check, squash-merge, tag, log the merge, delete the branch.",
+      "uses": ["script:land-slice.sh", "script:risk-gate.sh", "script:log-event.sh", "skill:git-workflow-and-versioning"],
       "next": ["harvest"]
     },
     {

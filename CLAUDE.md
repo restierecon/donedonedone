@@ -53,10 +53,11 @@ dispatch `planner` with the grilled spec; it
 writes vault/plan-draft.json and returns a table. If it reports OPEN
 QUESTIONS, take them back to /grill — never plan around a gap. Run
 `~/.claude/scripts/check-plan.sh` on the draft (it must exit 0; a FAIL goes back to the
-planner with its output), present the table with its risk column, then copy the approved
-slices into task-tree.json yourself, run `risk-gate.sh assess <ID>` for each, and delete
-the draft. A
-rejected or abandoned plan, or one sent back to /grill, gets its draft deleted too.
+planner with its output), present the table with its risk column, then adopt the approved
+slices in one call: `~/.claude/scripts/adopt-plan.sh` (all of them) or `adopt-plan.sh <ID>…`
+(a subset). It re-runs check-plan.sh, copies the slices into task-tree.json, runs
+`risk-gate.sh assess` on each, deletes the draft and commits. A rejected or abandoned
+plan, or one sent back to /grill: `adopt-plan.sh --discard`.
 Every slice is autonomous: named "Actor can [do something]", touches every layer that
 behavior needs, testable alone, never decomposed by layer, and needs no human decision
 mid-build. A slice only blocks slices naming it in `depends_on`. Independent slices may
@@ -94,19 +95,26 @@ score. Load the risk-gate skill for the rubric, reassessment and approval steps.
    configure-gates skill unless an open pending-review card names that step.
    A `crap` FAIL goes back to the builder, and so does a `mutation` FAIL; hotspots
    outside the diff go to the crap-hotspots skill (~/.claude/skills/crap-hotspots/SKILL.md),
-   survivors to mutation-survivors (~/.claude/skills/mutation-survivors/SKILL.md)
+   survivors to mutation-survivors (~/.claude/skills/mutation-survivors/SKILL.md).
+   A FAIL ending in `OOM: killed for memory` is the machine, not a test verdict (the
+   gate already retried it at half the workers): don't send it to the builder; run the
+   gate once more after the other running gates finish, and only a second OOM goes to
+   the builder, as a memory regression
 3. Reviewer: APPROVED — hand it the SHA and the gate result line; it re-runs only if
    HEAD moved
 4. Auditor: CLEARED (if the slice's auditor_triggers is non-empty or its risk class is
    high or critical; otherwise skip)
 5. Risk: `risk-gate.sh check <ID> merge` PASS — every control its class requires,
    including any human approval, at the current patch-id
-After each gate: record the verdict in task-tree.json, log it with
-`~/.claude/scripts/log-event.sh <ID> <gate> <verdict> --sha <sha> --patch-id <id> --evidence <rung>`
-(sha and patch_id from gate.sh's result line, the rung from the agent's EVIDENCE line:
-live-verified | unit-test-verified | type-check-only | verifier-blocked | verifier-failed),
-commit. A gate that doesn't apply (e.g. auditor, no trigger) is recorded as
-`"skip: <reason>"` in task-tree.json and as the log line's verdict — never omitted.
+After each of gates 1-4, record it in one call:
+`~/.claude/scripts/record-gate.sh <ID> <self_review|automated|reviewer|auditor> <verdict> --gate-line "<gate.sh result line>" --evidence <rung>`.
+It writes task-tree.json, appends the log.jsonl line (sha and patch_id read from the
+gate line; without one, pass `--sha` and `--patch-id`) and commits. The rung comes from
+the agent's EVIDENCE line: live-verified | unit-test-verified | type-check-only |
+verifier-blocked | verifier-failed. Gate 5 is recorded by land-slice.sh (Merge below).
+A gate that doesn't apply (e.g. auditor, no trigger) is recorded as
+`"skip: <reason>"` — never omitted. Any other log event (Tier 3, escalation,
+correction, scope) still goes through `~/.claude/scripts/log-event.sh`.
 Gate green is input to a verdict, not a verdict. You do this
 yourself. On REJECTED/BLOCKED/CLEARED-WITH-FINDINGS, pass each
 CRITICAL line as `--signal` with its `--category`; log Tier 3 tiebreaks, escalations and
@@ -123,13 +131,15 @@ every added line. An adopted codebase's existing comments stay until a slice rew
 those lines; removing them elsewhere is scope creep.
 
 ## Merge, Harvest & Prune
-Before merging, recompute the patch-id (`git diff main...slice/<ID> -- . ':(exclude)vault' |
-git patch-id --stable`): same as the approved verdicts' → they stand (a rebase alone
-changes only the sha); different → stale, re-run the gates.
-All gates pass → squash-merge to main (checkpoint noise stays on the branch; guard.sh
-re-runs the risk check on the merge command), log `merge done` with the check's
-CONTROLS line as `--signal`, tag
-`<ID>-done`, delete the branch (and worktree), then run the harvest skill yourself:
+Verdicts count only at the patch-id they were given (`git diff main...slice/<ID> -- .
+':(exclude)vault' | git patch-id --stable`): a rebase alone changes only the sha and
+they stand; a changed diff makes them stale, so re-run the gates.
+All gates pass → `~/.claude/scripts/land-slice.sh <ID> [-m '<type>(<scope>): <subject> (<ID>)']`,
+from the main checkout. It runs `risk-gate.sh check <ID> merge` at the current patch-id
+(guard.sh runs it too), refuses a conflict before touching main, squash-merges
+(checkpoint noise stays on the branch), tags `<ID>-done`, records gate 5, logs
+`merge done` with the CONTROLS line, commits, and deletes the branch and worktree. A
+conflict → parallel-dispatch step 6. Then run the harvest skill yourself:
 append the slice's story to vault/stories.md, delete the slice from task-tree.json,
 and commit both files in one commit.
 task-tree.json holds live work only; a `depends_on` ID absent from it is SATISFIED

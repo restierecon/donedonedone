@@ -87,8 +87,8 @@ out=$(detect "$d")
 has "vitest with lcov coverage and pnpm: coverage on, crap ready, a11y and stryker proposed" "$out" \
   "READY  - gate.lint: pnpm exec eslint ." \
   "READY  - gate.types: pnpm -s typecheck" \
-  "READY  - gate.test: pnpm exec vitest run --coverage" \
-  "READY  - gate.test.focus: pnpm exec vitest run {}" \
+  "READY  - gate.test: pnpm exec vitest run --minWorkers=1 --maxWorkers={workers} --coverage" \
+  "READY  - gate.test.focus: pnpm exec vitest run --minWorkers=1 --maxWorkers={workers} {}" \
   "READY  - gate.build: pnpm -s build" \
   "READY  - gate.crap: $PYN ~/.claude/scripts/crap-score.py coverage/lcov.info -x '*.test.*' -x '*.spec.*' src" \
   "IGNORE dist/ coverage/"
@@ -102,12 +102,29 @@ d=$(repo package.json '{"scripts": {"lint": "eslint . --fix", "test:a11y": "play
 out=$(detect "$d")
 has "jest: coverage goes to .gate/, a fixing lint script is skipped, an a11y script is used" "$out" \
   "READY  - gate.lint: npx eslint ." \
-  "READY  - gate.test: npx jest --coverage --coverageReporters=lcov --coverageDirectory=.gate/coverage" \
-  "READY  - gate.test.focus: npx jest {}" \
+  "READY  - gate.test: npx jest --maxWorkers={workers} --coverage --coverageReporters=lcov --coverageDirectory=.gate/coverage" \
+  "READY  - gate.test.focus: npx jest --maxWorkers={workers} {}" \
   "READY  - gate.a11y: npm run -s test:a11y" \
   "READY  - gate.crap: $PYN ~/.claude/scripts/crap-score.py .gate/coverage/lcov.info -x '*.test.*' -x '*.spec.*' ." \
-  "READY  - gate.mutation: npx stryker run --reporters json && $PYN ~/.claude/scripts/mutation-report.py reports/mutation/mutation.json" \
+  "READY  - gate.mutation: npx stryker run --concurrency {workers} --reporters json && $PYN ~/.claude/scripts/mutation-report.py reports/mutation/mutation.json" \
   "N/A    gate.types — plain JavaScript (no typescript with a tsconfig.json)"
+rm -rf "$d"
+
+for spec in '"^4.0.2"' '"5"' '"~3.2.4"' '"workspace:*"' '"latest"'; do
+  d=$(repo package.json "{\"devDependencies\": {\"vitest\": $spec}}")
+  out=$(detect "$d")
+  case "$spec" in
+    *4.0.2*|*5*) want="READY  - gate.test: npx vitest run --maxWorkers={workers}" ;;
+    *3.2.4*) want="READY  - gate.test: npx vitest run --minWorkers=1 --maxWorkers={workers}" ;;
+    *) want="READY  - gate.test: npx vitest run" ;;
+  esac
+  has "vitest $spec gets the worker flags its version accepts (4+ dropped --minWorkers; 1-3 crash without it below the core count)" "$out" "$want"
+  rm -rf "$d"
+done
+
+d=$(repo package.json '{"dependencies": {"react": "18"}, "devDependencies": {"vitest": "3", "@playwright/test": "1", "@axe-core/playwright": "4"}}' tests/a11y/home.spec.ts '')
+out=$(detect "$d")
+has "playwright a11y runs with the gate's worker budget" "$out" "READY  - gate.a11y: npx playwright test tests/a11y --workers={workers} --reporter=line"
 rm -rf "$d"
 
 d=$(repo package.json '{"scripts": {"test": "node --test"}, "dependencies": {"express": "4"}}')
@@ -133,7 +150,7 @@ has "maven with jacoco, pit and checkstyle through mvnw: all ready" "$out" \
   "READY  - gate.lint: ./mvnw -q -B checkstyle:check" \
   "READY  - gate.test: ./mvnw -q -B test" \
   "READY  - gate.crap: $PYN ~/.claude/scripts/crap-score.py target/site/jacoco/jacoco.xml src/main/java" \
-  "READY  - gate.mutation: ./mvnw -q -B test-compile org.pitest:pitest-maven:mutationCoverage -DoutputFormats=XML -DtimestampedReports=false && $PYN ~/.claude/scripts/mutation-report.py target/pit-reports/mutations.xml" \
+  "READY  - gate.mutation: ./mvnw -q -B test-compile org.pitest:pitest-maven:mutationCoverage -Dthreads={workers} -DoutputFormats=XML -DtimestampedReports=false && $PYN ~/.claude/scripts/mutation-report.py target/pit-reports/mutations.xml" \
   "IGNORE target/"
 rm -rf "$d"
 
@@ -141,7 +158,7 @@ d=$(repo build.gradle.kts 'plugins { jacoco }
 tasks.jacocoTestReport { reports { xml.required = true } }' gradlew '')
 out=$(detect "$d")
 has "gradle with jacoco xml: the test step produces the report crap reads" "$out" \
-  "READY  - gate.test: ./gradlew -q test jacocoTestReport" \
+  "READY  - gate.test: ./gradlew -q --max-workers={workers} test jacocoTestReport" \
   "READY  - gate.crap: $PYN ~/.claude/scripts/crap-score.py build/reports/jacoco/test/jacocoTestReport.xml src/main/java"
 matches "gradle without pitest: mutation is a slice naming the plugin settings" "$out" "^SLICE  gate\.mutation — apply info\.solidsoft\.pitest with outputFormats"
 rm -rf "$d"
@@ -193,7 +210,7 @@ out=$(detect "$d")
 has "python + react: lint and test chain both stacks, and only the stack crap follows gets coverage" "$out" \
   "STACK: python (pyproject.toml) + node (package.json)" \
   "READY  - gate.lint: $PYN -m ruff check -q . && npm run -s lint" \
-  "READY  - gate.test: $PYN -m pytest -q && npx vitest run --coverage" \
+  "READY  - gate.test: $PYN -m pytest -q && npx vitest run --minWorkers=1 --maxWorkers={workers} --coverage" \
   "READY  - gate.crap: $PYN ~/.claude/scripts/crap-score.py coverage/lcov.info -x '*.test.*' -x '*.spec.*' ."
 matches "python + react: two focus commands can't share one line, so it asks" "$out" '^ASK    gate\.test\.focus — one command per step, and python and node each have one'
 rm -rf "$d"
