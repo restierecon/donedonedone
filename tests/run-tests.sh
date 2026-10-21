@@ -667,6 +667,8 @@ out=$(workers_on --mb 2048)
 if [ "$out" = "2" ]; then ok "gate.workers.mb sizes each worker"; else bad "gate.workers.mb sizes each worker" "got $out"; fi
 out=$(workers_on --max 2)
 if [ "$out" = "2" ]; then ok "gate.workers.max caps the count"; else bad "gate.workers.max caps the count" "got $out"; fi
+out=$(workers_on --claimed 2048 --explain)
+if [ "${out%% *}" = "3" ] && echo "$out" | grep -q "2048 MiB claimed by other gates"; then ok "memory other gates claimed but haven't used yet is off the table (6 GiB free − 1 reserve − 2 claimed → 3)"; else bad "memory other gates claimed but haven't used yet is off the table (6 GiB free − 1 reserve − 2 claimed → 3)" "got $out"; fi
 fake_mem 67108864 67108864
 echo '0::/ci/job' > "$hw/proc/self/cgroup"
 mkdir -p "$hw/cg/ci/job"
@@ -752,6 +754,111 @@ else
   bad "a gate.workers.mb that isn't whole MiB fails before the suite runs" "exit $status: $out"
 fi
 rm -rf "$repo" "$hw"
+
+echo "== gate.sh — memory: claims, measured worker size, OOM recovery =="
+hw=$(mktemp -d)
+gate_in() { (cd "$1" && shift && GATE_WORKERS_DIR="$hw/gates" "$@" "$GATE" "${gate_args[@]}" 2>&1); }
+gate_args=(test)
+
+sleep 30 & live=$!
+mkdir -p "$hw/gates" && echo 4096 > "$hw/gates/$live"
+# shellcheck disable=SC2016
+repo=$(make_gate_repo '- gate.test: for f in "$GATE_WORKERS_DIR"/*; do echo "$(basename "$f")=$(cat "$f")"; done; echo "n={workers}"')
+out=$(gate_in "$repo" env GATE_WORKERS='')
+n=$(sed -n 's/^n=//p' "$repo/.gate/test.log")
+own=$(grep -v "^$live=" "$repo/.gate/test.log" | grep -v '^n=' | cut -d= -f2)
+kill "$live" 2>/dev/null; wait "$live" 2>/dev/null
+if echo "$out" | grep -q "^workers .*MiB claimed by other gates" && [ "$own" = "$((n * 1024))" ]; then
+  ok "a gate subtracts what other gates claimed and still haven't used, then claims its own workers × size"
+else
+  bad "a gate subtracts what other gates claimed and still haven't used, then claims its own workers × size" "$out / $(cat "$repo/.gate/test.log")"
+fi
+rm -rf "$repo"
+
+# shellcheck disable=SC2016
+repo=$(make_gate_repo '- gate.test: if [ {workers} -gt 2 ]; then exit 137; fi; echo "ran with $GATE_WORKERS"')
+status=0; out=$(gate_in "$repo" env GATE_WORKERS=4) || status=$?
+if [ "$status" -eq 0 ] && echo "$out" | grep -q "^test OOM (exit 137) — killed for memory at 4 workers; re-running once with 2" \
+   && echo "$out" | grep -q "^test PASS" && [ "$(cat "$repo/.gate/test.log")" = "ran with 2" ] \
+   && [ "$(cat "$repo/.git/ddd-gate/worker-mb")" = "2048" ]; then
+  ok "an OOM kill re-runs the step once at half the workers and remembers a doubled worker size"
+else
+  bad "an OOM kill re-runs the step once at half the workers and remembers a doubled worker size" "exit $status: $out"
+fi
+out=$(gate_in "$repo" env GATE_WORKERS='')
+if echo "$out" | grep -q "^workers .*2048 MiB/worker, .*size measured on earlier runs"; then ok "the next gate sizes workers from the remembered size"; else bad "the next gate sizes workers from the remembered size" "$out"; fi
+rm -rf "$repo"
+
+repo=$(make_gate_repo '- gate.test: exit 137')
+status=0; out=$(gate_in "$repo" env GATE_WORKERS=1) || status=$?
+if [ "$status" -eq 1 ] && ! echo "$out" | grep -q "re-running" && echo "$out" | grep -q "^test FAIL (exit 137.*OOM: killed for memory at 1 worker(s), not a test verdict"; then
+  ok "an OOM kill at one worker fails, labelled as memory rather than a test verdict"
+else
+  bad "an OOM kill at one worker fails, labelled as memory rather than a test verdict" "exit $status: $out"
+fi
+rm -rf "$repo"
+
+printf 'low 0\noom 0\noom_kill 0\n' > "$hw/memory.events"
+repo=$(make_gate_repo "- gate.test: printf 'oom_kill 1\\\\n' > $hw/memory.events; echo assertion failed; exit 1")
+status=0; out=$(gate_in "$repo" env GATE_WORKERS=2 GATE_MEMORY_EVENTS="$hw/memory.events") || status=$?
+if [ "$status" -eq 1 ] && echo "$out" | grep -q "^test OOM (exit 1) — killed for memory at 2 workers; re-running once with 1" \
+   && echo "$out" | grep -q "^test FAIL (exit 1" && ! echo "$out" | grep -q "OOM: killed"; then
+  ok "a cgroup oom_kill during the step counts as OOM; a retry with no new kill is a plain test failure"
+else
+  bad "a cgroup oom_kill during the step counts as OOM; a retry with no new kill is a plain test failure" "exit $status: $out"
+fi
+rm -rf "$repo"
+
+repo=$(make_gate_repo "- gate.test: echo 'A jest worker process (pid=7) was terminated by another process: signal=SIGKILL'; exit 1")
+out=$(gate_in "$repo" env GATE_WORKERS=2)
+if echo "$out" | grep -q "re-running once with 1"; then ok "jest's report of a SIGKILLed worker counts as OOM"; else bad "jest's report of a SIGKILLed worker counts as OOM" "$out"; fi
+rm -rf "$repo"
+repo=$(make_gate_repo '- gate.test: echo "expected 2, got 3"; exit 1')
+out=$(gate_in "$repo" env GATE_WORKERS=2)
+if ! echo "$out" | grep -q "OOM"; then ok "an ordinary failing test is never retried"; else bad "an ordinary failing test is never retried" "$out"; fi
+rm -rf "$repo"
+
+for c in 'true jest --ci' 'true vitest run' 'true playwright test e2e' 'true stryker run'; do
+  repo=$(make_gate_repo "- gate.test: $c")
+  out=$(gate_in "$repo" env GATE_WORKERS=2)
+  if echo "$out" | grep -q "^workers: gate.test runs .* without {workers}, so it starts a worker per core"; then ok "warns when a runner that takes every core runs without {workers}: $c"; else bad "warns when a runner that takes every core runs without {workers}: $c" "$out"; fi
+  rm -rf "$repo"
+done
+for c in 'true jest --maxWorkers={workers}' 'true jest --runInBand' 'true vitest run --maxWorkers=2' 'echo ok'; do
+  repo=$(make_gate_repo "- gate.test: $c")
+  out=$(gate_in "$repo" env GATE_WORKERS=2)
+  if ! echo "$out" | grep -q "^workers:"; then ok "no runner warning for: $c"; else bad "no runner warning for: $c" "$out"; fi
+  rm -rf "$repo"
+done
+
+if ps -A -o pid= -o ppid= -o rss= >/dev/null 2>&1 && command -v python3 >/dev/null 2>&1; then
+  repo=$(make_gate_repo "- gate.test: : {workers}; python3 -c 'import time; x = b\"x\" * (300 * 1024 * 1024); time.sleep(2.5)'
+- gate.workers.mb: 128")
+  gate_in "$repo" env GATE_WORKERS=1 >/dev/null
+  size=$(cat "$repo/.git/ddd-gate/worker-mb" 2>/dev/null)
+  out=$(gate_in "$repo" env GATE_WORKERS='')
+  if [ "${size:-0}" -ge 300 ] && [ "${size:-0}" -le 600 ] && echo "$out" | grep -q "$size MiB/worker, .*size measured on earlier runs"; then
+    ok "a full test run measures its peak memory per worker (+25%) and the next gate sizes workers by it ($size MiB)"
+  else
+    bad "a full test run measures its peak memory per worker (+25%) and the next gate sizes workers by it" "size ${size:-none}: $out"
+  fi
+  rm -rf "$repo"
+  repo=$(make_gate_repo '- gate.test: sleep 1.5
+- gate.test.focus: sleep 1.5; echo {}')
+  mkdir -p "$repo/.git/ddd-gate" && echo 1000 > "$repo/.git/ddd-gate/worker-mb"
+  gate_args=(test -- one); gate_in "$repo" env GATE_WORKERS=1 >/dev/null; gate_args=(test)
+  focused_size=$(cat "$repo/.git/ddd-gate/worker-mb")
+  gate_in "$repo" env GATE_WORKERS=1 >/dev/null
+  if [ "$focused_size" = "1000" ] && [ "$(cat "$repo/.git/ddd-gate/worker-mb")" = "750" ]; then
+    ok "a focused run never teaches the size; a lighter full run lowers it by a quarter at most"
+  else
+    bad "a focused run never teaches the size; a lighter full run lowers it by a quarter at most" "focused $focused_size, then $(cat "$repo/.git/ddd-gate/worker-mb")"
+  fi
+  rm -rf "$repo"
+else
+  echo "  SKIP  worker-size measurement (no ps -o rss or python3 here)"
+fi
+rm -rf "$hw"
 
 echo "== gate.sh — built-in markers step =="
 repo=$(make_gate_repo '')
@@ -2241,6 +2348,22 @@ echo "== risk-gate.sh — the record is append-only and human approvals are huma
 head -1 "$repo/vault/log.jsonl" > "$repo/l" && git -C "$repo" add -A >/dev/null && git -C "$repo" commit -q -m "log" && cp "$repo/l" "$repo/vault/log.jsonl"
 status=0; out=$(rg "$repo" check S001 build) || status=$?
 if [ "$status" -eq 1 ] && echo "$out" | grep -q "append-only"; then ok "a rewritten log.jsonl fails the risk gate"; else bad "a rewritten log.jsonl fails the risk gate" "$out"; fi
+crlf=$(mktemp -d)
+git -C "$crlf" init -q -b main && git -C "$crlf" config user.email t@t && git -C "$crlf" config user.name t
+mkdir -p "$crlf/vault" && printf '{"a":1}\n' > "$crlf/vault/log.jsonl" && jq -n --argjson s "$LOW" '{slices: [$s]}' > "$crlf/vault/task-tree.json"
+git -C "$crlf" add -A && git -C "$crlf" commit -q -m init
+git -C "$crlf" checkout -q -b other && echo '{"b":2}' >> "$crlf/vault/log.jsonl" && git -C "$crlf" commit -q -am more
+git -C "$crlf" config core.autocrlf true && git -C "$crlf" checkout -q main
+out=$(rg "$crlf" check S001 build)
+if od -c "$crlf/vault/log.jsonl" | grep -q '\\r' && echo "$out" | grep -q "no recorded risk assessment" && ! echo "$out" | grep -q "append-only"; then
+  ok "a log.jsonl that git checked out with CRLF (core.autocrlf) still counts as unchanged"
+else
+  bad "a log.jsonl that git checked out with CRLF (core.autocrlf) still counts as unchanged" "$(od -c "$crlf/vault/log.jsonl" | head -2) / $out"
+fi
+printf '{"a":2}\r\n' > "$crlf/vault/log.jsonl"
+out=$(rg "$crlf" check S001 build)
+if echo "$out" | grep -q "append-only"; then ok "a rewritten line still fails the append-only check under CRLF"; else bad "a rewritten line still fails the append-only check under CRLF" "$out"; fi
+rm -rf "$crlf"
 git -C "$repo" checkout -q -- vault/log.jsonl
 expect_block "the Director can't Write the risk policy"        guard_file Write 'vault/risk-policy.json'
 expect_block "the Director can't Edit the approvals ledger"    guard_file Edit '/repo/.git/donedonedone/approvals.jsonl'
@@ -2440,6 +2563,153 @@ fi
 status=0; (cd "$repo" && "$LOG_EVENT" S010 risk low --score 101 >/dev/null 2>&1) || status=$?
 if [ "$status" -eq 1 ]; then ok "log-event.sh rejects a score over 100"; else bad "log-event.sh rejects a score over 100" "exit $status"; fi
 rm -rf "$repo"
+
+echo "== adopt-plan.sh / record-gate.sh / land-slice.sh — one call per Director step =="
+ADOPT="$ROOT/scripts/adopt-plan.sh"
+RECORD="$ROOT/scripts/record-gate.sh"
+LAND="$ROOT/scripts/land-slice.sh"
+in_repo() { (cd "$1" && shift && "$@" 2>&1); }
+plan_slice() {
+  risk_slice "$1" "$(dims 1 1 0 1 1)" | jq -c --argjson d "${2:-[]}" \
+    '.title = "Shopper can keep cart \(.id)" | .depends_on = $d | .ui_contract = null
+     | .gates = {self_review: null, automated: null, reviewer: null, auditor: null, risk: null}'
+}
+d=$(make_risk_repo "[]")
+jq -n --argjson a "$(plan_slice S010)" --argjson b "$(plan_slice S011 '["S010"]')" '[$a, $b]' > "$d/vault/plan-draft.json"
+
+status=0; out=$(in_repo "$d" "$ADOPT" S011) || status=$?
+if [ "$status" -eq 1 ] && echo "$out" | grep -q "S011 needs S010" && [ "$(jq '.slices | length' "$d/vault/task-tree.json")" = "0" ]; then
+  ok "adopt-plan refuses a slice whose dependency stays behind in the draft"
+else
+  bad "adopt-plan refuses a slice whose dependency stays behind in the draft" "exit $status: $out"
+fi
+cp "$d/vault/plan-draft.json" "$d/good.json"
+jq '.[0].title = "Cart persistence layer"' "$d/good.json" > "$d/vault/plan-draft.json"
+status=0; out=$(in_repo "$d" "$ADOPT") || status=$?
+if [ "$status" -eq 1 ] && echo "$out" | grep -q "check-plan.sh failed" && [ "$(jq '.slices | length' "$d/vault/task-tree.json")" = "0" ]; then
+  ok "adopt-plan runs check-plan.sh first and adopts nothing from a draft that fails it"
+else
+  bad "adopt-plan runs check-plan.sh first and adopts nothing from a draft that fails it" "exit $status: $out"
+fi
+mv "$d/good.json" "$d/vault/plan-draft.json"
+status=0; out=$(in_repo "$d" "$ADOPT") || status=$?
+if [ "$status" -eq 0 ] && echo "$out" | grep -q "^ADOPTED: 2 of 2 slices, draft deleted" && echo "$out" | grep -q "^RISK: S010 class=low" \
+   && [ "$(jq -c '[.slices[].id]' "$d/vault/task-tree.json")" = '["S010","S011"]' ] \
+   && [ "$(jq -s '[.[] | select(.event == "risk")] | length' "$d/vault/log.jsonl")" = "2" ] \
+   && [ ! -e "$d/vault/plan-draft.json" ] && [ -z "$(git -C "$d" status --porcelain)" ] \
+   && [ "$(git -C "$d" log -1 --format=%s)" = "chore(vault): adopt plan S010 S011" ]; then
+  ok "adopt-plan copies the slices, records each risk assessment, deletes the draft and commits — one call"
+else
+  bad "adopt-plan copies the slices, records each risk assessment, deletes the draft and commits — one call" "exit $status: $out / $(git -C "$d" status --porcelain)"
+fi
+jq -n --argjson a "$(plan_slice S010)" '[$a]' > "$d/vault/plan-draft.json"
+status=0; out=$(in_repo "$d" "$ADOPT") || status=$?
+if [ "$status" -eq 1 ] && echo "$out" | grep -q "already in vault/task-tree.json: S010"; then ok "adopt-plan never adopts a slice twice"; else bad "adopt-plan never adopts a slice twice" "exit $status: $out"; fi
+out=$(in_repo "$d" "$ADOPT" --discard)
+if echo "$out" | grep -q "^DISCARDED" && [ ! -e "$d/vault/plan-draft.json" ]; then ok "adopt-plan --discard deletes a rejected draft"; else bad "adopt-plan --discard deletes a rejected draft" "$out"; fi
+
+slice_change "$d" S010 "cart work"
+P10=$(pid_of "$d" S010)
+before=$(wc -l < "$d/vault/log.jsonl")
+status=0; out=$(in_repo "$d" "$RECORD" S010 reviewer PASS) || status=$?
+if [ "$status" -eq 1 ] && echo "$out" | grep -q "reviewer takes one of: APPROVED REJECTED BLOCKED" && [ "$(wc -l < "$d/vault/log.jsonl")" -eq "$before" ]; then
+  ok "record-gate refuses a verdict the gate can't give and records nothing"
+else
+  bad "record-gate refuses a verdict the gate can't give and records nothing" "exit $status: $out"
+fi
+status=0; out=$(in_repo "$d" "$RECORD" S099 automated PASS) || status=$?
+if [ "$status" -eq 1 ] && echo "$out" | grep -q "S099 is not in vault/task-tree.json"; then ok "record-gate refuses a slice that isn't live"; else bad "record-gate refuses a slice that isn't live" "exit $status: $out"; fi
+status=0; out=$(in_repo "$d" "$RECORD" S010 automated FAIL --gate-line "GATE: PASS @ sha=abc1234 patch_id=$P10") || status=$?
+if [ "$status" -eq 1 ] && echo "$out" | grep -q "disagrees with the gate line" && [ "$(wc -l < "$d/vault/log.jsonl")" -eq "$before" ]; then
+  ok "record-gate refuses a verdict that contradicts the gate line it was handed"
+else
+  bad "record-gate refuses a verdict that contradicts the gate line it was handed" "exit $status: $out"
+fi
+status=0; out=$(in_repo "$d" "$RECORD" S010 automated PASS --gate-line "GATE: PASS @ sha=abc1234 patch_id=$P10") || status=$?
+last=$(tail -1 "$d/vault/log.jsonl")
+if [ "$status" -eq 0 ] && echo "$out" | grep -q "^RECORDED: S010 automated PASS" \
+   && [ "$(jq -r '.slices[] | select(.id == "S010") | .gates.automated' "$d/vault/task-tree.json")" = "PASS" ] \
+   && [ "$(jq -r '"\(.event) \(.verdict) \(.sha) \(.patch_id)"' <<<"$last")" = "gate PASS abc1234 $P10" ] \
+   && [ -z "$(git -C "$d" status --porcelain)" ] && [ "$(git -C "$d" log -1 --format=%s)" = "chore(vault): record automated PASS (S010)" ]; then
+  ok "record-gate writes task-tree.json, logs sha and patch_id from the gate line, and commits — one call"
+else
+  bad "record-gate writes task-tree.json, logs sha and patch_id from the gate line, and commits — one call" "exit $status: $out / $last"
+fi
+in_repo "$d" "$RECORD" S010 auditor "skip: no trigger" >/dev/null
+if [ "$(jq -r '.slices[] | select(.id == "S010") | .gates.auditor' "$d/vault/task-tree.json")" = "skip: no trigger" ] \
+   && [ "$(tail -1 "$d/vault/log.jsonl" | jq -r '"\(.event) \(.verdict)"')" = "auditor skip: no trigger" ]; then
+  ok "a gate that doesn't apply is recorded as skip: <reason> in both places"
+else
+  bad "a gate that doesn't apply is recorded as skip: <reason> in both places" "$(tail -1 "$d/vault/log.jsonl")"
+fi
+
+main_before=$(git -C "$d" rev-parse main)
+status=0; out=$(in_repo "$d" "$LAND" S010) || status=$?
+if [ "$status" -eq 1 ] && echo "$out" | grep -q "S010 can't land until the risk gate passes" && echo "$out" | grep -q "reviewer: no reviewer verdict" \
+   && [ "$(git -C "$d" rev-parse main)" = "$main_before" ] && git -C "$d" rev-parse -q --verify slice/S010 >/dev/null; then
+  ok "land-slice runs the merge check itself and lands nothing without every control"
+else
+  bad "land-slice runs the merge check itself and lands nothing without every control" "exit $status: $out"
+fi
+expect_block "guard.sh runs the merge check on land-slice.sh too" guard_in "$d" "$LAND S010"
+expect_block "guard.sh reads a quoted slice id after land-slice.sh" guard_in "$d" "$HOME/.claude/scripts/land-slice.sh 'S010' -m 'feat: x (S010)'"
+expect_block "a subagent can't run record-gate.sh" guard_in "$d" "$RECORD S010 reviewer APPROVED" reviewer
+expect_block "a subagent can't run land-slice.sh" guard_in "$d" "$LAND S010" builder
+expect_block "a subagent can't run adopt-plan.sh" guard_in "$d" "$ADOPT" planner
+in_repo "$d" "$RECORD" S010 reviewer APPROVED --patch-id "$P10" --evidence unit-test-verified >/dev/null
+expect_allow "guard.sh lets land-slice.sh through once the controls are in" guard_in "$d" "$LAND S010"
+git -C "$d" checkout -q slice/S010
+status=0; out=$(in_repo "$d" "$LAND" S010) || status=$?
+tree_s010=$(jq -c '.slices[] | select(.id == "S010") | [.status, .gates.risk]' "$d/vault/task-tree.json")
+merge_line=$(jq -c 'select(.event == "merge")' "$d/vault/log.jsonl" | tail -1)
+if [ "$status" -eq 0 ] && echo "$out" | grep -q "^LANDED: S010 at [0-9a-f]* · tag S010-done · branch deleted" \
+   && [ "$(git -C "$d" branch --show-current)" = "main" ] && grep -q "cart work" "$d/src/app.txt" \
+   && git -C "$d" rev-parse -q --verify refs/tags/S010-done >/dev/null && ! git -C "$d" rev-parse -q --verify slice/S010 >/dev/null \
+   && [ "$tree_s010" = '["done","PASS"]' ] && [ "$(jq -r .patch_id <<<"$merge_line")" = "$P10" ] \
+   && jq -e '.verdict == "done" and (.signals[0] | startswith("low requires"))' <<<"$merge_line" >/dev/null \
+   && [ "$(git -C "$d" log -1 --format=%s S010-done)" = "feat: Shopper can keep cart S010 (S010)" ] \
+   && [ -z "$(git -C "$d" status --porcelain --untracked-files=no)" ]; then
+  ok "land-slice squash-merges from a serial slice checkout, tags, logs merge done with the CONTROLS line, records the risk gate and deletes the branch"
+else
+  bad "land-slice squash-merges from a serial slice checkout, tags, logs merge done with the CONTROLS line, records the risk gate and deletes the branch" "exit $status: $out / $tree_s010 / $merge_line"
+fi
+
+git -C "$d" branch -q slice/S011 S010-done~1
+wt="$d/.worktrees/S011"
+git -C "$d" worktree add -q "$wt" slice/S011
+echo "cart rewrite" >> "$wt/src/app.txt"
+git -C "$wt" commit -q -am "rewrite the same line"
+P11=$(pid_of "$d" S011)
+in_repo "$d" "$RECORD" S011 automated PASS --patch-id "$P11" >/dev/null
+in_repo "$d" "$RECORD" S011 reviewer APPROVED --patch-id "$P11" --evidence unit-test-verified >/dev/null
+main_before=$(git -C "$d" rev-parse main)
+status=0; out=$(in_repo "$d" "$LAND" S011) || status=$?
+if [ "$status" -eq 1 ] && echo "$out" | grep -q "conflict: src/app.txt" && echo "$out" | grep -q "re-dispatch its builder once" \
+   && [ "$(git -C "$d" rev-parse main)" = "$main_before" ] && [ -z "$(git -C "$d" status --porcelain --untracked-files=no)" ]; then
+  ok "land-slice finds a conflict before touching main and points at the rebase step"
+else
+  bad "land-slice finds a conflict before touching main and points at the rebase step" "exit $status: $out"
+fi
+git -C "$wt" reset -q --hard main
+mkdir -p "$wt/tests" && echo "share test" > "$wt/tests/share.txt"
+git -C "$wt" add tests/share.txt && git -C "$wt" commit -q -m "rebased onto main"
+P11=$(pid_of "$d" S011)
+in_repo "$d" "$RECORD" S011 automated PASS --patch-id "$P11" >/dev/null
+in_repo "$d" "$RECORD" S011 reviewer APPROVED --patch-id "$P11" --evidence unit-test-verified >/dev/null
+git -C "$d" checkout -q -b scratch main
+status=0; out=$(in_repo "$d" "$LAND" S011) || status=$?
+if [ "$status" -eq 1 ] && echo "$out" | grep -q "on 'scratch' — land from main"; then ok "land-slice refuses to land from an unrelated branch"; else bad "land-slice refuses to land from an unrelated branch" "exit $status: $out"; fi
+git -C "$d" checkout -q main
+status=0; out=$(in_repo "$d" "$LAND" S011 -m "feat(cart): share a saved cart (S011)") || status=$?
+if [ "$status" -eq 0 ] && [ ! -d "$wt" ] && ! git -C "$d" rev-parse -q --verify slice/S011 >/dev/null \
+   && [ "$(git -C "$d" log -1 --format=%s S011-done)" = "feat(cart): share a saved cart (S011)" ] && [ -f "$d/tests/share.txt" ]; then
+  ok "land-slice removes the slice's worktree with its branch, and takes a commit message"
+else
+  bad "land-slice removes the slice's worktree with its branch, and takes a commit message" "exit $status: $out"
+fi
+status=0; out=$(in_repo "$d" "$LAND" S011) || status=$?
+if [ "$status" -eq 1 ]; then ok "land-slice refuses a slice that already landed"; else bad "land-slice refuses a slice that already landed" "exit $status: $out"; fi
+rm -rf "$d"
 
 echo "== risk gate wiring (protocol prose) =="
 if grep -q '^## Risk Gate' "$ROOT/CLAUDE.md" && grep -q 'risk-gate.sh check <ID> merge' "$ROOT/CLAUDE.md" && grep -q 'You cannot approve' "$ROOT/CLAUDE.md"; then

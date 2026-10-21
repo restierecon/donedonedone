@@ -13,7 +13,7 @@ builder spawn and any git command that would land `slice/<ID>` on main until
 approved scope. The autonomy dial can add oversight, never remove it.
 
 Where it sits: grill → planner (drafts `risk`) → check-plan.sh (validates it, prints
-the risk table) → Director copies the slice and runs `risk-gate.sh assess <ID>` →
+the risk table) → Director runs `adopt-plan.sh`, which runs `risk-gate.sh assess <ID>` →
 builder (spawn checked) → gate.sh (`scope` step) → reviewer → auditor → merge (checked).
 
 ## The assessment (`risk` on each slice)
@@ -85,9 +85,10 @@ changes it.
   decision; they don't make it.
 
 ## Director steps
-1. After check-plan.sh passes and the human approves the table, copy the slices into
-   task-tree.json and run `risk-gate.sh assess <ID>` for each. It records `risk` in
-   log.jsonl (score, class, hash) and prints the assessment (≤ 20 lines).
+1. After check-plan.sh passes and the human approves the table, run `adopt-plan.sh`
+   (or `adopt-plan.sh <ID>…`). It copies the slices into task-tree.json and runs
+   `risk-gate.sh assess <ID>` for each, which records `risk` in log.jsonl (score,
+   class, hash) and prints one RISK line per slice.
 2. Builder brief: a `RISK: <class> — <scope.change>; unchanged: …; rollback: …` line.
    guard.sh checks the class word against the computed one. Elevated and above: no
    `model: sonnet`.
@@ -95,11 +96,12 @@ changes it.
    the safeguards, cost to reverse) asking the human to run
    `~/.claude/scripts/approve-risk.sh authorize <ID>` in their own terminal. Continue
    with other slices. `risk-gate.sh pending` and the SessionStart hook list held slices.
-4. Before merging, run `risk-gate.sh check <ID> merge` yourself. guard.sh runs it again on the
-   merge command. High and critical need `approve-risk.sh merge <ID>` from the human after
-   the reviewer and auditor pass. Ask once, in pending-review.md, and move on.
-5. Log the merge with the check's CONTROLS line as a signal:
-   `log-event.sh <ID> merge done --signal "<CONTROLS line>"`.
+4. Merge with `land-slice.sh <ID>`. It runs `risk-gate.sh check <ID> merge` before
+   touching main (guard.sh runs it on the command too) and lands nothing on a FAIL.
+   High and critical need `approve-risk.sh merge <ID>` from the human after the
+   reviewer and auditor pass. Ask once, in pending-review.md, and move on.
+5. land-slice.sh logs the merge with the check's CONTROLS line as a signal
+   (`merge done`); there is nothing left to log by hand.
 
 ## Scope expansion → reassessment
 A `scope` FAIL in gate.sh, a builder STATUS: SCOPE-EXPANSION, or a reviewer's

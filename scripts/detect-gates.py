@@ -184,22 +184,24 @@ def node_plan(repo):
     config = "\n".join(repo.read(c) for c in repo.matches("vitest.config.*", "vite.config.*"))
     crap = "%s %%s -x '*.test.*' -x '*.spec.*' %s" % (SCORER, src)
     if "vitest" in deps:
-        plan.ready("test", x + " vitest run")
-        plan.ready("test.focus", x + " vitest run {}")
+        vitest = x + " vitest run" + vitest_workers(deps["vitest"])
+        plan.ready("test", vitest)
+        plan.ready("test.focus", vitest + " {}")
         provider = "@vitest/coverage-v8" in deps or "@vitest/coverage-istanbul" in deps
         lcov = "lcov" in config
         plan.coverage_marker = "--coverage"
         if provider and lcov:
-            plan.test_with_coverage = x + " vitest run --coverage"
+            plan.test_with_coverage = vitest + " --coverage"
             plan.ready("crap", crap % "coverage/lcov.info", ["coverage/"])
         else:
             need = "" if provider else "add @vitest/coverage-v8 and "
             plan.slice("crap", need + 'set coverage: { provider: "v8", reporter: ["lcov"], include: ["%s/**"] } in vitest.config' % src, crap % "coverage/lcov.info")
     elif "jest" in deps:
-        plan.ready("test", x + " jest")
-        plan.ready("test.focus", x + " jest {}")
+        jest = x + " jest --maxWorkers={workers}"
+        plan.ready("test", jest)
+        plan.ready("test.focus", jest + " {}")
         plan.coverage_marker = "--coverage"
-        plan.test_with_coverage = x + " jest --coverage --coverageReporters=lcov --coverageDirectory=.gate/coverage"
+        plan.test_with_coverage = jest + " --coverage --coverageReporters=lcov --coverageDirectory=.gate/coverage"
         plan.ready("crap", crap % ".gate/coverage/lcov.info")
     elif scripts.get("test") and "no test specified" not in scripts["test"]:
         plan.ready("test", "CI=true " + run + " test")
@@ -218,17 +220,29 @@ def node_plan(repo):
     elif a11y_script:
         plan.ready("a11y", run + " " + a11y_script, ["test-results/", "playwright-report/"])
     elif "@axe-core/playwright" in deps and "@playwright/test" in deps and a11y_dir:
-        plan.ready("a11y", "%s playwright test %s --reporter=line" % (x, a11y_dir), ["test-results/", "playwright-report/"])
+        plan.ready("a11y", "%s playwright test %s --workers={workers} --reporter=line" % (x, a11y_dir), ["test-results/", "playwright-report/"])
     else:
         plan.slice("a11y", "UI (%s) without an accessibility check; add @playwright/test and @axe-core/playwright, and tests/a11y with one test per page asserting no wcag2a/wcag2aa violations" % ui[0],
-                   x + " playwright test tests/a11y --reporter=line")
-    mutation = "%s stryker run --reporters json && %s reports/mutation/mutation.json" % (x, ADAPTER)
+                   x + " playwright test tests/a11y --workers={workers} --reporter=line")
+    mutation = "%s stryker run --concurrency {workers} --reporters json && %s reports/mutation/mutation.json" % (x, ADAPTER)
     if "@stryker-mutator/core" in deps:
         plan.ready("mutation", mutation, ["reports/", ".stryker-tmp/"])
     elif "test" in plan.steps and plan.steps["test"]["status"] == "READY":
         runner = "vitest-runner" if "vitest" in deps else "jest-runner" if "jest" in deps else "<runner>"
         plan.slice("mutation", "add @stryker-mutator/core and @stryker-mutator/" + runner, mutation)
     return plan
+
+
+def major(spec):
+    match = re.search(r"\d+", spec or "")
+    return int(match.group()) if match and not re.match(r"\s*(workspace|file|link|git|https?):", spec or "") else None
+
+
+def vitest_workers(spec):
+    version = major(spec)
+    if version is None or version < 1:
+        return ""
+    return " --maxWorkers={workers}" if version >= 4 else " --minWorkers=1 --maxWorkers={workers}"
 
 
 def maven_plan(repo):
@@ -252,7 +266,7 @@ def maven_plan(repo):
         plan.ready("crap", crap)
     else:
         plan.slice("crap", "add jacoco-maven-plugin with prepare-agent and report bound to the test phase (tests/fixtures/crap/java/pom.xml)", crap)
-    mutation = "%s test-compile org.pitest:pitest-maven:mutationCoverage -DoutputFormats=XML -DtimestampedReports=false && %s target/pit-reports/mutations.xml" % (mvn, ADAPTER)
+    mutation = "%s test-compile org.pitest:pitest-maven:mutationCoverage -Dthreads={workers} -DoutputFormats=XML -DtimestampedReports=false && %s target/pit-reports/mutations.xml" % (mvn, ADAPTER)
     if "pitest-maven" in pom:
         plan.ready("mutation", mutation)
     else:
@@ -269,7 +283,7 @@ def gradle_plan(repo):
     if not build:
         return None
     text = repo.read(build)
-    gradle = ("./gradlew" if repo.exists("gradlew") else "gradle") + " -q"
+    gradle = ("./gradlew" if repo.exists("gradlew") else "gradle") + " -q --max-workers={workers}"
     plan = Plan("java-gradle", [build])
     if "checkstyle" in text:
         plan.ready("lint", gradle + " checkstyleMain")

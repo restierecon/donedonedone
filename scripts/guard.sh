@@ -312,6 +312,8 @@ if [ -n "$agent_id" ]; then
     plain=$(normalize "$cmd")
     protected_name "$plain" 'log-event' \
       && block "BLOCKED: vault/log.jsonl is written by the Director only (log-event.sh). Return your verdict as text."
+    protected_name "$plain" 'record-gate|land-slice|adopt-plan' \
+      && block "BLOCKED: record-gate.sh, land-slice.sh and adopt-plan.sh are the Director's: they write task-tree.json and log.jsonl and land slices. Return your verdict as text."
     protected_name "$plain" 'risk-gate' && ! read_only_shell "$plain" && vault_project \
       && block "BLOCKED: risk-gate.sh is the Director's: it records risk assessments and judges merges. If your work needs files outside the approved scope, stop and report SCOPE-EXPANSION."
     if ! read_only_shell "$plain" && vault_project && touches_sensitive "$cmd" subagent; then
@@ -585,6 +587,7 @@ landing_slices() {
       push)
         refs=$(printf '%s\n' "$plain_seg" | grep -oE 'slice/[a-z0-9._-]+:(refs/heads/)?(main|master)([[:space:]]|$)' | cut -d: -f1) ;;
     esac
+    printf '%s\n' "$seg" | tr -d "\"'" | sed -nE 's/^(.*[^[:alnum:]_-])?land-slice(\.sh)?[[:space:]]+([A-Za-z0-9._-]+).*/\3/p' | head -1
     [ -n "$refs" ] || continue
     printf '%s\n' "$refs" | while IFS= read -r ref; do
       printf '%s\n' "$seg" | grep -oiE "slice/[A-Za-z0-9._-]+" | while IFS= read -r raw; do

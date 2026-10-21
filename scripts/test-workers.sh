@@ -1,22 +1,23 @@
 #!/bin/bash
 
 usage() {
-  echo "usage: test-workers.sh [--mb <MiB per worker>] [--max <workers>] [--share <gates running>] [--reserve <MiB>] [--explain]" >&2
+  echo "usage: test-workers.sh [--mb <MiB per worker>] [--max <workers>] [--share <gates running>] [--reserve <MiB>] [--claimed <MiB>] [--explain]" >&2
   exit 2
 }
 
-per_worker_mb=1024 max="" share=1 reserve_mb="${GATE_WORKERS_RESERVE_MB:-1024}" explain=0
+per_worker_mb=1024 max="" share=1 reserve_mb="${GATE_WORKERS_RESERVE_MB:-1024}" claimed_mb=0 explain=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --mb) per_worker_mb="$2"; shift 2 ;;
     --max) max="$2"; shift 2 ;;
     --share) share="$2"; shift 2 ;;
     --reserve) reserve_mb="$2"; shift 2 ;;
+    --claimed) claimed_mb="$2"; shift 2 ;;
     --explain) explain=1; shift ;;
     *) usage ;;
   esac
 done
-for v in "$per_worker_mb" "$share" "$reserve_mb" ${max:+"$max"}; do
+for v in "$per_worker_mb" "$share" "$reserve_mb" "$claimed_mb" ${max:+"$max"}; do
   case "$v" in ''|*[!0-9]*) usage ;; esac
 done
 if [ "$per_worker_mb" -lt 1 ] || [ "$share" -lt 1 ]; then usage; fi
@@ -174,10 +175,11 @@ reserve_kb=$(( reserve_mb * 1024 ))
 per_kb=$(( per_worker_mb * 1024 ))
 if [ -n "$mem_total_kb" ]; then
   fair_kb=$(( (mem_total_kb - reserve_kb) / share ))
-  free_kb=$(( mem_free_kb - reserve_kb ))
+  free_kb=$(( mem_free_kb - reserve_kb - claimed_mb * 1024 ))
   budget_kb=$(( fair_kb < free_kb ? fair_kb : free_kb ))
   by_mem=$(( budget_kb / per_kb ))
   mem_note="$(( mem_free_kb / 1024 )) MiB free of $(( mem_total_kb / 1024 ))"
+  [ "$claimed_mb" -gt 0 ] && mem_note="$mem_note, $claimed_mb MiB claimed by other gates"
 else
   by_mem=$(( (cpus + 1) / 2 / share ))
   mem_note="memory unknown, half the CPUs"

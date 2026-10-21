@@ -193,10 +193,11 @@ ledger_of() {
 append_only() {
   local rel="$1" committed n status=0
   git -C "$root" cat-file -e "HEAD:$rel" 2>/dev/null || return 0
+  [ -f "$root/$rel" ] || return 1
   committed=$(mktemp)
-  git -C "$root" show "HEAD:$rel" > "$committed"
+  git -C "$root" show "HEAD:$rel" | tr -d '\r' > "$committed"
   n=$(wc -c < "$committed" | tr -d ' ')
-  if [ ! -f "$root/$rel" ] || ! head -c "$n" "$root/$rel" | cmp -s - "$committed"; then status=1; fi
+  tr -d '\r' < "$root/$rel" | head -c "$n" | cmp -s - "$committed" || status=1
   rm -f "$committed"
   return "$status"
 }

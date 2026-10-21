@@ -33,17 +33,20 @@ up to `max_parallel_slices` (vault/project.md, default 3) at once:
    across whichever slices just finished building.
 4. Vault bookkeeping stays out of slice branches during a wave: builder/reviewer/
    auditor commits inside a worktree touch application code only. The Director's own
-   commits (task-tree.json, log.jsonl, stories.md) land directly on
+   commits (task-tree.json, log.jsonl, stories.md — record-gate.sh, land-slice.sh and
+   adopt-plan.sh commit in the main checkout for you) land directly on
    main, in the main checkout — never on a slice branch. Slice branches stay vault-free
    so a squash-merge only touches code and sibling bookkeeping never collides.
-5. Process verdicts and squash-merges to main ONE AT A TIME, in whatever order they
-   land — the merge stays Director-serial even though build/review was concurrent.
-6. Squash-merge conflict (a sibling already changed an overlapping file): re-dispatch
+5. Process verdicts and merges to main ONE AT A TIME (`land-slice.sh <ID>` from the
+   main checkout), in whatever order they land — the merge stays Director-serial even
+   though build/review was concurrent.
+6. Conflict (land-slice.sh lists the files and leaves main untouched; a sibling already
+   changed an overlapping file): re-dispatch
    that builder once, in its worktree, to rebase onto current main and resolve. Then
    compare gate.sh's new patch_id with the approved one: same → verdicts stand (clean
    rebase); different → the resolution changed the slice, re-run every gate. Second failure → escalate (vault/flags/pending-review.md); don't force it.
-7. After merge (or on abandonment): `git worktree remove .worktrees/<ID>` and delete
-   the branch.
+7. land-slice.sh removes the worktree and branch after the merge. On abandonment:
+   `git worktree remove .worktrees/<ID>` and delete the branch yourself.
 
 A crashed wave leaves worktrees behind; the SessionStart hook lists them. Resume each
 (re-invoke its builder/reviewer in place) or tear it down before starting new work.
