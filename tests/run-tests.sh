@@ -2348,6 +2348,22 @@ echo "== risk-gate.sh — the record is append-only and human approvals are huma
 head -1 "$repo/vault/log.jsonl" > "$repo/l" && git -C "$repo" add -A >/dev/null && git -C "$repo" commit -q -m "log" && cp "$repo/l" "$repo/vault/log.jsonl"
 status=0; out=$(rg "$repo" check S001 build) || status=$?
 if [ "$status" -eq 1 ] && echo "$out" | grep -q "append-only"; then ok "a rewritten log.jsonl fails the risk gate"; else bad "a rewritten log.jsonl fails the risk gate" "$out"; fi
+crlf=$(mktemp -d)
+git -C "$crlf" init -q -b main && git -C "$crlf" config user.email t@t && git -C "$crlf" config user.name t
+mkdir -p "$crlf/vault" && printf '{"a":1}\n' > "$crlf/vault/log.jsonl" && jq -n --argjson s "$LOW" '{slices: [$s]}' > "$crlf/vault/task-tree.json"
+git -C "$crlf" add -A && git -C "$crlf" commit -q -m init
+git -C "$crlf" checkout -q -b other && echo '{"b":2}' >> "$crlf/vault/log.jsonl" && git -C "$crlf" commit -q -am more
+git -C "$crlf" config core.autocrlf true && git -C "$crlf" checkout -q main
+out=$(rg "$crlf" check S001 build)
+if od -c "$crlf/vault/log.jsonl" | grep -q '\\r' && echo "$out" | grep -q "no recorded risk assessment" && ! echo "$out" | grep -q "append-only"; then
+  ok "a log.jsonl that git checked out with CRLF (core.autocrlf) still counts as unchanged"
+else
+  bad "a log.jsonl that git checked out with CRLF (core.autocrlf) still counts as unchanged" "$(od -c "$crlf/vault/log.jsonl" | head -2) / $out"
+fi
+printf '{"a":2}\r\n' > "$crlf/vault/log.jsonl"
+out=$(rg "$crlf" check S001 build)
+if echo "$out" | grep -q "append-only"; then ok "a rewritten line still fails the append-only check under CRLF"; else bad "a rewritten line still fails the append-only check under CRLF" "$out"; fi
+rm -rf "$crlf"
 git -C "$repo" checkout -q -- vault/log.jsonl
 expect_block "the Director can't Write the risk policy"        guard_file Write 'vault/risk-policy.json'
 expect_block "the Director can't Edit the approvals ledger"    guard_file Edit '/repo/.git/donedonedone/approvals.jsonl'
