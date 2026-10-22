@@ -1,0 +1,6 @@
+.env
+.env.*
+.worktrees/
+.gate/
+vault/plan-draft.json
+__pycache__/

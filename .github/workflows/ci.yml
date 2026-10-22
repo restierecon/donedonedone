@@ -31,6 +31,8 @@ jobs:
         run: PYTHON=python tests/detect-gates.sh
       - name: context firewall tests
         run: python -m unittest discover -s context-firewall/tests -p 'test_*.py'
+      - name: eval runner tests
+        run: python -m unittest discover -s evals/tests -p 'test_*.py'
       - name: manifest validation
         run: scripts/validate-manifests.sh
       - name: scripts are executable in the repo
