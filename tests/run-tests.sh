@@ -3045,6 +3045,69 @@ if grep -q '^DESIGN: complexity' "$ROOT/agents/reviewer.md"; then ok "reviewer r
 if grep -q 'vault/architecture.json' "$ROOT/skills/grill/SKILL.md" && grep -q 'architecture.json' "$ROOT/CLAUDE.md"; then ok "grill and protocol name the fitness rules file"; else bad "grill and protocol name the fitness rules file" "missing"; fi
 if grep -q 'scripts/\*.html' "$INSTALL"; then ok "install.sh ships the graph viewer template"; else bad "install.sh ships the graph viewer template" "missing"; fi
 
+echo "== notify =="
+NOTIFY="$ROOT/scripts/notify.sh"
+nt=$(mktemp -d)
+mkdir -p "$nt/conf" "$nt/bin"
+mkdir -p "$nt/repo" && git -C "$nt/repo" init -q
+mkdir -p "$nt/repo/vault/flags"
+notify_in() { printf '{"cwd":"%s"%s}' "$nt/repo" "${2:-}" | DDD_NOTIFY_HOME="$nt/conf" DDD_NOTIFY_URL="${NURL:-}" PATH="$nt/bin:$PATH" "$NOTIFY" "$1" 2>&1; }
+printf '#!/bin/bash\n{ echo "TITLE=$1"; cat; echo "--"; } >> "%s"\n' "$nt/sent" > "$nt/cmd"
+chmod +x "$nt/cmd"
+
+printf '# Pending review\n' > "$nt/repo/vault/flags/pending-review.md"
+out=$(notify_in flags)
+if [ -z "$out" ] && [ ! -e "$nt/sent" ]; then ok "notify stays silent and exits clean when nothing is configured"; else bad "notify stays silent and exits clean when nothing is configured" "$out"; fi
+
+cp "$nt/cmd" "$nt/conf/notify-cmd"
+notify_in flags >/dev/null
+if [ ! -e "$nt/sent" ]; then ok "notify's first run baselines existing flags instead of resending them"; else bad "notify's first run baselines existing flags instead of resending them" "$(cat "$nt/sent")"; fi
+
+printf '\n## S004 needs approve-risk.sh merge S004\nwhat: delete notes\n' >> "$nt/repo/vault/flags/pending-review.md"
+notify_in flags >/dev/null
+if grep -q '^TITLE=repo: needs your review$' "$nt/sent" 2>/dev/null && grep -q 'approve-risk.sh merge S004' "$nt/sent" && ! grep -q '# Pending review' "$nt/sent"; then
+  ok "notify sends only the entry added to pending-review.md, with the approval command"
+else
+  bad "notify sends only the entry added to pending-review.md, with the approval command" "$(cat "$nt/sent" 2>/dev/null)"
+fi
+
+rm -f "$nt/sent"
+notify_in flags >/dev/null
+if [ ! -e "$nt/sent" ]; then ok "notify does not repeat an entry it already sent"; else bad "notify does not repeat an entry it already sent" "$(cat "$nt/sent")"; fi
+
+printf '# Blocked\n' > "$nt/repo/vault/flags/blocked.md"
+notify_in flags >/dev/null
+printf 'S007 SSRF in link preview\n' >> "$nt/repo/vault/flags/blocked.md"
+notify_in flags >/dev/null
+if grep -q '^TITLE=repo: BLOCKED (auditor critical)$' "$nt/sent" 2>/dev/null && grep -q 'S007 SSRF' "$nt/sent"; then ok "notify flags a blocked.md entry as an auditor block"; else bad "notify flags a blocked.md entry as an auditor block" "$(cat "$nt/sent" 2>/dev/null)"; fi
+
+rm -f "$nt/sent"
+notify_in event ',"message":"Claude needs your permission to use Bash","notification_type":"permission_prompt"' >/dev/null
+if grep -q '^TITLE=repo: Claude Code (permission_prompt)$' "$nt/sent" 2>/dev/null && grep -q 'needs your permission' "$nt/sent"; then ok "notify forwards Claude Code's own waiting-for-you notifications"; else bad "notify forwards Claude Code's own waiting-for-you notifications" "$(cat "$nt/sent" 2>/dev/null)"; fi
+
+rm -f "$nt/conf/notify-cmd" "$nt/sent"
+printf '#!/bin/bash\n{ printf "ARGS=%%s\\n" "$*"; echo "CONFIG:"; cat "$5"; echo "BODY:"; cat; } > "%s"\nexit 0\n' "$nt/sent" > "$nt/bin/curl"
+chmod +x "$nt/bin/curl"
+NURL='https://hooks.slack.com/services/T0/B0/secret' notify_in event ',"message":"idle"' >/dev/null
+if grep -q '"text"' "$nt/sent" 2>/dev/null && grep -q 'url = "https://hooks.slack.com/services/T0/B0/secret"' "$nt/sent" && ! grep -q '^ARGS=.*secret' "$nt/sent"; then
+  ok "notify posts Slack JSON and passes the webhook URL in a curl config, never on the command line"
+else
+  bad "notify posts Slack JSON and passes the webhook URL in a curl config, never on the command line" "$(cat "$nt/sent" 2>/dev/null)"
+fi
+
+NURL='https://ntfy.sh/my-topic' notify_in event ',"message":"idle"' >/dev/null
+if grep -q 'Title: repo: Claude Code' "$nt/sent" 2>/dev/null && grep -q '^idle' "$nt/sent"; then ok "notify posts plain text with a Title header to an ntfy-style URL"; else bad "notify posts plain text with a Title header to an ntfy-style URL" "$(cat "$nt/sent" 2>/dev/null)"; fi
+
+out=$(DDD_NOTIFY_HOME="$nt/empty" DDD_NOTIFY_URL= "$NOTIFY" test </dev/null 2>&1); rc=$?
+if [ "$rc" -ne 0 ] && printf '%s' "$out" | grep -q 'not configured'; then ok "notify.sh test explains how to configure when nothing is set"; else bad "notify.sh test explains how to configure when nothing is set" "rc=$rc $out"; fi
+
+if jq -e '([.hooks.PostToolUse[].hooks[].command] | index("~/.claude/scripts/notify.sh flags")) and ([.hooks.Notification[].hooks[].command] | index("~/.claude/scripts/notify.sh event"))' "$ROOT/settings.json" >/dev/null; then
+  ok "settings.json wires notify onto PostToolUse and Notification"
+else
+  bad "settings.json wires notify onto PostToolUse and Notification" "missing"
+fi
+rm -rf "$nt"
+
 echo ""
 echo "$pass passed, $fail failed"
 [ "$fail" -eq 0 ]

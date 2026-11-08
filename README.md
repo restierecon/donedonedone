@@ -46,9 +46,9 @@ builds. Nothing after the grill should need you unless a slice escalates.
 | CLAUDE.md | Global protocol — the main session IS the Director |
 | agents/ | planner · builder · reviewer · auditor · retro (least-privilege tools, model-per-agent) |
 | skills/ | protocol-native: grill · ui-prototype · slice-planning · risk-gate · parallel-dispatch · architecture-review · learning-loop · configure-gates · test-speed · crap-hotspots · mutation-survivors · clean-diff · harden-diff · blast-radius · `/codebase-map` · brief-contract · `/init-codebase` · `/harvest` · `/create-verification-skill` · `/maintain-verification-skill` (opt-in, `/`-only: a project-local `verify-*` skill that lets the reviewer reach live-verified evidence) — plus a general engineering-practice library, a principles index (19 pstack principles, read on demand) and pstack's prose skills: unslop · technical-writing (docs/README/ADR work) (see Credits) |
-| settings.json | Permission deny/ask lists + hooks on 6 events + env that keeps Claude Code on Windows in Git Bash |
+| settings.json | Permission deny/ask lists + hooks on 7 events + env that keeps Claude Code on Windows in Git Bash |
 | context-firewall/ | `ddd` — the context firewall: artifact store, per-type compressors, retrieval, ranking, stats (Python 3.8+ stdlib, installed to `~/.claude/context-firewall/`) |
-| scripts/ | ddd (the firewall's bash entry point, `PreToolUse` rewrite and `PostToolUse` hook) · guard.sh (PreToolUse) · vault-guard.sh (Pre/PostToolUse, SubagentStop — restores Director-only files) · lint.sh (PostToolUse) · checkpoint.sh (Stop) · session-start.sh (SessionStart) · codebase-graph.py + codemap/ + graph-viewer.html (code and workflow map of any repo, change impact, `arch` fitness check, drill-down HTML) · crap-score.py (lizard + coverage report → CRAP lines for `gate.crap`) · mutation-report.py (mutation tool report → mutant lines for `gate.mutation`) · detect-gates.py (reads a repo's manifests → the gate lines it supports today, and what each missing one needs) · gate.sh (quiet lint/types/test/build/a11y runner + diff-scoped CRAP, mutation, TODO/FIXME, no-comments and architecture-rule checks) · test-workers.sh (the per-gate worker budget behind `{workers}`, from CPUs, free memory, cgroup limits and running gates) · find-comments.sh (the comment detector behind that check) · log-event.sh (the Director's structured log.jsonl writer) · risk-gate.sh (scores each slice's risk, judges builder spawns and merges) · adopt-plan.sh · record-gate.sh · land-slice.sh (the Director's plan adoption, gate recording and merge, one call each) · approve-risk.sh (the human's approval command — refuses inside an agent) · check-plan.sh (the Director's lint for a planner draft: fields, "Actor can" titles, resolvable acyclic `depends_on`, `auditor_triggers` from a fixed list, every `ui_contract` an approved contract, gates as a verdict or `skip: <reason>`) · generate-agents.sh (Copilot/Cursor agents, install-time) · fetch-jq.sh (checksum-pinned jq into ~/.claude/bin when jq is missing, install-time) · agents-md.sh (protocol block in a project's AGENTS.md, for Cursor/Copilot) |
+| scripts/ | ddd (the firewall's bash entry point, `PreToolUse` rewrite and `PostToolUse` hook) · guard.sh (PreToolUse) · vault-guard.sh (Pre/PostToolUse, SubagentStop — restores Director-only files) · lint.sh (PostToolUse) · checkpoint.sh (Stop) · session-start.sh (SessionStart) · notify.sh (PostToolUse, Notification — pushes new flags and waiting-for-you prompts to ntfy, Slack, Discord or a command) · codebase-graph.py + codemap/ + graph-viewer.html (code and workflow map of any repo, change impact, `arch` fitness check, drill-down HTML) · crap-score.py (lizard + coverage report → CRAP lines for `gate.crap`) · mutation-report.py (mutation tool report → mutant lines for `gate.mutation`) · detect-gates.py (reads a repo's manifests → the gate lines it supports today, and what each missing one needs) · gate.sh (quiet lint/types/test/build/a11y runner + diff-scoped CRAP, mutation, TODO/FIXME, no-comments and architecture-rule checks) · test-workers.sh (the per-gate worker budget behind `{workers}`, from CPUs, free memory, cgroup limits and running gates) · find-comments.sh (the comment detector behind that check) · log-event.sh (the Director's structured log.jsonl writer) · risk-gate.sh (scores each slice's risk, judges builder spawns and merges) · adopt-plan.sh · record-gate.sh · land-slice.sh (the Director's plan adoption, gate recording and merge, one call each) · approve-risk.sh (the human's approval command — refuses inside an agent) · check-plan.sh (the Director's lint for a planner draft: fields, "Actor can" titles, resolvable acyclic `depends_on`, `auditor_triggers` from a fixed list, every `ui_contract` an approved contract, gates as a verdict or `skip: <reason>`) · generate-agents.sh (Copilot/Cursor agents, install-time) · fetch-jq.sh (checksum-pinned jq into ~/.claude/bin when jq is missing, install-time) · agents-md.sh (protocol block in a project's AGENTS.md, for Cursor/Copilot) |
 | workflow.json | This setup's stage order for the workflow map; verified by the map's build and CI |
 | tests/ | Test harness for the hook scripts — run after any script edit; CI runs it too |
 | evals/ | 16-task benchmark + scorecard — run before trusting, re-run after any manifest edit |
@@ -165,6 +165,39 @@ by the human, before planning (`ui-prototype` skill):
 
 A contract that turns out to be unbuildable goes back to the grill as a new
 revision and a new approval. The builder never redesigns it.
+
+## Notifications
+You shouldn't have to keep checking `vault/flags/` to find out a slice is waiting on you.
+`scripts/notify.sh` pushes to your phone or chat when:
+- a new entry lands in `vault/flags/pending-review.md` (escalations, `approve-risk.sh` /
+  `approve-ui.sh` requests, Tier 3 tiebreaks, retro proposals). The message is the
+  entry itself, with its 3-line summary and the exact command to run
+- a new entry lands in `vault/flags/blocked.md` (auditor CRITICAL)
+- Claude Code itself is waiting for you: a permission prompt, or the session sitting idle
+  on your input (the `Notification` hook)
+
+Set one destination and check it:
+
+```bash
+echo 'https://ntfy.sh/<a-long-random-topic>' > ~/.claude/notify-url && chmod 600 ~/.claude/notify-url
+~/.claude/scripts/notify.sh test
+```
+
+- **ntfy** (any URL that isn't Slack or Discord) gets the text as the body and the
+  title in a `Title` header. That also covers a self-hosted ntfy or any plain-text webhook.
+  On ntfy.sh, anyone who knows the topic can read it, so make the topic long and random.
+- **Slack** (`https://hooks.slack.com/...`) and **Discord** (`https://discord.com/api/webhooks/...`)
+  incoming webhooks get their JSON format.
+- **Anything else**: an executable `~/.claude/notify-cmd` gets the title as `$1` and the
+  body on stdin, and takes precedence over the URL.
+- `DDD_NOTIFY_URL` in the environment overrides `~/.claude/notify-url`.
+
+The URL is a secret. It reaches curl through a config on a file descriptor, so it never
+appears in `ps` or in shell history. With nothing configured the hook does nothing. The first run in a
+project records the flags as they are, so you only hear about entries added after
+that, each one once. Snapshots live in `.git/ddd-notify/`, shared by every worktree.
+A failed send never fails a tool call. Notifications are wired for Claude Code only
+(`settings.json`); Cursor and Copilot don't run them yet.
 
 ## Autonomy dial (`vault/project.md`)
 - **supervised** (default) — every slice pauses for your approval after its gates

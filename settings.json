@@ -99,6 +99,16 @@
             "timeout": 15
           }
         ]
+      },
+      {
+        "matcher": "Write|Edit|MultiEdit|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/scripts/notify.sh flags",
+            "timeout": 10
+          }
+        ]
       }
     ],
     "Stop": [
@@ -127,6 +137,17 @@
           {
             "type": "command",
             "command": "~/.claude/scripts/vault-guard.sh"
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/scripts/notify.sh event",
+            "timeout": 10
           }
         ]
       }
