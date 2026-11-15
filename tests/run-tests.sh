@@ -218,10 +218,10 @@ echo "== checkpoint.sh — branch discipline =="
 approve_ui_in() {
   local h
   h=$(cd "$1" && "$ROOT/scripts/ui-approval.sh" hash "$2") || return 1
-  mkdir -p "$1/.git/donedonedone"
+  mkdir -p "$1/.git/tbv"
   jq -cn --arg c "$2" --arg h "$h" --arg d "${3:-approve}" --arg ts "${4:-2026-10-04T10:00:00Z}" \
     '{ts: $ts, kind: "ui", contract: $c, decision: $d, hash: $h, approver: "human@test", user: "human"}' \
-    >> "$1/.git/donedonedone/approvals.jsonl"
+    >> "$1/.git/tbv/approvals.jsonl"
 }
 
 make_repo() {
@@ -449,21 +449,21 @@ cp "$ROOT/context-firewall/tests/fixtures/pytest_fail.out" "$repo/fixture.txt"
 git -C "$repo" add fixture.txt && git -C "$repo" commit -qm fixture
 out=$(cd "$repo" && "$GATE" test 2>&1)
 lines=$(echo "$out" | wc -l)
-if echo "$out" | grep -q "^  \[ddd\] test | art-" && echo "$out" | grep -q "1. test_session_refresh" \
-   && echo "$out" | grep -q "Passed: 60  Failed: 3  Skipped: 1" && [ "$lines" -le 33 ] && [ -d "$repo/.ddd" ] \
-   && ! git -C "$repo" status --porcelain --untracked-files=all | grep -q '\.ddd'; then
+if echo "$out" | grep -q "^  \[tbv\] test | art-" && echo "$out" | grep -q "1. test_session_refresh" \
+   && echo "$out" | grep -q "Passed: 60  Failed: 3  Skipped: 1" && [ "$lines" -le 33 ] && [ -d "$repo/.tbv" ] \
+   && ! git -C "$repo" status --porcelain --untracked-files=all | grep -q '\.tbv'; then
   ok "failing test step excerpt goes through the context firewall, store stays out of git"
 else
   bad "failing test step excerpt goes through the context firewall, store stays out of git" "$lines lines: $out"
 fi
 out=$(cd "$repo" && GATE_FIREWALL=0 "$GATE" test 2>&1)
-if ! echo "$out" | grep -q "\[ddd\]" && echo "$out" | grep -q "AssertionError"; then
+if ! echo "$out" | grep -q "\[tbv\]" && echo "$out" | grep -q "AssertionError"; then
   ok "GATE_FIREWALL=0 keeps the plain grep excerpt"
 else
   bad "GATE_FIREWALL=0 keeps the plain grep excerpt" "$out"
 fi
 out=$(cd "$repo" && GATE_EXCERPT_LINES=8 "$GATE" test 2>&1)
-if [ "$(echo "$out" | grep -c '^  ')" -le 8 ] && echo "$out" | grep -q "^  \[ddd\] \(full output\|omitted\)"; then
+if [ "$(echo "$out" | grep -c '^  ')" -le 8 ] && echo "$out" | grep -q "^  \[tbv\] \(full output\|omitted\)"; then
   ok "firewall excerpt respects GATE_EXCERPT_LINES and keeps the retrieval line"
 else
   bad "firewall excerpt respects GATE_EXCERPT_LINES and keeps the retrieval line" "$out"
@@ -780,7 +780,7 @@ repo=$(make_gate_repo '- gate.test: if [ {workers} -gt 2 ]; then exit 137; fi; e
 status=0; out=$(gate_in "$repo" env GATE_WORKERS=4) || status=$?
 if [ "$status" -eq 0 ] && echo "$out" | grep -q "^test OOM (exit 137) — killed for memory at 4 workers; re-running once with 2" \
    && echo "$out" | grep -q "^test PASS" && [ "$(cat "$repo/.gate/test.log")" = "ran with 2" ] \
-   && [ "$(cat "$repo/.git/ddd-gate/worker-mb")" = "2048" ]; then
+   && [ "$(cat "$repo/.git/tbv-gate/worker-mb")" = "2048" ]; then
   ok "an OOM kill re-runs the step once at half the workers and remembers a doubled worker size"
 else
   bad "an OOM kill re-runs the step once at half the workers and remembers a doubled worker size" "exit $status: $out"
@@ -835,7 +835,7 @@ if ps -A -o pid= -o ppid= -o rss= >/dev/null 2>&1 && command -v python3 >/dev/nu
   repo=$(make_gate_repo "- gate.test: : {workers}; python3 -c 'import time; x = b\"x\" * (300 * 1024 * 1024); time.sleep(2.5)'
 - gate.workers.mb: 128")
   gate_in "$repo" env GATE_WORKERS=1 >/dev/null
-  size=$(cat "$repo/.git/ddd-gate/worker-mb" 2>/dev/null)
+  size=$(cat "$repo/.git/tbv-gate/worker-mb" 2>/dev/null)
   out=$(gate_in "$repo" env GATE_WORKERS='')
   if [ "${size:-0}" -ge 300 ] && [ "${size:-0}" -le 600 ] && echo "$out" | grep -q "$size MiB/worker, .*size measured on earlier runs"; then
     ok "a full test run measures its peak memory per worker (+25%) and the next gate sizes workers by it ($size MiB)"
@@ -845,14 +845,14 @@ if ps -A -o pid= -o ppid= -o rss= >/dev/null 2>&1 && command -v python3 >/dev/nu
   rm -rf "$repo"
   repo=$(make_gate_repo '- gate.test: sleep 1.5
 - gate.test.focus: sleep 1.5; echo {}')
-  mkdir -p "$repo/.git/ddd-gate" && echo 1000 > "$repo/.git/ddd-gate/worker-mb"
+  mkdir -p "$repo/.git/tbv-gate" && echo 1000 > "$repo/.git/tbv-gate/worker-mb"
   gate_args=(test -- one); gate_in "$repo" env GATE_WORKERS=1 >/dev/null; gate_args=(test)
-  focused_size=$(cat "$repo/.git/ddd-gate/worker-mb")
+  focused_size=$(cat "$repo/.git/tbv-gate/worker-mb")
   gate_in "$repo" env GATE_WORKERS=1 >/dev/null
-  if [ "$focused_size" = "1000" ] && [ "$(cat "$repo/.git/ddd-gate/worker-mb")" = "750" ]; then
+  if [ "$focused_size" = "1000" ] && [ "$(cat "$repo/.git/tbv-gate/worker-mb")" = "750" ]; then
     ok "a focused run never teaches the size; a lighter full run lowers it by a quarter at most"
   else
-    bad "a focused run never teaches the size; a lighter full run lowers it by a quarter at most" "focused $focused_size, then $(cat "$repo/.git/ddd-gate/worker-mb")"
+    bad "a focused run never teaches the size; a lighter full run lowers it by a quarter at most" "focused $focused_size, then $(cat "$repo/.git/tbv-gate/worker-mb")"
   fi
   rm -rf "$repo"
 else
@@ -1647,11 +1647,11 @@ status=0; out=$(ui_check) || status=$?
 if [ "$status" -eq 1 ] && echo "$out" | grep -q "last decision was 'deny'"; then ok "a later denial overrides an earlier approval"; else bad "a later denial overrides an earlier approval" "exit $status: $out"; fi
 status=0; out=$(ui_check src/ui.md) || status=$?
 if [ "$status" -eq 2 ] && echo "$out" | grep -q "must be vault/ui/<feature-slug>/contract.md"; then ok "a contract path outside vault/ui fails closed"; else bad "a contract path outside vault/ui fails closed" "exit $status: $out"; fi
-lines_before=$(wc -l < "$urepo/.git/donedonedone/approvals.jsonl")
+lines_before=$(wc -l < "$urepo/.git/tbv/approvals.jsonl")
 status=0; out=$(cd "$urepo" && CLAUDECODE=1 "$APPROVE_UI" vault/ui/notes/contract.md 2>&1) || status=$?
 if [ "$status" -eq 1 ] && echo "$out" | grep -q "agent's shell"; then ok "approve-ui.sh refuses inside an agent's shell"; else bad "approve-ui.sh refuses inside an agent's shell" "exit $status: $out"; fi
 status=0; out=$(cd "$urepo" && echo "APPROVE UI notes" | env -u CLAUDECODE "$APPROVE_UI" vault/ui/notes/contract.md 2>&1) || status=$?
-if [ "$status" -eq 1 ] && echo "$out" | grep -qE "$refusal_ok" && [ "$(wc -l < "$urepo/.git/donedonedone/approvals.jsonl")" -eq "$lines_before" ]; then
+if [ "$status" -eq 1 ] && echo "$out" | grep -qE "$refusal_ok" && [ "$(wc -l < "$urepo/.git/tbv/approvals.jsonl")" -eq "$lines_before" ]; then
   ok "approve-ui.sh refuses piped input and writes nothing"
 else
   bad "approve-ui.sh refuses piped input and writes nothing" "exit $status: $out"
@@ -1800,7 +1800,7 @@ echo "# my own global rules" > "$home/.claude/CLAUDE.md"
 echo "old" > "$home/.claude/commands/init-vault.md"
 echo "old" > "$home/.claude/scripts/generate-copilot-agents.sh"
 echo '{"mine": true}' > "$home/.cursor/hooks.json"
-HOME="$home" DONEDONEDONE_OFFLINE=1 "$INSTALL" >/dev/null 2>&1
+HOME="$home" TBV_OFFLINE=1 "$INSTALL" >/dev/null 2>&1
 if [ "$(jq -r .mine "$home/.claude/settings.json")" = "true" ] && [ "$(jq -r .mine "$home"/.claude/settings.json.bak-*)" = "true" ]; then
   ok "install keeps what an existing settings.json holds and backs the file up"
 else
@@ -1835,7 +1835,7 @@ rm -rf "$home"
 home=$(mktemp -d)
 mkdir -p "$home/.claude/skills/init-vault"
 echo "old skill" > "$home/.claude/skills/init-vault/SKILL.md"
-status=0; out=$(HOME="$home" DONEDONEDONE_OFFLINE=1 "$INSTALL" 2>&1) || status=$?
+status=0; out=$(HOME="$home" TBV_OFFLINE=1 "$INSTALL" 2>&1) || status=$?
 if [ "$status" -eq 0 ] && [ ! -e "$home/.claude/skills/init-vault" ] \
    && [ "$(cat "$home"/.claude/init-vault-skill.bak-*/SKILL.md 2>/dev/null)" = "old skill" ]; then
   ok "install moves the renamed init-vault skill to a backup outside skills/, never deletes it"
@@ -1855,7 +1855,7 @@ echo old > "$home/.claude/agents/scribe.md"
 echo old > "$home/.claude/skills/compaction/SKILL.md"
 echo old > "$home/.copilot/agents/scribe.agent.md"
 echo old > "$home/.cursor/agents/scribe.md"
-status=0; out=$(HOME="$home" DONEDONEDONE_OFFLINE=1 "$INSTALL" 2>&1) || status=$?
+status=0; out=$(HOME="$home" TBV_OFFLINE=1 "$INSTALL" 2>&1) || status=$?
 if [ "$status" -eq 0 ] && [ ! -e "$home/.claude/agents/scribe.md" ] && [ ! -e "$home/.claude/skills/compaction" ] \
    && [ ! -e "$home/.copilot/agents/scribe.agent.md" ] && [ ! -e "$home/.cursor/agents/scribe.md" ]; then
   ok "install retires the scribe agent and compaction skill from every live folder"
@@ -1876,7 +1876,7 @@ home=$(mktemp -d)
 mkdir -p "$home/.claude"
 echo '{"mine": true, "env": {"CLAUDE_CODE_USE_POWERSHELL_TOOL": "1"}, "permissions": {"deny": ["Bash(mine *)"]},
   "hooks": {"Stop": [{"hooks": [{"type": "command", "command": "my-stop.sh"}]}]}}' > "$home/.claude/settings.json"
-out=$(HOME="$home" DONEDONEDONE_OFFLINE=1 "$INSTALL" 2>&1)
+out=$(HOME="$home" TBV_OFFLINE=1 "$INSTALL" 2>&1)
 s="$home/.claude/settings.json"
 if [ "$(jq -r '.mine' "$s")" = "true" ] && [ "$(jq -r '.env.CLAUDE_CODE_USE_POWERSHELL_TOOL' "$s")" = "1" ] \
    && jq -e '.permissions.deny | index("Bash(mine *)") and index("Bash(sudo *)")' "$s" >/dev/null \
@@ -1894,26 +1894,26 @@ else
 fi
 before=$(jq -cS . "$s")
 sleep 1
-HOME="$home" DONEDONEDONE_OFFLINE=1 "$INSTALL" >/dev/null 2>&1
+HOME="$home" TBV_OFFLINE=1 "$INSTALL" >/dev/null 2>&1
 if [ "$(jq -cS . "$s")" = "$before" ] && [ "$(find "$home/.claude" -name 'settings.json.bak-*' | wc -l | tr -d ' ')" = "1" ]; then
   ok "a second install changes nothing in settings.json and adds no hook twice"
 else
   bad "a second install changes nothing in settings.json and adds no hook twice" "$(ls "$home/.claude")"
 fi
-if grep -q "^commit=$(git -C "$ROOT" rev-parse HEAD)$" "$home/.claude/donedonedone.version" && grep -q "^source=$ROOT$" "$home/.claude/donedonedone.version" \
-   && grep -q ' scripts/gate.sh$' "$home/.claude/donedonedone.manifest" && echo "$out" | grep -q "^Version: $(git -C "$ROOT" rev-parse --short=7 HEAD) "; then
+if grep -q "^commit=$(git -C "$ROOT" rev-parse HEAD)$" "$home/.claude/tbv.version" && grep -q "^source=$ROOT$" "$home/.claude/tbv.version" \
+   && grep -q ' scripts/gate.sh$' "$home/.claude/tbv.manifest" && echo "$out" | grep -q "^Version: $(git -C "$ROOT" rev-parse --short=7 HEAD) "; then
   ok "install records the commit it installed, where from, and a hash of every file it put in place"
 else
-  bad "install records the commit it installed, where from, and a hash of every file it put in place" "$(cat "$home/.claude/donedonedone.version")"
+  bad "install records the commit it installed, where from, and a hash of every file it put in place" "$(cat "$home/.claude/tbv.version")"
 fi
-if [ -z "$(HOME="$home" DONEDONEDONE_OFFLINE=1 "$home/.claude/scripts/harness.sh" check)" ] \
-   && HOME="$home" DONEDONEDONE_OFFLINE=1 "$home/.claude/scripts/ddd" version | grep -q "^status: up to date, files unmodified"; then
-  ok "a fresh install checks out clean, and ddd version says so"
+if [ -z "$(HOME="$home" TBV_OFFLINE=1 "$home/.claude/scripts/harness.sh" check)" ] \
+   && HOME="$home" TBV_OFFLINE=1 "$home/.claude/scripts/tbv" version | grep -q "^status: up to date, files unmodified"; then
+  ok "a fresh install checks out clean, and tbv version says so"
 else
-  bad "a fresh install checks out clean, and ddd version says so" "$(HOME="$home" DONEDONEDONE_OFFLINE=1 "$home/.claude/scripts/ddd" version)"
+  bad "a fresh install checks out clean, and tbv version says so" "$(HOME="$home" TBV_OFFLINE=1 "$home/.claude/scripts/tbv" version)"
 fi
 echo "not json" > "$s"
-out=$(HOME="$home" DONEDONEDONE_OFFLINE=1 "$INSTALL" 2>&1)
+out=$(HOME="$home" TBV_OFFLINE=1 "$INSTALL" 2>&1)
 if [ "$(cat "$s")" = "not json" ] && ls "$home"/.claude/settings.json.new-* >/dev/null 2>&1 && echo "$out" | grep -q "could not be merged"; then
   ok "a settings.json that can't be merged is left alone, with the new one beside it"
 else
@@ -1953,7 +1953,7 @@ git -C "$hsrc" push -q origin main
 git -C "$hsrc" reset -q --hard HEAD~1
 HOME="$hhome" "$hsrc/install.sh" >/dev/null
 out=$(hz check)
-if echo "$out" | grep -q "^update available: $hurl is at $(git -C "$horigin" rev-parse --short=7 main), ahead of the clone at $hsrc — run: $hhome/.claude/scripts/ddd update"; then
+if echo "$out" | grep -q "^update available: $hurl is at $(git -C "$horigin" rev-parse --short=7 main), ahead of the clone at $hsrc — run: $hhome/.claude/scripts/tbv update"; then
   ok "a remote that moved ahead of the clone is reported as an update"
 else
   bad "a remote that moved ahead of the clone is reported as an update" "$out"
@@ -1961,7 +1961,7 @@ fi
 mv "$horigin" "$horigin.away"
 if hz check | grep -q "^update available"; then ok "the remote is asked at most once a day: the answer is cached"; else bad "the remote is asked at most once a day: the answer is cached" "$(hz check)"; fi
 mv "$horigin.away" "$horigin"
-if [ -z "$(DONEDONEDONE_OFFLINE=1 hz check)" ]; then ok "DONEDONEDONE_OFFLINE=1 never asks the remote"; else bad "DONEDONEDONE_OFFLINE=1 never asks the remote" "$(DONEDONEDONE_OFFLINE=1 hz check)"; fi
+if [ -z "$(TBV_OFFLINE=1 hz check)" ]; then ok "TBV_OFFLINE=1 never asks the remote"; else bad "TBV_OFFLINE=1 never asks the remote" "$(TBV_OFFLINE=1 hz check)"; fi
 nv=$(mktemp -d)
 out=$(cd "$nv" && HOME="$hhome" "$hhome/.claude/scripts/session-start.sh" </dev/null 2>&1)
 if echo "$out" | grep -q "^update available"; then ok "session-start passes the notice on in a project with no vault"; else bad "session-start passes the notice on in a project with no vault" "$out"; fi
@@ -1978,7 +1978,7 @@ if [ "$status" -eq 1 ] && echo "$out" | grep -q "uncommitted changes"; then ok "
 git -C "$hsrc" checkout -q -- agents/a.md
 status=0; out=$(hz update) || status=$?
 if [ "$status" -eq 0 ] && [ "$(cat "$hhome/.claude/agents/a.md")" = "two" ] && [ -z "$(hz check)" ] \
-   && grep -q "^commit=$(git -C "$horigin" rev-parse main)$" "$hhome/.claude/donedonedone.version"; then
+   && grep -q "^commit=$(git -C "$horigin" rev-parse main)$" "$hhome/.claude/tbv.version"; then
   ok "update fast-forwards the clone, reinstalls from it and leaves nothing to report"
 else
   bad "update fast-forwards the clone, reinstalls from it and leaves nothing to report" "exit $status: $out"
@@ -2011,7 +2011,7 @@ else
 fi
 hook=$(hz project-hook | jq -r '.hooks.SessionStart[0].hooks[0].command')
 empty=$(mktemp -d)
-if HOME="$empty" sh -c "$hook" | grep -q "donedonedone is not installed on this machine.*git clone $hurl && ./install.sh" \
+if HOME="$empty" sh -c "$hook" | grep -q "tbv is not installed on this machine.*git clone $hurl && ./install.sh" \
    && [ -z "$(HOME="$hhome" sh -c "$hook")" ]; then
   ok "the project hook speaks only on a machine with no install, and names the repository to clone"
 else
@@ -2019,10 +2019,10 @@ else
 fi
 git -C "$hsrc" remote set-url origin "https://user:s3cret@example.test/x.git"
 HOME="$hhome" "$hsrc/install.sh" >/dev/null
-if grep -q '^origin=https://example.test/x.git$' "$hhome/.claude/donedonedone.version" && ! grep -q s3cret "$hhome/.claude/donedonedone.version"; then
+if grep -q '^origin=https://example.test/x.git$' "$hhome/.claude/tbv.version" && ! grep -q s3cret "$hhome/.claude/tbv.version"; then
   ok "credentials in the clone's remote URL never reach the stamp"
 else
-  bad "credentials in the clone's remote URL never reach the stamp" "$(grep origin "$hhome/.claude/donedonedone.version")"
+  bad "credentials in the clone's remote URL never reach the stamp" "$(grep origin "$hhome/.claude/tbv.version")"
 fi
 rm -rf "$hroot" "$proj" "$empty"
 if [ -z "$("$ROOT/scripts/harness.sh" check 2>&1)" ]; then ok "check is silent when run from a clone, where nothing is installed"; else bad "check is silent when run from a clone, where nothing is installed" "$("$ROOT/scripts/harness.sh" check 2>&1)"; fi
@@ -2303,10 +2303,10 @@ rg() { (cd "$1" && shift && "$RISK_GATE" "$@" 2>&1); }
 lg() { (cd "$1" && shift && "$LOG_EVENT" "$@" >/dev/null 2>&1); }
 hash_in() { rg "$1" show "$2" | sed -n 's/.*hash=\([0-9a-f]*\).*/\1/p'; }
 seed_approval() {
-  mkdir -p "$1/.git/donedonedone"
+  mkdir -p "$1/.git/tbv"
   jq -cn --arg s "$2" --arg k "$3" --arg d "$4" --arg h "$5" --arg p "${6:-}" \
     '{ts: (now | todate), slice: $s, kind: $k, decision: $d, class: "x", score: 0, hash: $h, approver: "human@test"}
-     + (if $p != "" then {patch_id: $p} else {} end)' >> "$1/.git/donedonedone/approvals.jsonl"
+     + (if $p != "" then {patch_id: $p} else {} end)' >> "$1/.git/tbv/approvals.jsonl"
 }
 guard_in() {
   jq -n --arg cwd "$1" --arg c "$2" --arg a "${3:-}" \
@@ -2524,10 +2524,10 @@ if echo "$out" | grep -q "append-only"; then ok "a rewritten line still fails th
 rm -rf "$crlf"
 git -C "$repo" checkout -q -- vault/log.jsonl
 expect_block "the Director can't Write the risk policy"        guard_file Write 'vault/risk-policy.json'
-expect_block "the Director can't Edit the approvals ledger"    guard_file Edit '/repo/.git/donedonedone/approvals.jsonl'
-expect_block "a subagent can't Write the approvals ledger"     guard_file Write '.git/donedonedone/approvals.jsonl' builder
-expect_allow "anyone may read the approvals ledger"            guard_file Read '.git/donedonedone/approvals.jsonl'
-expect_block "the Director can't append to the ledger in shell" guard_in "$repo" 'echo "{}" >> .git/donedonedone/approvals.jsonl'
+expect_block "the Director can't Edit the approvals ledger"    guard_file Edit '/repo/.git/tbv/approvals.jsonl'
+expect_block "a subagent can't Write the approvals ledger"     guard_file Write '.git/tbv/approvals.jsonl' builder
+expect_allow "anyone may read the approvals ledger"            guard_file Read '.git/tbv/approvals.jsonl'
+expect_block "the Director can't append to the ledger in shell" guard_in "$repo" 'echo "{}" >> .git/tbv/approvals.jsonl'
 expect_block "the Director can't run approve-risk.sh"          guard_in "$repo" 'scripts/approve-risk.sh merge S001'
 expect_block "the Director can't fake a pty for approve-risk.sh" guard_in "$repo" 'script -qc "approve-risk.sh merge S001" /dev/null'
 expect_block "the Director can't run approve-ui.sh"            guard_in "$repo" 'scripts/approve-ui.sh vault/ui/cart/contract.md'
@@ -2535,31 +2535,31 @@ expect_allow "the Director may run the read-only ui-approval.sh check" guard_in 
 expect_block "the Director can't re-snapshot human-only files" guard_in "$repo" 'scripts/vault-guard.sh --human-snapshot'
 expect_block "the Director can't overwrite the policy in shell" guard_in "$repo" 'printf x > vault/risk-policy.json'
 expect_allow "the Director may commit the policy a human edited" guard_in "$repo" 'git add vault/risk-policy.json && git commit -m "chore: risk policy"'
-expect_allow "the Director may read the ledger in shell"        guard_in "$repo" 'jq . .git/donedonedone/approvals.jsonl'
+expect_allow "the Director may read the ledger in shell"        guard_in "$repo" 'jq . .git/tbv/approvals.jsonl'
 expect_block "a dot segment doesn't hide the risk policy from Write" guard_file Write 'vault/./risk-policy.json'
-expect_block "a doubled slash doesn't hide the ledger from Edit"   guard_file Edit '/repo/.git//donedonedone/approvals.jsonl'
-expect_block "a .. detour doesn't hide the ledger from Write"      guard_file Write '/repo/.git/hooks/../donedonedone/approvals.jsonl'
+expect_block "a doubled slash doesn't hide the ledger from Edit"   guard_file Edit '/repo/.git//tbv/approvals.jsonl'
+expect_block "a .. detour doesn't hide the ledger from Write"      guard_file Write '/repo/.git/hooks/../tbv/approvals.jsonl'
 expect_block "vault-guard's snapshot store is human-only"          guard_file Write '/repo/.git/skeletoncrew-vault-guard/vault_risk-policy.json'
-expect_block "a Windows path with backslashes doesn't hide the ledger from Write" guard_file Write 'C:\repo\.git\donedonedone\approvals.jsonl'
+expect_block "a Windows path with backslashes doesn't hide the ledger from Write" guard_file Write 'C:\repo\.git\tbv\approvals.jsonl'
 expect_block "a Windows path with backslashes doesn't hide the risk policy from Edit" guard_file Edit 'C:\Repo\Vault\Risk-Policy.json'
 expect_block "a Windows path with backslashes doesn't hide a .env from Read" guard_file Read 'C:\proj\.env'
 expect_block "a Windows path with backslashes doesn't hide secrets/ from Write" guard_file Write 'C:\proj\secrets\key.txt'
 expect_allow "an ordinary Windows path is still writable"       guard_file Write 'C:\proj\src\app.py'
 MSYS=winsymlinks:nativestrict ln -s "$repo/.git" "$repo/gl" 2>/dev/null
 if [ -L "$repo/gl" ]; then
-  status=0; guard_file Write "$repo/gl/donedonedone/approvals.jsonl" || status=$?
+  status=0; guard_file Write "$repo/gl/tbv/approvals.jsonl" || status=$?
   if [ "$status" -eq 2 ]; then
     ok "a symlinked directory doesn't hide the ledger from Write"
   else
-    bad "a symlinked directory doesn't hide the ledger from Write" "exit $status, expected 2; link: $(readlink "$repo/gl" 2>&1); cd -P: $(cd -P "$repo/gl/donedonedone" 2>&1 && pwd -P); realpath: $(realpath -m "$repo/gl/donedonedone/approvals.jsonl" 2>&1)"
+    bad "a symlinked directory doesn't hide the ledger from Write" "exit $status, expected 2; link: $(readlink "$repo/gl" 2>&1); cd -P: $(cd -P "$repo/gl/tbv" 2>&1 && pwd -P); realpath: $(realpath -m "$repo/gl/tbv/approvals.jsonl" 2>&1)"
   fi
-  expect_block "a symlinked directory doesn't hide the ledger from a glob" guard_in "$repo" 'cp forged gl/d*/a*'
+  expect_block "a symlinked directory doesn't hide the ledger from a glob" guard_in "$repo" 'cp forged gl/t*/a*'
 else
   echo "  SKIP  symlinked-directory ledger tests (this machine can't create a symlink: Git Bash without native symlink rights copies the directory instead)"
 fi
 rm -rf "$repo/gl"
-expect_block "a glob doesn't hide the ledger from shell"           guard_in "$repo" 'echo x >> .git/donedone*/approvals?jsonl'
-expect_block "a cd into .git doesn't hide the ledger"              guard_in "$repo" 'cd .git && cd done* && tee -a app*'
+expect_block "a glob doesn't hide the ledger from shell"           guard_in "$repo" 'echo x >> .git/tb*/approvals?jsonl'
+expect_block "a cd into .git doesn't hide the ledger"              guard_in "$repo" 'cd .git && cd tb* && tee -a app*'
 expect_block "the snapshot store is human-only in shell"           guard_in "$repo" 'cp forged .git/skeletoncrew-vault-guard/x'
 expect_block "a glob doesn't hide approve-risk.sh"                 guard_in "$repo" "$ROOT/scripts/approve-r*.sh merge S001"
 expect_block "an agent can't unset CLAUDECODE"                     guard_in "$repo" 'unset CLAUDECODE; true'
@@ -2567,7 +2567,7 @@ expect_block "an agent can't scrub its environment"                guard_in "$re
 expect_block "an agent can't open a pty from python"               guard_in "$repo" 'python3 -c "import pty; pty.spawn([\"sh\"])"'
 expect_block "an agent can't wrap a command in unbuffer"           guard_in "$repo" 'unbuffer sh run.sh'
 expect_block "a subagent can't write vault/ through a glob"        guard_in "$repo" 'echo x > vau?t/task-tree.json' builder
-expect_allow "globs into the ledger are fine for reading"          guard_in "$repo" 'jq . .git/d*/a*'
+expect_allow "globs into the ledger are fine for reading"          guard_in "$repo" 'jq . .git/t*/a*'
 expect_allow "a glob that can't reach a human-only file is fine"   guard_in "$repo" 'prettier --write *.json src/*.json'
 expect_allow "copying build output with a glob is fine"            guard_in "$repo" 'mkdir -p build && cp -r dist/* build/'
 expect_block "a subagent can't run risk-gate.sh"                guard_in "$repo" 'scripts/risk-gate.sh assess S001' builder
@@ -2580,19 +2580,19 @@ rm -rf "$nrepo"
 status=0; out=$(cd "$repo" && CLAUDECODE=1 "$APPROVE" merge S002 2>&1) || status=$?
 if [ "$status" -eq 1 ] && echo "$out" | grep -q "agent's shell"; then ok "approve-risk.sh refuses inside an agent's shell"; else bad "approve-risk.sh refuses inside an agent's shell" "exit $status: $out"; fi
 fake=$(mktemp -d); ln -s "$(command -v bash)" "$fake/claude"
-lines_before=$(wc -l < "$repo/.git/donedonedone/approvals.jsonl")
+lines_before=$(wc -l < "$repo/.git/tbv/approvals.jsonl")
 ancestor_refusal="agent's shell"
 ps -o comm= -p $$ >/dev/null 2>&1 || ancestor_refusal="agent's shell|interactive terminal"
 status=0; out=$(cd "$repo" && env -u CLAUDECODE "$fake/claude" -c "\"\$0\" merge S002; exit \$?" "$APPROVE" 2>&1) || status=$?
-if [ "$status" -eq 1 ] && echo "$out" | grep -qE "$ancestor_refusal" && [ "$(wc -l < "$repo/.git/donedonedone/approvals.jsonl")" -eq "$lines_before" ]; then
+if [ "$status" -eq 1 ] && echo "$out" | grep -qE "$ancestor_refusal" && [ "$(wc -l < "$repo/.git/tbv/approvals.jsonl")" -eq "$lines_before" ]; then
   ok "approve-risk.sh refuses under a Claude Code process even with CLAUDECODE unset"
 else
   bad "approve-risk.sh refuses under a Claude Code process even with CLAUDECODE unset" "exit $status: $out"
 fi
 rm -rf "$fake"
-lines_before=$(wc -l < "$repo/.git/donedonedone/approvals.jsonl")
+lines_before=$(wc -l < "$repo/.git/tbv/approvals.jsonl")
 status=0; out=$(cd "$repo" && echo S002 | env -u CLAUDECODE "$APPROVE" merge S002 2>&1) || status=$?
-if [ "$status" -eq 1 ] && echo "$out" | grep -qE "$refusal_ok" && [ "$(wc -l < "$repo/.git/donedonedone/approvals.jsonl")" -eq "$lines_before" ]; then
+if [ "$status" -eq 1 ] && echo "$out" | grep -qE "$refusal_ok" && [ "$(wc -l < "$repo/.git/tbv/approvals.jsonl")" -eq "$lines_before" ]; then
   ok "approve-risk.sh refuses piped input and writes nothing"
 else
   bad "approve-risk.sh refuses piped input and writes nothing" "exit $status: $out"
@@ -2628,14 +2628,14 @@ sys.exit(os.WEXITSTATUS(status))
 if ! under_claude && command -v python3 >/dev/null 2>&1 && python3 -c 'import os, pty; os.forkpty' >/dev/null 2>&1; then
   printf '# P\n## Gate\n- gate.test: true\n- gate.mutation: echo no-mutants\n' > "$repo/vault/project.md"
   status=0; out=$(cd "$repo" && pty_run "nope" env -u CLAUDECODE "$APPROVE" merge S002 2>&1) || status=$?
-  if [ "$status" -eq 1 ] && tail -1 "$repo/.git/donedonedone/approvals.jsonl" | jq -e '.decision == "deny" and .approver == "test@test"' >/dev/null \
+  if [ "$status" -eq 1 ] && tail -1 "$repo/.git/tbv/approvals.jsonl" | jq -e '.decision == "deny" and .approver == "test@test"' >/dev/null \
      && ! rg "$repo" check S002 merge >/dev/null; then
     ok "a human at a real terminal who types anything else records a denial"
   else
     bad "a human at a real terminal who types anything else records a denial" "exit $status: $(echo "$out" | tail -3)"
   fi
   status=0; out=$(cd "$repo" && pty_run "S002" env -u CLAUDECODE "$APPROVE" merge S002 2>&1) || status=$?
-  if [ "$status" -eq 0 ] && tail -1 "$repo/.git/donedonedone/approvals.jsonl" | jq -e --arg p "$P2" '.decision == "approve" and .kind == "merge" and .patch_id == $p' >/dev/null \
+  if [ "$status" -eq 0 ] && tail -1 "$repo/.git/tbv/approvals.jsonl" | jq -e --arg p "$P2" '.decision == "approve" and .kind == "merge" and .patch_id == $p' >/dev/null \
      && rg "$repo" check S002 merge | grep -q "^RISK: PASS merge S002"; then
     ok "a human at a real terminal approves the merge, bound to its patch_id"
   else
@@ -2648,21 +2648,21 @@ rm -rf "$repo"
 
 echo "== vault-guard.sh — human-only files survive any tool call =="
 repo=$(make_vault_repo)
-mkdir -p "$repo/.git/donedonedone"
-echo '{"slice":"S001","decision":"approve"}' > "$repo/.git/donedonedone/approvals.jsonl"
+mkdir -p "$repo/.git/tbv"
+echo '{"slice":"S001","decision":"approve"}' > "$repo/.git/tbv/approvals.jsonl"
 (cd "$repo" && "$VAULT_GUARD" --snapshot </dev/null)
 vg "$repo" PreToolUse "" Bash 'python3 forge.py' >/dev/null
-echo '{"slice":"S002","decision":"approve","forged":true}' >> "$repo/.git/donedonedone/approvals.jsonl"
+echo '{"slice":"S002","decision":"approve","forged":true}' >> "$repo/.git/tbv/approvals.jsonl"
 status=0; out=$(vg "$repo" PostToolUse "" Bash 'python3 forge.py') || status=$?
-if [ "$status" -eq 2 ] && echo "$out" | grep -q "human-only" && ! grep -q forged "$repo/.git/donedonedone/approvals.jsonl"; then
+if [ "$status" -eq 2 ] && echo "$out" | grep -q "human-only" && ! grep -q forged "$repo/.git/tbv/approvals.jsonl"; then
   ok "an approval forged during the Director's own tool call is undone"
 else
   bad "an approval forged during the Director's own tool call is undone" "exit $status: $out"
 fi
 vg "$repo" PreToolUse "" Bash 'ls' >/dev/null; vg "$repo" PostToolUse "" Bash 'ls' >/dev/null
-echo '{"slice":"S004","decision":"approve","late":true}' >> "$repo/.git/donedonedone/approvals.jsonl"
+echo '{"slice":"S004","decision":"approve","late":true}' >> "$repo/.git/tbv/approvals.jsonl"
 status=0; out=$(vg "$repo" PreToolUse "" Bash 'ls') || status=$?
-if [ "$status" -eq 2 ] && echo "$out" | grep -q "between tool calls" && ! grep -q late "$repo/.git/donedonedone/approvals.jsonl"; then
+if [ "$status" -eq 2 ] && echo "$out" | grep -q "between tool calls" && ! grep -q late "$repo/.git/tbv/approvals.jsonl"; then
   ok "an approval a background job writes between tool calls is undone at the next call"
 else
   bad "an approval a background job writes between tool calls is undone at the next call" "exit $status: $out"
@@ -2684,10 +2684,10 @@ echo '{"thresholds":{"moderate":15}}' > "$repo/vault/risk-policy.json"
 vg "$repo" PreToolUse "" Bash 'ls' >/dev/null
 status=0; vg "$repo" PostToolUse "" Bash 'ls' >/dev/null || status=$?
 if [ "$status" -eq 0 ] && grep -q '"moderate":15' "$repo/vault/risk-policy.json"; then ok "a human's edit between tool calls is kept"; else bad "a human's edit between tool calls is kept" "exit $status"; fi
-echo '{"slice":"S003","decision":"approve","human":true}' >> "$repo/.git/donedonedone/approvals.jsonl"
+echo '{"slice":"S003","decision":"approve","human":true}' >> "$repo/.git/tbv/approvals.jsonl"
 (cd "$repo" && "$VAULT_GUARD" --human-snapshot </dev/null)
 status=0; vg "$repo" PostToolUse builder >/dev/null || status=$?
-if [ "$status" -eq 0 ] && grep -q '"human":true' "$repo/.git/donedonedone/approvals.jsonl"; then
+if [ "$status" -eq 0 ] && grep -q '"human":true' "$repo/.git/tbv/approvals.jsonl"; then
   ok "an approve-risk.sh write mid-call survives (it re-snapshots the ledger)"
 else
   bad "an approve-risk.sh write mid-call survives (it re-snapshots the ledger)" "exit $status"
@@ -3235,7 +3235,7 @@ esac
 EOF
 chmod +x "$fake/bin/cygpath"
 HOME="$home" PATH="$fake/bin:$PATH" "$INSTALL" >/dev/null 2>&1
-win=$(jq -r '.hooks.PreToolUse[] | select(.command | endswith("/guard.sh")) | .windows' "$home/.copilot/hooks/donedonedone.json" 2>/dev/null)
+win=$(jq -r '.hooks.PreToolUse[] | select(.command | endswith("/guard.sh")) | .windows' "$home/.copilot/hooks/tbv.json" 2>/dev/null)
 # shellcheck disable=SC2016
 want='& '"'"'C:\Program Files\Git\bin\bash.exe'"'"' '"'"'C:/Users/o'"''"'neil/.claude/scripts/guard.sh'"'"'; exit $LASTEXITCODE'
 if [ "$win" = "$want" ]; then
@@ -3288,7 +3288,7 @@ rm -rf "$repo"
 
 home=$(mktemp -d)
 HOME="$home" "$INSTALL" >/dev/null 2>&1
-hooks="$home/.copilot/hooks/donedonedone.json"
+hooks="$home/.copilot/hooks/tbv.json"
 missing=$(jq -r '.hooks[][].command' "$hooks" 2>/dev/null | tr -d '\r' | while IFS= read -r c; do [ -x "$c" ] || echo "$c"; done)
 if jq -e '(has("version") | not)
       and (.hooks | keys == ["PostToolUse","PreToolUse","SessionStart","Stop","SubagentStop"])
@@ -3300,7 +3300,7 @@ else
 fi
 echo '{"mine": true}' > "$hooks"
 HOME="$home" "$INSTALL" >/dev/null 2>&1
-if [ "$(jq -r .mine "$hooks")" = "true" ] && ls "$home"/.copilot/hooks/donedonedone.json.new-* >/dev/null 2>&1; then
+if [ "$(jq -r .mine "$hooks")" = "true" ] && ls "$home"/.copilot/hooks/tbv.json.new-* >/dev/null 2>&1; then
   ok "install keeps an existing VS Code hooks file and drops the new one beside it, outside *.json"
 else
   bad "install keeps an existing VS Code hooks file and drops the new one beside it, outside *.json" "$(ls "$home/.copilot/hooks")"

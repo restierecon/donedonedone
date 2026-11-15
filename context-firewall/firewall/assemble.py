@@ -31,7 +31,7 @@ def _fit(section: Section, budget: int) -> Tuple[List[str], int]:
 
 
 def header(artifact: Artifact, comp: Compressed, mode: str, raw_tokens: int, out_tokens: Optional[int]) -> str:
-    parts = [f"[ddd] {comp.type}", artifact.id]
+    parts = [f"[tbv] {comp.type}", artifact.id]
     if artifact.exit_code is not None:
         parts.append(f"exit {artifact.exit_code}")
     if artifact.timed_out:
@@ -83,15 +83,15 @@ def render(comp: Compressed, artifact: Artifact, mode: str, budget: int, raw_tok
 def _footer(artifact: Artifact, omitted: List[Section], command: str) -> str:
     base = f"{command} artifact {artifact.id}"
     if not omitted:
-        return f"[ddd] full output: {base} [--section NAME | --lines A-B | --raw]"
+        return f"[tbv] full output: {base} [--section NAME | --lines A-B | --raw]"
     flags = [retrieval_flag(s) for s in omitted[:8]]
     more = f" (+{len(omitted) - 8} more sections)" if len(omitted) > 8 else ""
-    return f"[ddd] omitted for budget: {', '.join(flags)}{more} | retrieve: {base} <flag> | full: --raw"
+    return f"[tbv] omitted for budget: {', '.join(flags)}{more} | retrieve: {base} <flag> | full: --raw"
 
 
 def duplicate_notice(artifact: Artifact, previous_id: str, age_seconds: float, how: str, command: str) -> str:
     age = f"{int(age_seconds)}s" if age_seconds < 120 else f"{int(age_seconds // 60)}m"
     return (
-        f"[ddd] NO NEW INFORMATION | {artifact.id} | {how} the output of {previous_id} ({age} ago)\n"
-        f"[ddd] that result is above in this conversation; if it is no longer visible: {command} artifact {previous_id}"
+        f"[tbv] NO NEW INFORMATION | {artifact.id} | {how} the output of {previous_id} ({age} ago)\n"
+        f"[tbv] that result is above in this conversation; if it is no longer visible: {command} artifact {previous_id}"
     )

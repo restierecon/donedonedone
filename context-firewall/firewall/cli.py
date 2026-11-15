@@ -41,13 +41,13 @@ def _store(args: argparse.Namespace) -> ArtifactStore:
 
 
 def _session(args: argparse.Namespace) -> str:
-    return getattr(args, "session", None) or os.environ.get("DDD_SESSION") or "cli"
+    return getattr(args, "session", None) or os.environ.get("TBV_SESSION") or "cli"
 
 
 def _emit(result: CommandResult, args: argparse.Namespace) -> int:
     store = _store(args)
     settings = config.load(store.root, getattr(args, "mode", None))
-    if not (getattr(args, "session", None) or os.environ.get("DDD_SESSION")):
+    if not (getattr(args, "session", None) or os.environ.get("TBV_SESSION")):
         settings.data["dedup"]["enabled"] = False
     if not settings.enabled:
         _raw(sys.stdout, result.stdout)
@@ -58,7 +58,7 @@ def _emit(result: CommandResult, args: argparse.Namespace) -> int:
         _raw(sys.stdout, result.stdout)
         _raw(sys.stderr, result.stderr)
         if result.timed_out:
-            _err(f"[ddd] timed out after {args.timeout}s; partial output above" + (f"; stored as {outcome.artifact.id}" if outcome.artifact else ""))
+            _err(f"[tbv] timed out after {args.timeout}s; partial output above" + (f"; stored as {outcome.artifact.id}" if outcome.artifact else ""))
     else:
         _out(outcome.text or "")
     return result.exit_code if result.exit_code is not None else 0
@@ -69,7 +69,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     if argv and argv[0] == "--":
         argv = argv[1:]
     if not argv:
-        _err("ddd run: nothing to run (ddd run -- <command> [args])")
+        _err("tbv run: nothing to run (tbv run -- <command> [args])")
         return 2
     shell = "pwsh" if args.pwsh else ("sh" if args.shell else None)
     result = capture.run(argv, cwd=os.getcwd(), timeout=args.timeout, shell=shell, display=" ".join(argv))
@@ -100,7 +100,7 @@ def _project_command(step: str) -> Optional[str]:
 def cmd_step(args: argparse.Namespace) -> int:
     command = _project_command(args.step)
     if not command:
-        _err(f"ddd {args.step}: no command found (vault/project.md gate.{args.step}, package.json scripts.{args.step}); use ddd run -- <command>")
+        _err(f"tbv {args.step}: no command found (vault/project.md gate.{args.step}, package.json scripts.{args.step}); use tbv run -- <command>")
         return 2
     extra = " ".join(args.extra)
     full = f"{command} {extra}".strip()
@@ -148,7 +148,7 @@ def cmd_ingest(args: argparse.Namespace) -> int:
         return 0
     body = outcome.text or ""
     if args.body_only:
-        body = "\n".join(line for line in body.split("\n") if not line.startswith("[ddd] full output:"))
+        body = "\n".join(line for line in body.split("\n") if not line.startswith("[tbv] full output:"))
     _out(body)
     return 0
 
@@ -159,8 +159,8 @@ def cmd_hook(args: argparse.Namespace) -> int:
     out = hook.main(raw)
     if out:
         sys.stdout.write(out)
-    if os.environ.get("DDD_HOOK_DEBUG"):
-        _err(f"[ddd hook] {round((time.perf_counter() - started) * 1000, 1)} ms, replaced={bool(out)}")
+    if os.environ.get("TBV_HOOK_DEBUG"):
+        _err(f"[tbv hook] {round((time.perf_counter() - started) * 1000, 1)} ms, replaced={bool(out)}")
     return 0
 
 
@@ -176,7 +176,7 @@ def _print_lines(lines: List[str], args: argparse.Namespace, settings: config.Se
     shown, info = retrieval.bounded(lines, settings.limit("retrievalLines"), getattr(args, "all", False))
     _out("\n".join(shown))
     if info["shown"] < info["total"]:
-        _out(f"[ddd] {label}: showing {info['shown']} of {info['total']} lines; add --all for everything or narrow with --lines A-B")
+        _out(f"[tbv] {label}: showing {info['shown']} of {info['total']} lines; add --all for everything or narrow with --lines A-B")
 
 
 def _range(spec: str) -> tuple:
@@ -364,7 +364,7 @@ def cmd_config(args: argparse.Namespace) -> int:
 
 
 def parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="ddd", description="DoneDoneDone context firewall: compact tool output, full output kept as artifacts.")
+    p = argparse.ArgumentParser(prog="tbv", description="tbv context firewall: compact tool output, full output kept as artifacts.")
     sub = p.add_subparsers(dest="cmd")
 
     def common(sp: argparse.ArgumentParser) -> None:
@@ -409,7 +409,7 @@ def parser() -> argparse.ArgumentParser:
     sp = sub.add_parser("hook", help="Claude Code PostToolUse hook (reads the payload on stdin)")
     sp.set_defaults(fn=cmd_hook)
 
-    sp = sub.add_parser("pre", help="Claude Code PreToolUse hook: wraps simple, already-allowed noisy commands in ddd run")
+    sp = sub.add_parser("pre", help="Claude Code PreToolUse hook: wraps simple, already-allowed noisy commands in tbv run")
     sp.set_defaults(fn=cmd_pre)
 
     sp = sub.add_parser("artifact", help="retrieve an artifact or part of it")
@@ -492,7 +492,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     try:
         return int(args.fn(args) or 0)
     except retrieval.RetrievalError as exc:
-        _err(f"ddd: {exc}")
+        _err(f"tbv: {exc}")
         return 1
     except BrokenPipeError:
         return 0

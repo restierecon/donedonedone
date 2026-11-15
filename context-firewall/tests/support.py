@@ -18,10 +18,10 @@ FIXTURES = HERE / "fixtures"
 GOLDEN = HERE / "golden"
 ID = re.compile(r"art-[0-9a-f]{10}")
 
-os.environ["DDD_COMMAND"] = "ddd"
-os.environ.pop("DDD_MODE", None)
-os.environ.pop("DDD_HOME", None)
-os.environ.pop("DDD_DISABLE", None)
+os.environ["TBV_COMMAND"] = "tbv"
+os.environ.pop("TBV_MODE", None)
+os.environ.pop("TBV_HOME", None)
+os.environ.pop("TBV_DISABLE", None)
 
 
 def names():

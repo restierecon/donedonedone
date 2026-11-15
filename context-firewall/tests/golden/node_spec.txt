@@ -1,4 +1,4 @@
-[ddd] test | art-ID | exit 1 | node:test spec/high | ~499->167 tok est
+[tbv] test | art-ID | exit 1 | node:test spec/high | ~499->167 tok est
 TEST RESULT
 Status: FAILED
 Passed: 25  Failed: 2  Skipped: 0  Todo: 0  Total: 27
@@ -19,4 +19,4 @@ FAILURES
    nt/auth.test.mjs:5
    TypeError: provider.get is not a function
    (raw L61-71; --failure 2)
-[ddd] full output: ddd artifact art-ID [--section NAME | --lines A-B | --raw]
+[tbv] full output: tbv artifact art-ID [--section NAME | --lines A-B | --raw]

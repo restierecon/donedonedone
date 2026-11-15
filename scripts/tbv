@@ -5,7 +5,7 @@ case "${1:-}" in
   update|version) exec "$here/harness.sh" "$@" ;;
 esac
 entry=""
-for candidate in "$here/../context-firewall/ddd.py" "$HOME/.claude/context-firewall/ddd.py"; do
+for candidate in "$here/../context-firewall/tbv.py" "$HOME/.claude/context-firewall/tbv.py"; do
   if [ -f "$candidate" ]; then entry="$candidate"; break; fi
 done
 
@@ -26,10 +26,10 @@ if [ -z "$entry" ] || [ -z "$python" ]; then
     cat >/dev/null
     exit 0
   fi
-  echo "ddd: needs Python 3.8+ and context-firewall/ddd.py (looked next to $here and in ~/.claude)" >&2
+  echo "tbv: needs Python 3.8+ and context-firewall/tbv.py (looked next to $here and in ~/.claude)" >&2
   exit 127
 fi
 
-export DDD_SELF="$here/ddd"
+export TBV_SELF="$here/tbv"
 # shellcheck disable=SC2086
 exec $python "$entry" "$@"

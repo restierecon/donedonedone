@@ -1,4 +1,4 @@
-[ddd] lint | art-ID | exit 1 | lint:diagnostics/high | ~427->300 tok est
+[tbv] lint | art-ID | exit 1 | lint:diagnostics/high | ~427->300 tok est
 LINT FAILED (exit 1)
 Errors: 19  Warnings: 3  (repeats collapsed below)
 ✖ 22 problems (19 errors, 3 warnings)
@@ -19,4 +19,4 @@ ERRORS (19):
 WARNINGS (3):
 /work/es/f1.js:2:7 eqeqeq Expected '===' and instead saw '=='
   same at: /work/es/f2.js:2:7, /work/es/f3.js:2:7  [x3]
-[ddd] full output: ddd artifact art-ID [--section NAME | --lines A-B | --raw]
+[tbv] full output: tbv artifact art-ID [--section NAME | --lines A-B | --raw]

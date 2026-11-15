@@ -1,4 +1,4 @@
-[ddd] generic-log | art-ID | exit 0 | generic/low | ~10k->466 tok est
+[tbv] generic-log | art-ID | exit 0 | generic/low | ~10k->466 tok est
 600 lines (showing head, tail and error/warning lines)
 ERRORS / WARNINGS
 L8: 2026-10-04T10:00:07.467Z WARN  cache miss rate 31% above threshold  [x11 similar]
@@ -24,4 +24,4 @@ L597: 2026-10-04T10:09:56.336Z INFO  worker-0 processed job 1596 in 62ms
 L598: 2026-10-04T10:09:57.482Z INFO  worker-1 processed job 1597 in 10ms
 L599: 2026-10-04T10:09:58.997Z INFO  worker-2 processed job 1598 in 42ms
 L600: 2026-10-04T10:09:59.338Z INFO  worker-3 processed job 1599 in 20ms
-[ddd] full output: ddd artifact art-ID [--section NAME | --lines A-B | --raw]
+[tbv] full output: tbv artifact art-ID [--section NAME | --lines A-B | --raw]

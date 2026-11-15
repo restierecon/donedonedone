@@ -15,8 +15,8 @@ heavy reads go to agents; you consume structured verdicts (≤ 20 lines) only.
 - Output > 20 lines you won't use? Route it to a subagent.
 - Hand agents file paths, not file contents — they read what they need.
 - Lint/types/tests/build run only through `~/.claude/scripts/gate.sh`, never raw.
-- Shell output starting `[ddd]` was compacted by the context firewall; the full output is kept.
-  Need an omitted part? `~/.claude/scripts/ddd artifact <id>` with `--failure N`, `--file`,
+- Shell output starting `[tbv]` was compacted by the context firewall; the full output is kept.
+  Need an omitted part? `~/.claude/scripts/tbv artifact <id>` with `--failure N`, `--file`,
   `--section`, `--lines A-B` or `--raw` — never re-run the command to see it.
 - About to restate what the user said? Delete it.
 
@@ -95,7 +95,7 @@ score. Load the risk-gate skill for the rubric, reassessment and approval steps.
   assessment fails closed.
 - Human approvals come only from `approve-risk.sh` and `approve-ui.sh`, run by a human
   in their own terminal. You cannot approve, and never try to: no agent may write
-  `.git/donedonedone/approvals.jsonl` or `vault/risk-policy.json`. Ask once via
+  `.git/tbv/approvals.jsonl` or `vault/risk-policy.json`. Ask once via
   pending-review.md and continue with non-dependent slices.
 - Hazards are re-derived from the diff at merge: a path or added line that matches a
   hazard rule (auth, secrets, money, a migration, a lockfile, DROP TABLE) and is not in
@@ -236,7 +236,7 @@ files; git and task-tree.json are the resume state.
   worktrees) plus `git log`, task-tree.json and your tool's built-in memory — no vault
   memory files. If it reports a retired memory layer, run the init-codebase migration
   step first. Leftover `.worktrees/<ID>` get resumed or torn down before new work.
-- A `donedonedone install` block in the SessionStart output (outdated, update available,
+- A `tbv install` block in the SessionStart output (outdated, update available,
   modified, too old for this project) → tell the human its lines once, before other
   work. Never run the update or the installer yourself: they replace the guardrails.
 - Ending a session mid-slice: commit the WIP on the slice branch (never main) so the

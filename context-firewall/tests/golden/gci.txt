@@ -1,4 +1,4 @@
-[ddd] directory-listing | art-ID | exit 0 | listing:get-childitem/high | ~1.0k->201 tok est
+[tbv] directory-listing | art-ID | exit 0 | listing:get-childitem/high | ~1.0k->201 tok est
 LISTING  entries: 64  files: 62  dirs: 2  (depth 2 shown; heavy dirs collapsed)
 api/
   r0.ts
@@ -56,4 +56,4 @@ auth/
   ... 5 more entries (--file auth)
 index.ts
 main.ts
-[ddd] full output: ddd artifact art-ID [--section NAME | --lines A-B | --raw]
+[tbv] full output: tbv artifact art-ID [--section NAME | --lines A-B | --raw]

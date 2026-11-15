@@ -10,8 +10,8 @@ from .store import ArtifactStore, printable
 
 SHELL_TOOLS = {"Bash", "PowerShell"}
 EDIT_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit"}
-DDD_CALL = re.compile(r"(^|[\s/\\'\"])ddd(\.py|\.ps1|\.cmd)?(['\"])?(\s|$)")
-RAW_REQUEST = re.compile(r"(^|\s)DDD_RAW=1(\s|$)|\$env:DDD_RAW\s*=")
+TBV_CALL = re.compile(r"(^|[\s/\\'\"])tbv(\.py|\.ps1|\.cmd)?(['\"])?(\s|$)")
+RAW_REQUEST = re.compile(r"(^|\s)TBV_RAW=1(\s|$)|\$env:TBV_RAW\s*=")
 ALREADY_COMPACT = re.compile(r"(^|[\s/\\])gate\.sh(\s|$)")
 
 
@@ -44,7 +44,7 @@ def handle(payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     if tool not in SHELL_TOOLS:
         return None
     command = str(tool_input.get("command") or "")
-    if not command or tool_input.get("run_in_background") or DDD_CALL.search(command) or RAW_REQUEST.search(command) or ALREADY_COMPACT.search(command):
+    if not command or tool_input.get("run_in_background") or TBV_CALL.search(command) or RAW_REQUEST.search(command) or ALREADY_COMPACT.search(command):
         return None
     response = payload.get("tool_response")
     if isinstance(response, str):

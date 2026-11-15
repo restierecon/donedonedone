@@ -8,10 +8,10 @@ die() { echo "harness: $1" >&2; exit 1; }
 
 here="$(cd "$(dirname "$0")" && pwd)"
 dest="$(dirname "$here")"
-stamp="$dest/donedonedone.version"
-manifest="$dest/donedonedone.manifest"
-cache="$dest/donedonedone.remote"
-update_cmd="$here/ddd update"
+stamp="$dest/tbv.version"
+manifest="$dest/tbv.manifest"
+cache="$dest/tbv.remote"
+update_cmd="$here/tbv update"
 day=86400
 
 field() { [ -f "$stamp" ] && sed -n "s/^$1=//p" "$stamp" | head -1; }
@@ -85,7 +85,7 @@ with_timeout() {
 
 remote_head() {
   local src="$1" force="$2" now checked head=""
-  [ "${DONEDONEDONE_OFFLINE:-0}" = "1" ] && return 0
+  [ "${TBV_OFFLINE:-0}" = "1" ] && return 0
   now=$(date +%s)
   if [ "$force" -eq 0 ] && [ -f "$cache" ]; then
     checked=$(sed -n 's/^checked=//p' "$cache" | head -1)
@@ -137,14 +137,14 @@ cmd_check() {
   local found
   found=$(findings 0)
   [ -n "$found" ] || return 0
-  echo "--- donedonedone install (tell the human once, before other work; never update it yourself) ---"
+  echo "--- tbv install (tell the human once, before other work; never update it yourself) ---"
   printf '%s\n' "$found" | head -4
 }
 
 cmd_status() {
   local found
   if [ ! -f "$stamp" ]; then
-    echo "donedonedone: no install recorded in $dest — run install.sh from a clone"
+    echo "tbv: no install recorded in $dest — run install.sh from a clone"
     return 1
   fi
   echo "installed: $(short "$(field commit)") ($(field revision)) on $(field installed_at)$([ "$(field dirty)" = 1 ] && echo ", from a clone with uncommitted changes")"
@@ -166,7 +166,7 @@ cmd_require() {
   have=$(field revision)
   { [ -n "$have" ] && [ "$have" != "unknown" ]; } || return 0
   if [[ "$have" < "$want" ]]; then
-    echo "--- donedonedone install (tell the human once, before other work; never update it yourself) ---"
+    echo "--- tbv install (tell the human once, before other work; never update it yourself) ---"
     echo "too old for this project: vault/project.md needs harness $want or newer, $have is installed — run: $update_cmd"
   fi
 }
@@ -206,7 +206,7 @@ cmd_project_hook() {
         "hooks": [
           {
             "type": "command",
-            "command": "[ -x \"\$HOME/.claude/scripts/harness.sh\" ] || echo 'donedonedone is not installed on this machine and this project (vault/) is built with it. Tell the human before other work: git clone ${origin:-<the donedonedone repository>} && ./install.sh'"
+            "command": "[ -x \"\$HOME/.claude/scripts/harness.sh\" ] || echo 'tbv is not installed on this machine and this project (vault/) is built with it. Tell the human before other work: git clone ${origin:-<the tbv repository>} && ./install.sh'"
           }
         ]
       }

@@ -1,4 +1,4 @@
-[ddd] search | art-ID | exit 0 | search:path:line/high | ~1.8k->1.4k tok est
+[tbv] search | art-ID | exit 0 | search:path:line/high | ~1.8k->1.4k tok est
 SEARCH
 Query: gate
 Matches: 52  Files: 20
@@ -64,4 +64,4 @@ skills/code-review-and-quality/SKILL.md (5): 10, 16, 18, 53, 367
   ... 2 more in this file (--file skills/code-review-and-quality/SKILL.md)
 skills/harvest/SKILL.md (1): 14
   14: 2. Read vault/task-tree.json. Candidates are slices whose every applicable gate
-[ddd] full output: ddd artifact art-ID [--section NAME | --lines A-B | --raw]
+[tbv] full output: tbv artifact art-ID [--section NAME | --lines A-B | --raw]

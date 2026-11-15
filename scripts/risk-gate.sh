@@ -129,7 +129,7 @@ if common=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null); 
   root=$(dirname "$common")
   tree="$root/vault/task-tree.json"
   log="$root/vault/log.jsonl"
-  ledger="$common/donedonedone/approvals.jsonl"
+  ledger="$common/tbv/approvals.jsonl"
   project="$root/vault/project.md"
 fi
 base="${GATE_BASE:-main}"

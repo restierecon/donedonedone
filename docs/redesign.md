@@ -32,7 +32,7 @@ real run, so the speed claims are estimates.
 
 ### Principle 1: a script is the Director
 
-A state machine, `ddd next`, owns the process. It reads the state, prints exactly one
+A state machine, `tbv next`, owns the process. It reads the state, prints exactly one
 next action (spawn this agent with this brief file, run this command, wait for this
 approval) and records the result. The session executes what it prints.
 
@@ -137,7 +137,7 @@ Each step is usable alone, and each can be the last.
    `diff_paths` / `diff_lines` in the risk policy. The five risk classes stay until
    step 3; a diff hazard raises a slice within them.
 2. PR-based merge with branch protection and CODEOWNERS. Most of the autonomy gain.
-3. The `ddd next` state machine, then removal of the old protocol. Most of the speed
+3. The `tbv next` state machine, then removal of the old protocol. Most of the speed
    gain.
 
 Before step 3, add per-stage timing to `log.jsonl` and measure one feature end to end,

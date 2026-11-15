@@ -1,4 +1,4 @@
-[ddd] git-log | art-ID | exit 0 | git-log/high | ~2.6k->1.3k tok est
+[tbv] git-log | art-ID | exit 0 | git-log/high | ~2.6k->1.3k tok est
 GIT LOG  commits: 72
 3cd9e793e5 Sun Oct 4 17:03:00 2026 +0000 T | chore: step 70 of the long history
 8f518640f8 Sun Oct 4 17:03:00 2026 +0000 T | chore: step 69 of the long history
@@ -61,4 +61,4 @@ d54a497acc Sun Oct 4 17:02:55 2026 +0000 T | chore: step 18 of the long history
 97da2dbf93 Sun Oct 4 17:02:54 2026 +0000 T | chore: step 12 of the long history
 b5089c437f Sun Oct 4 17:02:54 2026 +0000 T | chore: step 11 of the long history
 ... 12 more commits (--section commits)
-[ddd] full output: ddd artifact art-ID [--section NAME | --lines A-B | --raw]
+[tbv] full output: tbv artifact art-ID [--section NAME | --lines A-B | --raw]

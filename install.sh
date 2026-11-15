@@ -70,14 +70,14 @@ for old in \
     echo "  retired ${old%%:*} (vault memory layer dropped) → ${old#*:}.bak-$TS"
   fi
 done
-cp "$SRC"/scripts/*.sh "$SRC"/scripts/*.py "$SRC"/scripts/*.html "$SRC"/scripts/ddd "$DEST/scripts/"
+cp "$SRC"/scripts/*.sh "$SRC"/scripts/*.py "$SRC"/scripts/*.html "$SRC"/scripts/tbv "$DEST/scripts/"
 rm -rf "$DEST/scripts/codemap"
 cp -R "$SRC/scripts/codemap" "$DEST/scripts/codemap"
 rm -rf "$DEST/scripts/codemap/__pycache__"
-chmod +x "$DEST"/scripts/*.sh "$DEST"/scripts/*.py "$DEST"/scripts/ddd
+chmod +x "$DEST"/scripts/*.sh "$DEST"/scripts/*.py "$DEST"/scripts/tbv
 mkdir -p "$DEST/context-firewall"
 rm -rf "$DEST/context-firewall/firewall"
-cp -R "$SRC/context-firewall/firewall" "$SRC/context-firewall/ddd.py" "$SRC/context-firewall/ddd.ps1" "$SRC/context-firewall/README.md" "$DEST/context-firewall/"
+cp -R "$SRC/context-firewall/firewall" "$SRC/context-firewall/tbv.py" "$SRC/context-firewall/tbv.ps1" "$SRC/context-firewall/README.md" "$DEST/context-firewall/"
 rm -rf "$DEST/context-firewall/firewall/__pycache__" "$DEST/context-firewall/firewall/adapters/__pycache__"
 cp -R "$SRC"/skills/* "$DEST/skills/"
 
@@ -118,14 +118,14 @@ if command -v jq >/dev/null 2>&1; then
         Stop:         [hook("checkpoint.sh")]
       }
     }' > "$hooks_tmp"
-  vscode_hooks="$HOME/.copilot/hooks/donedonedone.json"
+  vscode_hooks="$HOME/.copilot/hooks/tbv.json"
   if [ -f "$vscode_hooks" ] && ! cmp -s "$hooks_tmp" "$vscode_hooks"; then
     mv "$hooks_tmp" "$vscode_hooks.new-$TS"
-    echo "  !! existing ~/.copilot/hooks/donedonedone.json kept. Merge hooks from donedonedone.json.new-$TS manually."
+    echo "  !! existing ~/.copilot/hooks/tbv.json kept. Merge hooks from tbv.json.new-$TS manually."
   else
     mv "$hooks_tmp" "$vscode_hooks"
   fi
-  vscode_status="hooks → ~/.copilot/hooks/donedonedone.json (leave chat.useClaudeHooks off, or every hook runs twice)"
+  vscode_status="hooks → ~/.copilot/hooks/tbv.json (leave chat.useClaudeHooks off, or every hook runs twice)"
 fi
 
 cursor_status="not detected (re-run with CURSOR=1 to set it up anyway)"
@@ -167,13 +167,13 @@ echo "Installed: $n_agents agents · $n_skills skills (incl. /init-codebase, /ha
 echo "GitHub Copilot: $((n_agents + 1)) custom agents → ~/.copilot/agents/, $vscode_status"
 echo "Cursor: $cursor_status"
 echo ""
-if "$DEST/scripts/ddd" config >/dev/null 2>&1; then
-  echo "Context firewall: PreToolUse/PostToolUse hooks compact noisy shell output; ~/.claude/scripts/ddd retrieves it (see ~/.claude/context-firewall/README.md)"
+if "$DEST/scripts/tbv" config >/dev/null 2>&1; then
+  echo "Context firewall: PreToolUse/PostToolUse hooks compact noisy shell output; ~/.claude/scripts/tbv retrieves it (see ~/.claude/context-firewall/README.md)"
 else
   echo "Context firewall: installed but inactive — needs Python 3.8+ on PATH (python3, python or py -3). Shell output passes through unchanged."
 fi
 if version=$("$DEST/scripts/harness.sh" stamp "$SRC" 2>/dev/null); then
-  echo "Version: $version — '~/.claude/scripts/ddd version' shows whether it is current; '~/.claude/scripts/ddd update' pulls and reinstalls. Sessions are told when it falls behind."
+  echo "Version: $version — '~/.claude/scripts/tbv version' shows whether it is current; '~/.claude/scripts/tbv update' pulls and reinstalls. Sessions are told when it falls behind."
 else
   echo "Version: not recorded (git is needed to stamp the install); update checks are off."
 fi

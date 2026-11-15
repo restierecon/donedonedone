@@ -1,4 +1,4 @@
-[ddd] json | art-ID | exit 0 | json-outline/high | ~10k->461 tok est
+[tbv] json | art-ID | exit 0 | json-outline/high | ~10k->461 tok est
 JSON  dict  41622 chars  (structure outline; values over 80 chars clipped)
 {5 keys}
   "name": "app"
@@ -52,4 +52,4 @@ JSON  dict  41622 chars  (structure outline; values over 80 chars clipped)
       "id": 0
       "title": "Item 0 with a long title Item 0 with a long title Item 0 with a long title "
       "tags": [2 items: str]
-[ddd] full output: ddd artifact art-ID [--section NAME | --lines A-B | --raw]
+[tbv] full output: tbv artifact art-ID [--section NAME | --lines A-B | --raw]

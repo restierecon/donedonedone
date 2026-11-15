@@ -1,4 +1,4 @@
-[ddd] test | art-ID | exit 1 | go test/high | ~569->130 tok est
+[tbv] test | art-ID | exit 1 | go test/high | ~569->130 tok est
 TEST RESULT
 Status: FAILED
 Passed: 31  Failed: 2  Skipped: 0
@@ -12,4 +12,4 @@ FAILURES
    auth_test.go:20
    auth_test.go:20: token provider: unexpected nil
    (raw L68-68; --failure 2)
-[ddd] full output: ddd artifact art-ID [--section NAME | --lines A-B | --raw]
+[tbv] full output: tbv artifact art-ID [--section NAME | --lines A-B | --raw]

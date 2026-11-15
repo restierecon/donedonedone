@@ -25,10 +25,10 @@ def find_root(cwd: str) -> Path:
 
 
 def default_store_path(cwd: str) -> Path:
-    override = os.environ.get("DDD_HOME")
+    override = os.environ.get("TBV_HOME")
     if override:
         return Path(override).expanduser()
-    return find_root(cwd) / ".ddd"
+    return find_root(cwd) / ".tbv"
 
 
 def to_bytes(text: str) -> bytes:
@@ -65,7 +65,7 @@ def _cap(text: str, max_bytes: int) -> Tuple[str, bool]:
         return text, False
     half = max_bytes // 2
     omitted = len(data) - 2 * half
-    marker = f"\n[ddd: {omitted} bytes omitted from the middle - over maxRawArtifactBytes]\n".encode()
+    marker = f"\n[tbv: {omitted} bytes omitted from the middle - over maxRawArtifactBytes]\n".encode()
     return from_bytes(data[:half] + marker + data[-half:]), True
 
 

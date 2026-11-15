@@ -9,7 +9,7 @@ from typing import Any, Dict, Optional
 
 from . import config, permissions
 from .classify import classify_argv
-from .hook import ALREADY_COMPACT, DDD_CALL, RAW_REQUEST
+from .hook import ALREADY_COMPACT, TBV_CALL, RAW_REQUEST
 from .store import ArtifactStore
 
 REWRITE_TYPES = {"test", "build", "lint", "git-diff", "git-log", "git-status", "search", "directory-listing"}
@@ -17,7 +17,7 @@ SHELL_SYNTAX = re.compile(r"[;&|<>`$(){}\[\]*?~!#\\\n\r]|^\s*[A-Za-z_][A-Za-z0-9
 
 
 def self_command() -> Optional[str]:
-    path = os.environ.get("DDD_SELF")
+    path = os.environ.get("TBV_SELF")
     if not path:
         return None
     return shlex.quote(path.replace("\\", "/"))
@@ -31,7 +31,7 @@ def plan(payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     cwd = payload.get("cwd") or "."
     if not command or tool_input.get("run_in_background") or SHELL_SYNTAX.search(command):
         return None
-    if DDD_CALL.search(command) or RAW_REQUEST.search(command) or ALREADY_COMPACT.search(command):
+    if TBV_CALL.search(command) or RAW_REQUEST.search(command) or ALREADY_COMPACT.search(command):
         return None
     store = ArtifactStore.for_cwd(cwd)
     if not config.load(store.root).enabled:

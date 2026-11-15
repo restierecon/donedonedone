@@ -74,7 +74,7 @@ class Settings:
 
 
 def default_command() -> str:
-    return os.environ.get("DDD_COMMAND") or "~/.claude/scripts/ddd"
+    return os.environ.get("TBV_COMMAND") or "~/.claude/scripts/tbv"
 
 
 def _merge(base: Dict[str, Any], extra: Dict[str, Any]) -> Dict[str, Any]:
@@ -109,12 +109,12 @@ def load(store_root: Optional[Path] = None, mode: Optional[str] = None) -> Setti
             data = _merge(data, loaded)
             if "mode" in loaded:
                 source = str(path)
-    if os.environ.get("DDD_DISABLE") == "1":
+    if os.environ.get("TBV_DISABLE") == "1":
         data["enabled"] = False
-    env_mode = os.environ.get("DDD_MODE")
+    env_mode = os.environ.get("TBV_MODE")
     if env_mode:
         data["mode"] = env_mode
-        source = "DDD_MODE"
+        source = "TBV_MODE"
     if mode:
         data["mode"] = mode
         source = "flag"

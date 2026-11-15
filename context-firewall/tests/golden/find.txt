@@ -1,4 +1,4 @@
-[ddd] directory-listing | art-ID | exit 0 | listing:paths/medium | ~1.5k->364 tok est
+[tbv] directory-listing | art-ID | exit 0 | listing:paths/medium | ~1.5k->364 tok est
 LISTING  entries: 158  files: 119  dirs: 38  (depth 2 shown; heavy dirs collapsed)
 .github/
   workflows/ (1 files)
@@ -12,7 +12,7 @@ agents/
 context-firewall/
   firewall/ (58 files)
   tests/ (2 files)
-  ddd.py
+  tbv.py
 evals/
   README.md
   scorecard.md
@@ -57,4 +57,4 @@ install.sh
 LICENSE
 README.md
 settings.json
-[ddd] full output: ddd artifact art-ID [--section NAME | --lines A-B | --raw]
+[tbv] full output: tbv artifact art-ID [--section NAME | --lines A-B | --raw]

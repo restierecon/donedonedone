@@ -1,4 +1,4 @@
-[ddd] build | art-ID | exit 101 | build:diagnostics/high | ~216->115 tok est
+[tbv] build | art-ID | exit 101 | build:diagnostics/high | ~216->115 tok est
 BUILD FAILED (exit 101)
 Errors: 1  Warnings: 1
 warning: `rs` (lib) generated 1 warning
@@ -7,4 +7,4 @@ ERRORS (1):
 src/lib.rs:1:50 E0308 mismatched types
 WARNINGS (1):
 src/lib.rs:2:28 unused variable: `unused`
-[ddd] full output: ddd artifact art-ID [--section NAME | --lines A-B | --raw]
+[tbv] full output: tbv artifact art-ID [--section NAME | --lines A-B | --raw]
