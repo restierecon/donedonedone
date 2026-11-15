@@ -1800,11 +1800,11 @@ echo "# my own global rules" > "$home/.claude/CLAUDE.md"
 echo "old" > "$home/.claude/commands/init-vault.md"
 echo "old" > "$home/.claude/scripts/generate-copilot-agents.sh"
 echo '{"mine": true}' > "$home/.cursor/hooks.json"
-HOME="$home" "$INSTALL" >/dev/null 2>&1
-if [ "$(jq -r .mine "$home/.claude/settings.json")" = "true" ] && ls "$home"/.claude/settings.json.new-* >/dev/null 2>&1; then
-  ok "install keeps an existing settings.json and drops the new one beside it"
+HOME="$home" DONEDONEDONE_OFFLINE=1 "$INSTALL" >/dev/null 2>&1
+if [ "$(jq -r .mine "$home/.claude/settings.json")" = "true" ] && [ "$(jq -r .mine "$home"/.claude/settings.json.bak-*)" = "true" ]; then
+  ok "install keeps what an existing settings.json holds and backs the file up"
 else
-  bad "install keeps an existing settings.json and drops the new one beside it" "$(ls "$home/.claude")"
+  bad "install keeps what an existing settings.json holds and backs the file up" "$(ls "$home/.claude")"
 fi
 mapped=$(mktemp -d)
 git -C "$mapped" init -q -b main && printf 'echo hi\n' > "$mapped/a.sh" && git -C "$mapped" add -A && git -C "$mapped" -c user.email=t@t -c user.name=t commit -q -m i
@@ -1835,7 +1835,7 @@ rm -rf "$home"
 home=$(mktemp -d)
 mkdir -p "$home/.claude/skills/init-vault"
 echo "old skill" > "$home/.claude/skills/init-vault/SKILL.md"
-status=0; out=$(HOME="$home" "$INSTALL" 2>&1) || status=$?
+status=0; out=$(HOME="$home" DONEDONEDONE_OFFLINE=1 "$INSTALL" 2>&1) || status=$?
 if [ "$status" -eq 0 ] && [ ! -e "$home/.claude/skills/init-vault" ] \
    && [ "$(cat "$home"/.claude/init-vault-skill.bak-*/SKILL.md 2>/dev/null)" = "old skill" ]; then
   ok "install moves the renamed init-vault skill to a backup outside skills/, never deletes it"
@@ -1855,7 +1855,7 @@ echo old > "$home/.claude/agents/scribe.md"
 echo old > "$home/.claude/skills/compaction/SKILL.md"
 echo old > "$home/.copilot/agents/scribe.agent.md"
 echo old > "$home/.cursor/agents/scribe.md"
-status=0; out=$(HOME="$home" "$INSTALL" 2>&1) || status=$?
+status=0; out=$(HOME="$home" DONEDONEDONE_OFFLINE=1 "$INSTALL" 2>&1) || status=$?
 if [ "$status" -eq 0 ] && [ ! -e "$home/.claude/agents/scribe.md" ] && [ ! -e "$home/.claude/skills/compaction" ] \
    && [ ! -e "$home/.copilot/agents/scribe.agent.md" ] && [ ! -e "$home/.cursor/agents/scribe.md" ]; then
   ok "install retires the scribe agent and compaction skill from every live folder"
@@ -1870,6 +1870,161 @@ else
   bad "install moves the retired memory layer to backups and says so, never deletes it" "$out"
 fi
 rm -rf "$home"
+
+echo "== install.sh — settings merge and the version stamp =="
+home=$(mktemp -d)
+mkdir -p "$home/.claude"
+echo '{"mine": true, "env": {"CLAUDE_CODE_USE_POWERSHELL_TOOL": "1"}, "permissions": {"deny": ["Bash(mine *)"]},
+  "hooks": {"Stop": [{"hooks": [{"type": "command", "command": "my-stop.sh"}]}]}}' > "$home/.claude/settings.json"
+out=$(HOME="$home" DONEDONEDONE_OFFLINE=1 "$INSTALL" 2>&1)
+s="$home/.claude/settings.json"
+if [ "$(jq -r '.mine' "$s")" = "true" ] && [ "$(jq -r '.env.CLAUDE_CODE_USE_POWERSHELL_TOOL' "$s")" = "1" ] \
+   && jq -e '.permissions.deny | index("Bash(mine *)") and index("Bash(sudo *)")' "$s" >/dev/null \
+   && [ "$(jq -c '[.hooks.Stop[].hooks[].command]' "$s")" = '["my-stop.sh","~/.claude/scripts/checkpoint.sh"]' ] \
+   && jq -e '.hooks.SessionStart[0].hooks[0].command == "~/.claude/scripts/session-start.sh"' "$s" >/dev/null; then
+  ok "install adds its hooks and permissions to an existing settings.json and keeps every value that was there"
+else
+  bad "install adds its hooks and permissions to an existing settings.json and keeps every value that was there" "$(jq -c . "$s")"
+fi
+if [ "$(jq -r '.mine' "$home"/.claude/settings.json.bak-*)" = "true" ] && ! jq -e '.hooks.SessionStart' "$home"/.claude/settings.json.bak-* >/dev/null \
+   && echo "$out" | grep -q "merged this setup's hooks"; then
+  ok "the settings.json from before the merge is kept as a backup, and install says so"
+else
+  bad "the settings.json from before the merge is kept as a backup, and install says so" "$out"
+fi
+before=$(jq -cS . "$s")
+sleep 1
+HOME="$home" DONEDONEDONE_OFFLINE=1 "$INSTALL" >/dev/null 2>&1
+if [ "$(jq -cS . "$s")" = "$before" ] && [ "$(find "$home/.claude" -name 'settings.json.bak-*' | wc -l | tr -d ' ')" = "1" ]; then
+  ok "a second install changes nothing in settings.json and adds no hook twice"
+else
+  bad "a second install changes nothing in settings.json and adds no hook twice" "$(ls "$home/.claude")"
+fi
+if grep -q "^commit=$(git -C "$ROOT" rev-parse HEAD)$" "$home/.claude/donedonedone.version" && grep -q "^source=$ROOT$" "$home/.claude/donedonedone.version" \
+   && grep -q ' scripts/gate.sh$' "$home/.claude/donedonedone.manifest" && echo "$out" | grep -q "^Version: $(git -C "$ROOT" rev-parse --short=7 HEAD) "; then
+  ok "install records the commit it installed, where from, and a hash of every file it put in place"
+else
+  bad "install records the commit it installed, where from, and a hash of every file it put in place" "$(cat "$home/.claude/donedonedone.version")"
+fi
+if [ -z "$(HOME="$home" DONEDONEDONE_OFFLINE=1 "$home/.claude/scripts/harness.sh" check)" ] \
+   && HOME="$home" DONEDONEDONE_OFFLINE=1 "$home/.claude/scripts/ddd" version | grep -q "^status: up to date, files unmodified"; then
+  ok "a fresh install checks out clean, and ddd version says so"
+else
+  bad "a fresh install checks out clean, and ddd version says so" "$(HOME="$home" DONEDONEDONE_OFFLINE=1 "$home/.claude/scripts/ddd" version)"
+fi
+echo "not json" > "$s"
+out=$(HOME="$home" DONEDONEDONE_OFFLINE=1 "$INSTALL" 2>&1)
+if [ "$(cat "$s")" = "not json" ] && ls "$home"/.claude/settings.json.new-* >/dev/null 2>&1 && echo "$out" | grep -q "could not be merged"; then
+  ok "a settings.json that can't be merged is left alone, with the new one beside it"
+else
+  bad "a settings.json that can't be merged is left alone, with the new one beside it" "$out"
+fi
+rm -rf "$home"
+
+echo "== harness.sh — a session is told when the install is outdated, modified or too old =="
+hroot=$(mktemp -d)
+horigin="$hroot/origin.git" hsrc="$hroot/src" hhome="$hroot/home"
+git init -q --bare -b main "$horigin"
+git init -q -b main "$hsrc"
+git -C "$hsrc" config user.email t@t && git -C "$hsrc" config user.name t
+mkdir -p "$hsrc/agents" "$hsrc/scripts" "$hhome/.claude/agents"
+cp -R "$ROOT/scripts" "$hhome/.claude/scripts"
+cp "$ROOT/scripts/gate.sh" "$hsrc/scripts/gate.sh"
+echo one > "$hsrc/agents/a.md"
+# shellcheck disable=SC2016
+printf '#!/bin/bash\nsrc=$(cd "$(dirname "$0")" && pwd)\ncp "$src"/agents/*.md "$HOME/.claude/agents/"\n"$HOME/.claude/scripts/harness.sh" stamp "$src"\n' > "$hsrc/install.sh"
+chmod +x "$hsrc/install.sh"
+git -C "$hsrc" add -A && git -C "$hsrc" commit -q -m one
+git -C "$hsrc" remote add origin "$horigin" && git -C "$hsrc" push -q -u origin main
+hz() { HOME="$hhome" "$hhome/.claude/scripts/harness.sh" "$@" 2>&1; }
+HOME="$hhome" "$hsrc/install.sh" >/dev/null
+if [ -z "$(hz check)" ]; then ok "check is silent when the install matches its clone and the remote"; else bad "check is silent when the install matches its clone and the remote" "$(hz check)"; fi
+echo two > "$hsrc/agents/a.md"
+git -C "$hsrc" commit -q -am two
+out=$(hz check)
+if echo "$out" | grep -q "^outdated: .* is installed, and its clone at $hsrc is already at $(git -C "$hsrc" rev-parse --short=7 HEAD) — run: $hsrc/install.sh" \
+   && echo "$out" | head -1 | grep -q "tell the human once"; then
+  ok "a clone that was pulled but not installed is reported, with the command that fixes it"
+else
+  bad "a clone that was pulled but not installed is reported, with the command that fixes it" "$out"
+fi
+git -C "$hsrc" push -q origin main
+git -C "$hsrc" reset -q --hard HEAD~1
+HOME="$hhome" "$hsrc/install.sh" >/dev/null
+out=$(hz check)
+if echo "$out" | grep -q "^update available: $horigin is at $(git -C "$horigin" rev-parse --short=7 main), ahead of the clone at $hsrc — run: $hhome/.claude/scripts/ddd update"; then
+  ok "a remote that moved ahead of the clone is reported as an update"
+else
+  bad "a remote that moved ahead of the clone is reported as an update" "$out"
+fi
+mv "$horigin" "$horigin.away"
+if hz check | grep -q "^update available"; then ok "the remote is asked at most once a day: the answer is cached"; else bad "the remote is asked at most once a day: the answer is cached" "$(hz check)"; fi
+mv "$horigin.away" "$horigin"
+if [ -z "$(DONEDONEDONE_OFFLINE=1 hz check)" ]; then ok "DONEDONEDONE_OFFLINE=1 never asks the remote"; else bad "DONEDONEDONE_OFFLINE=1 never asks the remote" "$(DONEDONEDONE_OFFLINE=1 hz check)"; fi
+nv=$(mktemp -d)
+out=$(cd "$nv" && HOME="$hhome" "$hhome/.claude/scripts/session-start.sh" </dev/null 2>&1)
+if echo "$out" | grep -q "^update available"; then ok "session-start passes the notice on in a project with no vault"; else bad "session-start passes the notice on in a project with no vault" "$out"; fi
+out=$(cd "$nv" && echo '{"hook_event_name":"SessionStart"}' | HOME="$hhome" "$hhome/.claude/scripts/session-start.sh" 2>&1)
+if echo "$out" | jq -e '.hookSpecificOutput.additionalContext | test("update available")' >/dev/null 2>&1; then
+  ok "the notice reaches Claude Code as SessionStart context"
+else
+  bad "the notice reaches Claude Code as SessionStart context" "$out"
+fi
+rm -rf "$nv"
+echo "local edit" >> "$hsrc/agents/a.md"
+status=0; out=$(hz update) || status=$?
+if [ "$status" -eq 1 ] && echo "$out" | grep -q "uncommitted changes"; then ok "update refuses a clone with uncommitted changes"; else bad "update refuses a clone with uncommitted changes" "exit $status: $out"; fi
+git -C "$hsrc" checkout -q -- agents/a.md
+status=0; out=$(hz update) || status=$?
+if [ "$status" -eq 0 ] && [ "$(cat "$hhome/.claude/agents/a.md")" = "two" ] && [ -z "$(hz check)" ] \
+   && grep -q "^commit=$(git -C "$horigin" rev-parse main)$" "$hhome/.claude/donedonedone.version"; then
+  ok "update fast-forwards the clone, reinstalls from it and leaves nothing to report"
+else
+  bad "update fast-forwards the clone, reinstalls from it and leaves nothing to report" "exit $status: $out"
+fi
+if hz update | grep -q "^already up to date"; then ok "update is a no-op when nothing changed"; else bad "update is a no-op when nothing changed" "$(hz update)"; fi
+echo tampered >> "$hhome/.claude/scripts/gate.sh"
+rm "$hhome/.claude/agents/a.md"
+out=$(hz check)
+if echo "$out" | grep -q "^modified: 2 installed file(s) no longer match what install.sh put there (first: agents/a.md)"; then
+  ok "an installed file that was edited or deleted is reported"
+else
+  bad "an installed file that was edited or deleted is reported" "$out"
+fi
+status=0; out=$(hz status) || status=$?
+if [ "$status" -eq 1 ] && echo "$out" | grep -q "^installed: " && echo "$out" | grep -q "^modified: 2"; then ok "status exits 1 and lists what is wrong"; else bad "status exits 1 and lists what is wrong" "exit $status: $out"; fi
+HOME="$hhome" "$hsrc/install.sh" >/dev/null
+proj=$(mktemp -d)
+mkdir -p "$proj/vault"
+printf '# P\n- harness: 2099-01-01T00:00:00Z (abc1234)\n' > "$proj/vault/project.md"
+if hz require "$proj" | grep -q "^too old for this project: vault/project.md needs harness 2099-01-01T00:00:00Z or newer"; then
+  ok "a project that pins a newer harness than the one installed says so"
+else
+  bad "a project that pins a newer harness than the one installed says so" "$(hz require "$proj")"
+fi
+hz pin > "$proj/vault/project.md"
+if grep -q '^- harness: 20[0-9-]*T[0-9:]*Z ([0-9a-f]\{7\})$' "$proj/vault/project.md" && [ -z "$(hz require "$proj")" ]; then
+  ok "pin writes the installed revision, and a project pinned to it is satisfied"
+else
+  bad "pin writes the installed revision, and a project pinned to it is satisfied" "$(cat "$proj/vault/project.md")"
+fi
+hook=$(hz project-hook | jq -r '.hooks.SessionStart[0].hooks[0].command')
+empty=$(mktemp -d)
+if HOME="$empty" sh -c "$hook" | grep -q "donedonedone is not installed on this machine.*git clone $horigin && ./install.sh" \
+   && [ -z "$(HOME="$hhome" sh -c "$hook")" ]; then
+  ok "the project hook speaks only on a machine with no install, and names the repository to clone"
+else
+  bad "the project hook speaks only on a machine with no install, and names the repository to clone" "$hook"
+fi
+git -C "$hsrc" remote set-url origin "https://user:s3cret@example.test/x.git"
+HOME="$hhome" "$hsrc/install.sh" >/dev/null
+if grep -q '^origin=https://example.test/x.git$' "$hhome/.claude/donedonedone.version" && ! grep -q s3cret "$hhome/.claude/donedonedone.version"; then
+  ok "credentials in the clone's remote URL never reach the stamp"
+else
+  bad "credentials in the clone's remote URL never reach the stamp" "$(grep origin "$hhome/.claude/donedonedone.version")"
+fi
+rm -rf "$hroot" "$proj" "$empty"
+if [ -z "$("$ROOT/scripts/harness.sh" check 2>&1)" ]; then ok "check is silent when run from a clone, where nothing is installed"; else bad "check is silent when run from a clone, where nothing is installed" "$("$ROOT/scripts/harness.sh" check 2>&1)"; fi
 
 echo "== memory layer retired (resume = session-start.sh + git + task-tree.json) =="
 if [ ! -e "$ROOT/agents/scribe.md" ] && [ ! -e "$ROOT/skills/compaction" ]; then

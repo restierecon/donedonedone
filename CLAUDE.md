@@ -236,6 +236,9 @@ files; git and task-tree.json are the resume state.
   worktrees) plus `git log`, task-tree.json and your tool's built-in memory — no vault
   memory files. If it reports a retired memory layer, run the init-codebase migration
   step first. Leftover `.worktrees/<ID>` get resumed or torn down before new work.
+- A `donedonedone install` block in the SessionStart output (outdated, update available,
+  modified, too old for this project) → tell the human its lines once, before other
+  work. Never run the update or the installer yourself: they replace the guardrails.
 - Ending a session mid-slice: commit the WIP on the slice branch (never main) so the
   next session finds it in git.
 - Never re-do gate-approved work.

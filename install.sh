@@ -16,9 +16,35 @@ if [ -f "$DEST/CLAUDE.md" ] && ! cmp -s "$SRC/CLAUDE.md" "$DEST/CLAUDE.md"; then
 fi
 cp "$SRC/CLAUDE.md" "$DEST/CLAUDE.md"
 
+merge_settings() {
+  jq -s '
+    def union($a; $b): reduce ($a + $b)[] as $x ([]; if any(.[]; . == $x) then . else . + [$x] end);
+    def commands: [.[]?.hooks[]?.command];
+    .[0] as $mine | .[1] as $ours
+    | if ($mine | type) != "object" then error("not an object") else $mine end
+    | .env = (($ours.env // {}) + (.env // {}))
+    | .permissions = ((.permissions // {})
+        | .deny = union(.deny // []; $ours.permissions.deny // [])
+        | .ask = union(.ask // []; $ours.permissions.ask // []))
+    | .hooks = reduce ($ours.hooks | to_entries[]) as $e (.hooks // {};
+        (.[$e.key] // []) as $have
+        | .[$e.key] = $have + [$e.value[] | select(. as $g | any($have | commands[]; . == $g.hooks[0].command) | not)])
+  ' "$1" "$2"
+}
+
 if [ -f "$DEST/settings.json" ] && ! cmp -s "$SRC/settings.json" "$DEST/settings.json"; then
-  cp "$SRC/settings.json" "$DEST/settings.json.new-$TS"
-  echo "  !! existing settings.json kept. Merge permissions+hooks from settings.json.new-$TS manually."
+  merged=$(mktemp)
+  if command -v jq >/dev/null 2>&1 && merge_settings "$DEST/settings.json" "$SRC/settings.json" > "$merged" 2>/dev/null; then
+    if [ "$(jq -S . "$merged")" != "$(jq -S . "$DEST/settings.json")" ]; then
+      cp "$DEST/settings.json" "$DEST/settings.json.bak-$TS"
+      cat "$merged" > "$DEST/settings.json"
+      echo "  merged this setup's hooks and permissions into your settings.json (yours kept; backup → settings.json.bak-$TS)"
+    fi
+  else
+    cp "$SRC/settings.json" "$DEST/settings.json.new-$TS"
+    echo "  !! existing settings.json kept (it could not be merged: jq missing or the file is not valid JSON). Merge permissions+hooks from settings.json.new-$TS manually."
+  fi
+  rm -f "$merged"
 else
   cp "$SRC/settings.json" "$DEST/settings.json"
 fi
@@ -145,6 +171,11 @@ if "$DEST/scripts/ddd" config >/dev/null 2>&1; then
   echo "Context firewall: PreToolUse/PostToolUse hooks compact noisy shell output; ~/.claude/scripts/ddd retrieves it (see ~/.claude/context-firewall/README.md)"
 else
   echo "Context firewall: installed but inactive — needs Python 3.8+ on PATH (python3, python or py -3). Shell output passes through unchanged."
+fi
+if version=$("$DEST/scripts/harness.sh" stamp "$SRC" 2>/dev/null); then
+  echo "Version: $version — '~/.claude/scripts/ddd version' shows whether it is current; '~/.claude/scripts/ddd update' pulls and reinstalls. Sessions are told when it falls behind."
+else
+  echo "Version: not recorded (git is needed to stamp the install); update checks are off."
 fi
 echo ""
 echo "Recommended (optional) tools for full guardrails:"

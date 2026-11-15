@@ -1,6 +1,9 @@
 #!/bin/bash
 
 here="$(cd "$(dirname "$0")" && pwd)"
+case "${1:-}" in
+  update|version) exec "$here/harness.sh" "$@" ;;
+esac
 entry=""
 for candidate in "$here/../context-firewall/ddd.py" "$HOME/.claude/context-firewall/ddd.py"; do
   if [ -f "$candidate" ]; then entry="$candidate"; break; fi

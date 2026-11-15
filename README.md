@@ -18,6 +18,14 @@ cd ~/claude-setup && ./install.sh
 brew install jq gitleaks semgrep   # guardrail dependencies; on Linux, your package manager
 ```
 
+Already have a `~/.claude/settings.json`? The installer adds this setup's hooks and
+permissions to it and keeps every value of yours; the file as it was is saved beside it
+as `settings.json.bak-<timestamp>`. Re-running the installer adds nothing twice.
+
+To see what is installed and whether it is current: `~/.claude/scripts/ddd version`.
+To upgrade: `~/.claude/scripts/ddd update` (see
+[Staying current](#staying-current)).
+
 No jq and no admin rights? `install.sh` fetches the official jq 1.8.1 binary into
 `~/.claude/bin`, checks it against a pinned SHA-256, and the hook scripts find it
 there (see [jq without admin rights](#jq-without-admin-rights)).
@@ -725,8 +733,41 @@ Also:
 - gitleaks scan before every checkpoint commit
 - `autonomy: full` is only legal in a sandbox; new projects start `supervised`
 
+## Staying current
+`install.sh` records what it installed in `~/.claude/donedonedone.version` (the commit,
+its date, the clone it came from) and a hash of every file it put in place in
+`~/.claude/donedonedone.manifest`. At the start of every session, in any project, the
+session-start hook compares that record with reality and tells the agent to tell you,
+in one line, when:
+
+| It says | Meaning | Fix |
+|---|---|---|
+| `outdated` | The clone has newer commits than the install: you pulled and didn't install | `./install.sh` in the clone |
+| `update available` | The remote is ahead of the clone | `~/.claude/scripts/ddd update` |
+| `modified` | An installed file was edited or deleted since the install | `./install.sh` in the clone |
+| `too old for this project` | The project's `vault/project.md` pins a newer harness (`- harness: <date> (<commit>)`) | `~/.claude/scripts/ddd update` |
+
+`ddd update` fast-forwards the clone and runs its `install.sh`; it refuses a clone with
+uncommitted changes. Nothing updates on its own: these scripts are the guardrails, so
+new code reaches them only when you run the command.
+
+The remote is asked at most once a day, with a 5-second limit, and the answer is cached
+in `~/.claude/donedonedone.remote`. `DONEDONEDONE_OFFLINE=1` turns that question off;
+the other three checks are local.
+
+**A machine with no install** has no hook to notice it, so the project carries that
+check: /init-codebase adds a SessionStart hook to the project's `.claude/settings.json`
+that speaks only when `~/.claude/scripts/harness.sh` is missing, and names the
+repository to clone. That covers a teammate's laptop and a fresh cloud container. For
+cloud sessions, put the clone and `./install.sh` in the environment's setup script so
+the harness is there before the session starts.
+
+Limits: the check knows nothing about a clone that was deleted or installed from a
+tarball (`ddd version` says so; sessions stay quiet). Hooks this setup later drops stay
+in a merged `settings.json` until you remove them.
+
 ## Upgrading an existing install
-Pull, re-run `./install.sh`. It retires old `~/.claude/commands/init-vault.md` and
+`~/.claude/scripts/ddd update`, or pull and re-run `./install.sh`. It retires old `~/.claude/commands/init-vault.md` and
 `harvest.md` (now skills) to `.bak-<timestamp>` copies. /init-vault is now
 /init-codebase: install.sh moves a stale `~/.claude/skills/init-vault/` to
 `~/.claude/init-vault-skill.bak-<timestamp>/`, outside skills/ so it stops loading;
@@ -955,6 +996,7 @@ end to end); codebase-graph.py's in `tests/codebase-graph.sh`.
 | vault-guard.sh | PreToolUse, PostToolUse, PostToolUseFailure, SubagentStop hook; `vault-guard.sh --snapshot` | Restores task-tree.json and log.jsonl in the main checkout when a subagent changes them (exit 2 tells it why); warns the Director about unexplained changes. Snapshots live in `.git/skeletoncrew-vault-guard/`. Claude Code only — other tools' payloads don't name the subagent. |
 | lint.sh | PostToolUse hook | Formats the edited file, exit 2 with lint errors. Reads Claude Code's `file_path`, Copilot's `filePath` and Cursor's top-level `file_path`; Cursor ignores the exit code, so there errors surface at the gate. |
 | checkpoint.sh | Stop hook | Commits progress on `slice/*` branches only (never main, a feature branch or a detached HEAD), inside worktrees too. Scans with `gitleaks git --staged` (v8.19+) or `gitleaks protect --staged` (older) and aborts on a finding. |
+| harness.sh | `harness.sh status` · `check` · `require [dir]` · `update` · `pin` · `project-hook` · `stamp <source>` (`ddd version` and `ddd update` call it) | The install's version record. `stamp` (run by install.sh) writes the commit, its date and the source clone to `~/.claude/donedonedone.version` and a hash per installed file to `donedonedone.manifest`. `check` prints nothing when the install matches its clone, the remote (asked once a day) and the manifest, else one line per problem with the command that fixes it. `require` compares the install with a project's `harness:` pin. `pin` prints that line; `project-hook` prints the project-level hook that reports a machine with no install. `update` fast-forwards the clone and re-runs its install.sh. |
 | session-start.sh | SessionStart hook | Injects live slices, slices the risk gate is holding, git status and leftover worktrees (plus a one-line migration hint while vault/memory or vault/handoffs exists; deletes nothing); plain text, or `{"additional_context": ...}` for Cursor. Refreshes the AGENTS.md protocol block. |
 | agents-md.sh | `agents-md.sh [project-dir]` | Writes the protocol into the project's AGENTS.md between its markers; leaves everything else in the file alone. |
 | generate-agents.sh | `generate-agents.sh <copilot\|cursor> [dest]` | Emits derived agents (always overwritten, never hand-edit). Copilot gets an `orchestrator` whose roster is every agent in `agents/`; it isn't called "director" because that name means the main Claude Code session. |
