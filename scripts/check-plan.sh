@@ -77,6 +77,9 @@ risk_gate="$(dirname "$0")/risk-gate.sh"
 risk_errors=$("$risk_gate" lint "$plan" 2>&1) || { echo "check-plan: FAIL — risk assessment could not be checked: $risk_errors" | head -3 >&2; exit 1; }
 errors=$(printf '%s\n%s\n' "$errors" "$risk_errors" | sed '/^$/d')
 
+contract_errors=$("$(dirname "$0")/contract.sh" lint "$plan" 2>&1) || { echo "check-plan: FAIL — contracts could not be checked: $contract_errors" | head -3 >&2; exit 1; }
+errors=$(printf '%s\n%s\n' "$errors" "$contract_errors" | sed '/^$/d')
+
 if [ -z "$errors" ]; then
   echo "check-plan: OK — $plan ($(jq length "$plan") slices) · risk:"
   "$risk_gate" table "$plan" | head -18

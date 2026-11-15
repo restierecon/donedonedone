@@ -33,7 +33,7 @@ setting() {
   printf '%s\n' "${value%\`}"
 }
 
-known="lint types test build a11y crap mutation markers comments scope arch"
+known="lint types test build a11y crap mutation markers comments scope contract arch"
 steps=() targets=() focused=0
 while [ $# -gt 0 ]; do
   if [ "$1" = "--" ]; then
@@ -444,6 +444,19 @@ for step in "${steps[@]}"; do
       *)
         failed+=("scope")
         echo "scope FAIL — $(echo "$result" | head -1)"
+        echo "$result" | sed 1d | head -"$EXCERPT_LINES" | while IFS= read -r line; do echo "  $line"; done ;;
+    esac
+    continue
+  fi
+  if [ "$step" = "contract" ]; then
+    result=$("$(dirname "$0")/contract.sh" check 2>&1)
+    status=$?
+    case "$status" in
+      0) echo "contract PASS — $result" ;;
+      3) echo "contract SKIP ($result)" ;;
+      *)
+        failed+=("contract")
+        echo "contract FAIL — $(echo "$result" | head -1)"
         echo "$result" | sed 1d | head -"$EXCERPT_LINES" | while IFS= read -r line; do echo "  $line"; done ;;
     esac
     continue

@@ -1665,6 +1665,7 @@ cat > "$PLANS/good.json" <<'JSON'
 [
   {"id": "S010", "title": "Shopper can save a cart", "so_that": "I don't lose my picks",
    "status": "todo", "depends_on": [], "auditor_triggers": [], "ui_contract": null, "acceptance_criteria": ["cart persists across reload"],
+   "contract": {"tests": ["tests/cart"], "budget": 300},
    "verify": "tests/cart_test.sh", "retry_count": 0,
    "risk": {"dimensions": {"blast_radius": 1, "reversibility": 1, "security": 0, "complexity": 1, "uncertainty": 1},
             "rationale": "one module, a pattern the cart already uses", "hazards": [],
@@ -1675,6 +1676,7 @@ cat > "$PLANS/good.json" <<'JSON'
   {"id": "S011", "title": "Shopper can share a saved cart", "so_that": "a friend can buy for me",
    "status": "todo", "depends_on": ["S010", "S001", "S002"], "auditor_triggers": ["data-access", "user-input"],
    "ui_contract": "vault/ui/cart-share/contract.md", "acceptance_criteria": ["share link opens the cart"],
+   "contract": "none: fixture",
    "verify": "tests/share_test.sh", "retry_count": 0,
    "risk": {"dimensions": {"blast_radius": 2, "reversibility": 1, "security": 3, "complexity": 2, "uncertainty": 1},
             "rationale": "a link exposes one cart to another user", "hazards": [],
@@ -2571,7 +2573,7 @@ LAND="$ROOT/scripts/land-slice.sh"
 in_repo() { (cd "$1" && shift && "$@" 2>&1); }
 plan_slice() {
   risk_slice "$1" "$(dims 1 1 0 1 1)" | jq -c --argjson d "${2:-[]}" \
-    '.title = "Shopper can keep cart \(.id)" | .depends_on = $d | .ui_contract = null
+    '.title = "Shopper can keep cart \(.id)" | .depends_on = $d | .ui_contract = null | .contract = "none: fixture"
      | .gates = {self_review: null, automated: null, reviewer: null, auditor: null, risk: null}'
 }
 d=$(make_risk_repo "[]")
@@ -2710,6 +2712,224 @@ fi
 status=0; out=$(in_repo "$d" "$LAND" S011) || status=$?
 if [ "$status" -eq 1 ]; then ok "land-slice refuses a slice that already landed"; else bad "land-slice refuses a slice that already landed" "exit $status: $out"; fi
 rm -rf "$d"
+
+echo "== risk-gate.sh — hazards come from the diff, whatever the plan predicted =="
+CONTRACT="$ROOT/scripts/contract.sh"
+drepo=$(make_risk_repo "[]")
+add_slice() {
+  jq --argjson s "$2" '.slices += [$s]' "$1/vault/task-tree.json" > "$1/t.json" && mv "$1/t.json" "$1/vault/task-tree.json"
+  rg "$1" assess "$(jq -r .id <<<"$2")" >/dev/null
+}
+diff_case() {
+  local id="$1" file="$2" text="$3" hazards="${4:-[]}" p
+  add_slice "$drepo" "$(risk_slice "$id" "$(dims 1 1 0 1 1)" '[]' "$hazards")"
+  mkdir -p "$drepo/$(dirname "$file")"
+  slice_change "$drepo" "$id" "$text" "$file"
+  p=$(pid_of "$drepo" "$id")
+  lg "$drepo" "$id" gate PASS --patch-id "$p"
+  lg "$drepo" "$id" reviewer APPROVED --patch-id "$p" --evidence unit-test-verified
+  rg "$drepo" check "$id" merge
+}
+expect_lift() {
+  local desc="$1" want="$2" out
+  shift 2
+  out=$(diff_case "$@")
+  if [ -z "$want" ]; then
+    if echo "$out" | grep -q "^RISK: PASS merge" && ! echo "$out" | grep -q "^NOTE: the diff raises"; then ok "$desc"; else bad "$desc" "$out"; fi
+  elif [ "$want" = same ]; then
+    if echo "$out" | grep -q "^RISK: " && ! echo "$out" | grep -q "^NOTE: the diff raises"; then ok "$desc"; else bad "$desc" "$out"; fi
+  elif echo "$out" | grep -q "^NOTE: the diff raises .* to $want " && echo "$out" | grep -q "^RISK: FAIL merge .* class=$want "; then
+    ok "$desc"
+  else
+    bad "$desc" "$out"
+  fi
+}
+expect_lift "a plain change inside scope merges at the planned class" "" D001 src/app.txt "more"
+expect_lift "a diff that touches an auth path lifts a low slice to high" high D002 src/auth/login.txt "x"
+expect_lift "a lockfile in the diff lifts a low slice to elevated" elevated D003 src/package-lock.json "{}"
+expect_lift "an added DROP TABLE line lifts a low slice to critical" critical D004 src/cleanup.txt "DROP TABLE carts;"
+expect_lift "a .env file lifts to high" high D005 src/.env "KEY=1"
+expect_lift "a .env.example file lifts nothing" "" D006 src/.env.example "KEY="
+expect_lift "a hazard the plan already declared is not counted twice" same D008 src/migrations/001.txt "x" '["schema-migration"]'
+expect_lift "an undeclared hazard lifts a slice that declared a different one" high D007 src/billing/note.txt "x" '["schema-migration"]'
+out=$(rg "$drepo" check D003 merge)
+if echo "$out" | grep -q "raises D003 from low to elevated — it touches new-dependency (src/package-lock.json)"; then
+  ok "the note names the hazard and the file that raised the class"
+else
+  bad "the note names the hazard and the file that raised the class" "$out"
+fi
+out=$(rg "$drepo" check D007 merge)
+if echo "$out" | grep -q "raises D007 from elevated to high — it touches money (src/billing/note.txt)"; then
+  ok "the note gives the class the slice had and the class the diff needs"
+else
+  bad "the note gives the class the slice had and the class the diff needs" "$out"
+fi
+P2=$(pid_of "$drepo" D002)
+lg "$drepo" D002 auditor CLEARED --patch-id "$P2"
+status=0; out=$(rg "$drepo" check D002 merge) || status=$?
+if [ "$status" -eq 1 ] && echo "$out" | grep -q "human-approval: a human runs approve-risk.sh merge D002"; then
+  ok "a diff-lifted slice waits for the human merge approval its new class requires"
+else
+  bad "a diff-lifted slice waits for the human merge approval its new class requires" "$out"
+fi
+seed_approval "$drepo" D002 merge approve "$(hash_in "$drepo" D002)" "$P2"
+if rg "$drepo" check D002 merge | grep -q "^RISK: PASS merge D002 class=high"; then
+  ok "the human merge approval lets the lifted slice land"
+else
+  bad "the human merge approval lets the lifted slice land" "$(rg "$drepo" check D002 merge)"
+fi
+git -C "$drepo" checkout -q slice/D002
+out=$(cd "$drepo" && "$GATE" scope 2>&1)
+git -C "$drepo" checkout -q main
+if echo "$out" | grep -q "^scope PASS .*the diff touches auth (src/auth/login.txt), not in risk.hazards: the merge will need high controls"; then
+  ok "the gate's scope step warns of the lift while the slice is still building"
+else
+  bad "the gate's scope step warns of the lift while the slice is still building" "$out"
+fi
+echo '{"diff_paths": {"auth": ""}}' > "$drepo/vault/risk-policy.json"
+if rg "$drepo" check D002 merge | grep -q "^NOTE: the diff raises"; then
+  bad "a human can switch a diff rule off in the policy file" "$(rg "$drepo" check D002 merge)"
+else
+  ok "a human can switch a diff rule off in the policy file"
+fi
+echo '{"diff_paths": {"auth": "("}}' > "$drepo/vault/risk-policy.json"
+status=0; out=$(rg "$drepo" check D002 merge) || status=$?
+if [ "$status" -eq 2 ] && echo "$out" | grep -q "must be valid regexes"; then ok "a broken diff rule fails closed"; else bad "a broken diff rule fails closed" "exit $status: $out"; fi
+echo '{"diff_lines": {"typo": "x"}}' > "$drepo/vault/risk-policy.json"
+status=0; out=$(rg "$drepo" check D002 merge) || status=$?
+if [ "$status" -eq 2 ] && echo "$out" | grep -q "keys must be hazards"; then ok "a diff rule for an unknown hazard fails closed"; else bad "a diff rule for an unknown hazard fails closed" "exit $status: $out"; fi
+rm -rf "$drepo"
+
+echo "== contract.sh — acceptance tests lock before the build and can't drift =="
+ct() { (cd "$1" && shift && "$CONTRACT" "$@" 2>&1); }
+contract_slice() { risk_slice "$1" "$(dims 1 1 0 1 1)" | jq -c --argjson c "$2" '.contract = $c'; }
+crepo=$(make_risk_repo "[]")
+printf '# P\n## Gate\n- gate.test: true\n- gate.test.focus: sh\n' > "$crepo/vault/project.md"
+git -C "$crepo" commit -q -am "focus"
+add_slice "$crepo" "$(contract_slice C001 '{"tests": ["tests/cart_test.sh"], "budget": 5}')"
+git -C "$crepo" commit -q -am "adopt C001"
+status=0; out=$(ct "$crepo" lock C001) || status=$?
+if [ "$status" -eq 2 ] && echo "$out" | grep -q "no slice/C001 branch"; then ok "a contract can't lock before the tester has a branch"; else bad "a contract can't lock before the tester has a branch" "exit $status: $out"; fi
+status=0; out=$(rg "$crepo" check C001 build) || status=$?
+if [ "$status" -eq 1 ] && echo "$out" | grep -q "contract: the contract of C001 is not locked"; then
+  ok "no builder starts on a slice whose contract is not locked"
+else
+  bad "no builder starts on a slice whose contract is not locked" "exit $status: $out"
+fi
+git -C "$crepo" checkout -q -b slice/C001
+mkdir -p "$crepo/tests"
+echo "true" > "$crepo/tests/cart_test.sh"
+git -C "$crepo" add tests && git -C "$crepo" commit -q -m "test: green from the start"
+status=0; out=$(ct "$crepo" lock C001) || status=$?
+if [ "$status" -eq 2 ] && echo "$out" | grep -q "already pass"; then ok "tests that pass before the build can't be locked"; else bad "tests that pass before the build can't be locked" "exit $status: $out"; fi
+echo "test -f src/cart.txt" > "$crepo/tests/cart_test.sh"
+status=0; out=$(ct "$crepo" lock C001) || status=$?
+if [ "$status" -eq 2 ] && echo "$out" | grep -q "uncommitted changes in the contract tests"; then ok "uncommitted tests can't be locked"; else bad "uncommitted tests can't be locked" "exit $status: $out"; fi
+git -C "$crepo" commit -q -am "test: cart file exists"
+status=0; out=$(ct "$crepo" lock C001) || status=$?
+if [ "$status" -eq 0 ] && echo "$out" | grep -q "^CONTRACT: LOCKED C001 hash=[0-9a-f]\{12\} .*budget=5 red=confirmed revision=0" \
+   && jq -e '.slices[] | select(.id == "C001") | .contract.locked.red == "confirmed"' "$crepo/vault/task-tree.json" >/dev/null \
+   && tail -1 "$crepo/vault/log.jsonl" | jq -e '.event == "contract" and .verdict == "locked"' >/dev/null \
+   && [ -z "$(git -C "$crepo" status --porcelain --untracked-files=no)" ]; then
+  ok "lock confirms the tests are red, records the hash, logs it and commits — one call"
+else
+  bad "lock confirms the tests are red, records the hash, logs it and commits — one call" "exit $status: $out"
+fi
+if rg "$crepo" check C001 build | grep -q "^RISK: PASS build C001"; then ok "a locked contract lets the builder start"; else bad "a locked contract lets the builder start" "$(rg "$crepo" check C001 build)"; fi
+if ct "$crepo" lock C001 | grep -q "already locked"; then ok "locking twice is a no-op"; else bad "locking twice is a no-op" "$(ct "$crepo" lock C001)"; fi
+echo cart > "$crepo/src/cart.txt"
+git -C "$crepo" add src && git -C "$crepo" commit -q -m "feat: cart"
+out=$(cd "$crepo" && "$GATE" contract 2>&1)
+if echo "$out" | grep -q "^contract PASS — 1 contract test files as locked (.*) · 1 of 5 budget lines"; then
+  ok "the gate's contract step passes a build that leaves the tests alone and stays in budget"
+else
+  bad "the gate's contract step passes a build that leaves the tests alone and stays in budget" "$out"
+fi
+echo "true" > "$crepo/tests/cart_test.sh"
+git -C "$crepo" commit -q -am "weaken the test"
+status=0; out=$(cd "$crepo" && "$GATE" contract 2>&1) || status=$?
+if [ "$status" -eq 1 ] && echo "$out" | grep -q "^contract FAIL .*CONTRACT-DISPUTE" && echo "$out" | grep -q "tests/cart_test.sh"; then
+  ok "a builder that edits a locked test turns the gate red and the file is named"
+else
+  bad "a builder that edits a locked test turns the gate red and the file is named" "exit $status: $out"
+fi
+PC=$(pid_of "$crepo" C001)
+lg "$crepo" C001 gate PASS --patch-id "$PC"; lg "$crepo" C001 reviewer APPROVED --patch-id "$PC" --evidence unit-test-verified
+status=0; out=$(rg "$crepo" check C001 merge) || status=$?
+if [ "$status" -eq 1 ] && echo "$out" | grep -q "contract: the contract tests changed since they were locked"; then
+  ok "an edited contract can't merge, whatever its verdicts"
+else
+  bad "an edited contract can't merge, whatever its verdicts" "exit $status: $out"
+fi
+status=0; out=$(ct "$crepo" lock C001) || status=$?
+if [ "$status" -eq 2 ] && echo "$out" | grep -q "lock C001 --revise"; then ok "a plain re-lock never absorbs changed tests"; else bad "a plain re-lock never absorbs changed tests" "exit $status: $out"; fi
+git -C "$crepo" reset -q --hard HEAD~1
+seq 1 9 > "$crepo/src/more.txt"
+git -C "$crepo" add src && git -C "$crepo" commit -q -m "feat: too much"
+status=0; out=$(cd "$crepo" && "$GATE" contract 2>&1) || status=$?
+if [ "$status" -eq 1 ] && echo "$out" | grep -q "^contract FAIL — the diff changes 10 lines outside the contract tests, over the contract budget of 5 .*SCOPE-EXPANSION"; then
+  ok "a diff over the contract budget turns the gate red"
+else
+  bad "a diff over the contract budget turns the gate red" "exit $status: $out"
+fi
+git -C "$crepo" reset -q --hard HEAD~1
+printf 'test -f src/cart.txt\ntest -s src/cart.txt\n' > "$crepo/tests/cart_test.sh"
+git -C "$crepo" commit -q -am "test: revise after a dispute"
+status=0; out=$(ct "$crepo" lock C001 --revise) || status=$?
+if [ "$status" -eq 0 ] && echo "$out" | grep -q "revision=1" && (cd "$crepo" && "$GATE" contract 2>&1) | grep -q "^contract PASS" \
+   && tail -1 "$crepo/vault/log.jsonl" | jq -e '.verdict == "revised"' >/dev/null; then
+  ok "one revision after a dispute re-locks the contract and is logged"
+else
+  bad "one revision after a dispute re-locks the contract and is logged" "exit $status: $out"
+fi
+echo "test -d src" >> "$crepo/tests/cart_test.sh"
+git -C "$crepo" commit -q -am "test: revise again"
+status=0; out=$(ct "$crepo" lock C001 --revise) || status=$?
+if [ "$status" -eq 2 ] && echo "$out" | grep -q "second dispute is a human decision"; then ok "a second revision is refused: it goes to the human"; else bad "a second revision is refused: it goes to the human" "exit $status: $out"; fi
+git -C "$crepo" reset -q --hard HEAD~1
+git -C "$crepo" checkout -q main
+PC=$(pid_of "$crepo" C001)
+lg "$crepo" C001 gate PASS --patch-id "$PC"; lg "$crepo" C001 reviewer APPROVED --patch-id "$PC" --evidence unit-test-verified
+if rg "$crepo" check C001 merge | grep -q "^RISK: PASS merge C001"; then
+  ok "the merge check reads a lock committed on the slice branch"
+else
+  bad "the merge check reads a lock committed on the slice branch" "$(rg "$crepo" check C001 merge)"
+fi
+git -C "$crepo" checkout -q -- vault 2>/dev/null
+add_slice "$crepo" "$(contract_slice C002 '{"tests": ["tests/list_test.sh"], "budget": 50}')"
+add_slice "$crepo" "$(contract_slice C003 '"none: a docs-only slice"')"
+git -C "$crepo" commit -q -am "adopt C002 C003"
+git -C "$crepo" checkout -q -b slice/C002
+mkdir -p "$crepo/tests"
+echo "test -f src/list.txt" > "$crepo/tests/list_test.sh"; echo list > "$crepo/src/list.txt"
+git -C "$crepo" add tests src && git -C "$crepo" commit -q -m "tests and code together"
+status=0; out=$(ct "$crepo" lock C002) || status=$?
+if [ "$status" -eq 2 ] && echo "$out" | grep -q "already changes files outside the contract tests (src/list.txt"; then
+  ok "a branch that already holds implementation can't lock: tests come first"
+else
+  bad "a branch that already holds implementation can't lock: tests come first" "exit $status: $out"
+fi
+git -C "$crepo" checkout -q main
+git -C "$crepo" checkout -q -b slice/C003
+out=$(cd "$crepo" && "$GATE" contract 2>&1)
+if echo "$out" | grep -q "^contract SKIP (slice C003 — none: a docs-only slice)"; then ok "a slice with no contract skips the step and says why"; else bad "a slice with no contract skips the step and says why" "$out"; fi
+if rg "$crepo" check C003 build | grep -q "^RISK: PASS build C003"; then ok "a slice with no contract still builds"; else bad "a slice with no contract still builds" "$(rg "$crepo" check C003 build)"; fi
+rm -rf "$crepo"
+
+cplans=$(mktemp -d)
+plan_with() { jq -n --argjson s "$(risk_slice S020 "$(dims 1 1 0 1 1)")" --argjson c "$1" '[$s | .contract = $c]' > "$cplans/p.json"; "$CONTRACT" lint "$cplans/p.json"; }
+if jq -n --argjson s "$(risk_slice S020 "$(dims 1 1 0 1 1)")" '[$s]' > "$cplans/p.json" && "$CONTRACT" lint "$cplans/p.json" | grep -q "S020: missing contract"; then
+  ok "a plan slice without a contract fails the plan"
+else
+  bad "a plan slice without a contract fails the plan" "$("$CONTRACT" lint "$cplans/p.json")"
+fi
+if plan_with '"none"' | grep -q 'must be an object or "none: <reason>"'; then ok "opting out of a contract needs a reason"; else bad "opting out of a contract needs a reason" "$(plan_with '"none"')"; fi
+if plan_with '{"tests": ["tests/*"], "budget": 10}' | grep -q "plain repo paths (no globs)"; then ok "contract tests are plain paths, never globs"; else bad "contract tests are plain paths, never globs" "$(plan_with '{"tests": ["tests/*"], "budget": 10}')"; fi
+if plan_with '{"tests": ["tests/a"], "budget": 0}' | grep -q "whole number of changed lines above 0"; then ok "a contract needs a budget above 0"; else bad "a contract needs a budget above 0" "$(plan_with '{"tests": ["tests/a"], "budget": 0}')"; fi
+if [ -z "$(plan_with '{"tests": ["tests/a", "tests/b/"], "budget": 120}')" ]; then ok "a well-formed contract passes the lint"; else bad "a well-formed contract passes the lint" "$(plan_with '{"tests": ["tests/a", "tests/b/"], "budget": 120}')"; fi
+rm -rf "$cplans"
+expect_block "a tester spawn needs the full brief too" guard_agent Agent tester 'write tests'
+expect_allow "a full brief spawns the tester" guard_agent Agent tester "$FULL_BRIEF"
 
 echo "== risk gate wiring (protocol prose) =="
 if grep -q '^## Risk Gate' "$ROOT/CLAUDE.md" && grep -q 'risk-gate.sh check <ID> merge' "$ROOT/CLAUDE.md" && grep -q 'You cannot approve' "$ROOT/CLAUDE.md"; then

@@ -1,6 +1,7 @@
 # Redesign proposal: scripted loop, locked contracts, GitHub as the merge authority
 
-Status: proposal, not adopted. Nothing in the harness has changed.
+Status: step 1 of the build order is implemented (locked contracts, hazards derived
+from the diff). Steps 2 and 3 are proposals.
 
 ## Goals
 
@@ -132,7 +133,9 @@ script, not written by an LLM).
 Each step is usable alone, and each can be the last.
 
 1. Locked contracts and diff-derived lanes, on top of the current harness. Most of the
-   trust gain.
+   trust gain. Done: `contract.sh`, the `tester` agent, gate.sh's `contract` step, and
+   `diff_paths` / `diff_lines` in the risk policy. The five risk classes stay until
+   step 3; a diff hazard raises a slice within them.
 2. PR-based merge with branch protection and CODEOWNERS. Most of the autonomy gain.
 3. The `ddd next` state machine, then removal of the old protocol. Most of the speed
    gain.

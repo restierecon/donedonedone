@@ -2,7 +2,7 @@
 # shellcheck source=/dev/null
 [ -f "$(dirname "$0")/jq-text.sh" ] && . "$(dirname "$0")/jq-text.sh"
 
-EVENTS="builder gate reviewer auditor merge tier3 escalation correction retro risk scope rollback"
+EVENTS="builder gate reviewer auditor merge tier3 escalation correction retro risk scope rollback contract"
 CATEGORIES="criterion-unmet test-quality test-speed speculative-abstraction error-handling dead-code duplication scope-creep comments contract-mismatch dependency security logging gate-failure merge-conflict ambiguous-criteria human-correction scope-expansion risk-underestimate other"
 EVIDENCE="live-verified unit-test-verified type-check-only verifier-blocked verifier-failed"
 MAX_SIGNALS=5

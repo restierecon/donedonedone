@@ -401,7 +401,7 @@ $(printf '%s\n' "$out" | tail -16)"
 if [ "$tool" = "Agent" ]; then
   subagent=$(field '.tool_input.subagent_type // .tool_input.agentName')
   case "$subagent" in
-    builder|reviewer|auditor)
+    builder|reviewer|auditor|tester)
       prompt=$(field '.tool_input.prompt')
       missing=()
       for h in GOAL SCOPE ACCEPTANCE VERIFY FORBIDDEN REPORT STANDING; do

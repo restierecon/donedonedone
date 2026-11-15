@@ -1,11 +1,11 @@
 ---
 name: brief-contract
-description: Required brief format for spawning builder, reviewer, or auditor agents. Use when the Director writes the prompt for one of those three agents.
+description: Required brief format for spawning tester, builder, reviewer, or auditor agents. Use when the Director writes the prompt for one of those four agents.
 ---
 
 # Brief Contract
 
-Every builder, reviewer, or auditor spawn carries a brief with all seven headers
+Every tester, builder, reviewer, or auditor spawn carries a brief with all seven headers
 below. Each header begins its own line, uppercase, followed by a colon.
 `scripts/guard.sh` blocks the spawn if any header is missing and names the gaps, so a
 brief that skips one never runs.
@@ -43,7 +43,17 @@ STANDING:
 Slice ID and prior critique still go in the brief as free text,
 around these headers.
 
+## Tester briefs
+A tester brief starts with `SLICE: <ID>`. SCOPE is the slice's `contract.tests` paths
+and nothing else; ACCEPTANCE is the slice's criteria, verbatim; VERIFY is
+`gate.sh test -- <contract test paths>` failing. For a revision after a
+CONTRACT-DISPUTE, GOAL names the disputed test and quotes the builder's reason.
+
 ## Builder briefs: SLICE, RISK and harden-diff
+When the slice has a locked contract, SCOPE says so: `locked contract: <contract.tests>
+— never edit; budget <n> changed lines outside them`, and pastes the tester's INTERFACE
+line.
+
 A builder brief in a project with vault/task-tree.json also starts with
 `SLICE: <ID>`, the slice's id exactly as task-tree.json has it, and carries a
 `RISK: <class> — <scope.change>; unchanged: <...>; rollback: <...>` line whose class

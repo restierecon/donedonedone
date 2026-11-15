@@ -21,6 +21,14 @@
       "label": "Risk gate",
       "description": "Score each slice 0-100; the class sets the controls. Critical slices wait for a human authorization.",
       "uses": ["skill:risk-gate", "script:adopt-plan.sh", "script:risk-gate.sh", "script:approve-risk.sh"],
+      "next": ["contract"]
+    },
+    {
+      "id": "contract",
+      "label": "Contract",
+      "description": "The tester writes each slice's failing acceptance tests on slice/<ID>; contract.sh locks their hash and the diff budget. No builder starts before the lock.",
+      "when": "the slice has a contract; \"none: <reason>\" goes straight to dispatch",
+      "uses": ["agent:tester", "script:contract.sh", "script:guard.sh"],
       "next": ["dispatch"]
     },
     {
@@ -35,13 +43,13 @@
       "label": "Build",
       "description": "Minimum necessary change, test-first, on slice/<ID>; self-check with the gate, clean the diff, harden trust boundaries.",
       "uses": ["agent:builder", "skill:incremental-implementation", "skill:clean-diff", "skill:harden-diff"],
-      "next": ["gate"]
+      "next": ["gate", {"to": "contract", "label": "CONTRACT-DISPUTE (one revision)"}]
     },
     {
       "id": "gate",
       "label": "Gate",
-      "description": "The Director runs gate.sh once at the builder's SHA: lint, types, tests, build, CRAP, mutation, markers, comments, scope, arch.",
-      "uses": ["script:gate.sh", "script:record-gate.sh", "script:crap-score.py", "script:mutation-report.py", "script:find-comments.sh", "script:codebase-graph.py", "skill:test-speed", "skill:crap-hotspots", "skill:mutation-survivors"],
+      "description": "The Director runs gate.sh once at the builder's SHA: lint, types, tests, build, CRAP, mutation, markers, comments, scope, contract, arch.",
+      "uses": ["script:gate.sh", "script:contract.sh", "script:record-gate.sh", "script:crap-score.py", "script:mutation-report.py", "script:find-comments.sh", "script:codebase-graph.py", "skill:test-speed", "skill:crap-hotspots", "skill:mutation-survivors"],
       "next": ["review", {"to": "build", "label": "FAIL → builder"}]
     },
     {

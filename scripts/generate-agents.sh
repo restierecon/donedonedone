@@ -118,7 +118,9 @@ the builder. For CRAP hotspots or mutation survivors outside a slice's diff
 (architecture reviews, adopted codebases), follow ~/.claude/skills/crap-hotspots/SKILL.md
 or ~/.claude/skills/mutation-survivors/SKILL.md. A builder brief starts with
 SLICE: <ID>; when that slice's auditor_triggers is non-empty, its STANDING orders the
-builder to follow ~/.claude/skills/harden-diff/SKILL.md (brief-contract skill). Every slice
+builder to follow ~/.claude/skills/harden-diff/SKILL.md (brief-contract skill). A slice
+with a contract gets the tester first, then ~/.claude/scripts/contract.sh lock <ID>,
+before its builder; a locked test is never edited by a builder. Every slice
 carries a risk assessment: adopt an approved plan with ~/.claude/scripts/adopt-plan.sh
 (it runs risk-gate.sh assess on each slice), and merge with
 ~/.claude/scripts/land-slice.sh <ID> (it runs risk-gate.sh check <ID> merge first); follow

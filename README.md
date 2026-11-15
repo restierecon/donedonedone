@@ -44,7 +44,7 @@ builds. Nothing after the grill should need you unless a slice escalates.
 | Path | What |
 |---|---|
 | CLAUDE.md | Global protocol — the main session IS the Director |
-| agents/ | planner · builder · reviewer · auditor · retro (least-privilege tools, model-per-agent) |
+| agents/ | planner · tester · builder · reviewer · auditor · retro (least-privilege tools, model-per-agent) |
 | skills/ | protocol-native: grill · ui-prototype · slice-planning · risk-gate · parallel-dispatch · architecture-review · learning-loop · configure-gates · test-speed · crap-hotspots · mutation-survivors · clean-diff · harden-diff · blast-radius · `/codebase-map` · brief-contract · `/init-codebase` · `/harvest` · `/create-verification-skill` · `/maintain-verification-skill` (opt-in, `/`-only: a project-local `verify-*` skill that lets the reviewer reach live-verified evidence) — plus a general engineering-practice library, a principles index (19 pstack principles, read on demand) and pstack's prose skills: unslop · technical-writing (docs/README/ADR work) (see Credits) |
 | settings.json | Permission deny/ask lists + hooks on 6 events + env that keeps Claude Code on Windows in Git Bash |
 | context-firewall/ | `ddd` — the context firewall: artifact store, per-type compressors, retrieval, ranking, stats (Python 3.8+ stdlib, installed to `~/.claude/context-firewall/`) |
@@ -133,7 +133,38 @@ Enforcement is mechanical, not prose:
   `risk-gate.sh audit <ID>` prints one slice's trail. `risk-gate.sh calibrate` lists
   slices whose class was likely too low, for the retro. It never changes thresholds.
 
+- **Hazards from the diff** — the assessment is a prediction, so the merge check reads
+  the real diff too. A changed path or added line that matches a hazard rule (an auth
+  or billing path, a `.env` file, a migration, a lockfile, DROP TABLE) and is not in
+  the slice's `hazards` raises its class to that hazard's floor for the merge, whatever
+  the plan said or ruled out. gate.sh's `scope` line warns during the build. The rules
+  are `diff_paths` and `diff_lines` in the human-only `vault/risk-policy.json`.
+
 The dial below adds oversight on top; it never removes a control the risk class requires.
+
+## Contract
+A slice is held to tests it did not write. Every slice in a plan carries a `contract`:
+the paths of its acceptance tests and a budget of changed lines outside them, or
+`"none: <reason>"` when no test can prove it.
+
+1. The `tester` agent writes the acceptance tests on `slice/<ID>`, failing, and nothing
+   else.
+2. `contract.sh lock <ID>` refuses a branch that changes any other file, runs the tests
+   and refuses ones that already pass, then records the hash of the test files in
+   task-tree.json, logs it and commits.
+3. guard.sh refuses a builder on a slice whose contract is not locked.
+4. gate.sh's `contract` step and the merge check fail when a locked test changed or the
+   diff is over budget.
+
+A builder that thinks a test is wrong reports CONTRACT-DISPUTE; the tester revises the
+test or upholds it, and `contract.sh lock <ID> --revise` re-locks once. A second
+dispute on the same slice goes to the human.
+
+What this does not cover: a test that encodes a wrong reading of the criteria is
+enforced as written, and `red=unverified` in the lock line means no `gate.test.focus`
+was configured to prove the tests failed first. The lock is a hash in task-tree.json,
+which the Director can write; it stops a builder, not a Director that ignores the
+protocol.
 
 ## UI prototype gate
 Left alone, a builder designs UI from its training data's average: card grids, side
@@ -909,9 +940,10 @@ end to end); codebase-graph.py's in `tests/codebase-graph.sh`.
 | crap-score.py | `crap-score.py <coverage file> [-x <glob>]... [paths]` | Prints `<path>:<start>-<end> <score> <name>` per function for `gate.crap`: lizard complexity joined with LCOV, Cobertura, JaCoCo or coverage.py JSON line coverage. Unknown report format or missing lizard exits non-zero. |
 | codebase-graph.py | `codebase-graph.py build [--rev R] [--days N] [--coverage F] [--rules F] [--out D]` · `impact (--base R \| <files>…)` · `check --rules F --base R` | Entry point for the `codemap/` package. `build` writes `graph.json` + `graph.html` (from graph-viewer.html) to `.gate/` and prints a ≤ 20-line summary with the SEEN breakdown, exiting 1 when a setup's workflow.json has errors; `impact` prints the CHANGE IMPACT block; `check` exits 1 listing each forbidden dependency or new import-cycle edge HEAD adds over the base, and backs gate.sh's `arch` step. Reads committed trees only (`git cat-file`). Bad usage exits 2. |
 | mutation-report.py | `mutation-report.py <report \| ->` | Prints `<path>:<line> <killed\|survived\|timeout\|no-coverage> <description>` per mutant for `gate.mutation`, or `no-mutants`: reads mutation-testing-report-schema JSON, PIT XML, cargo-mutants outcomes.json, Gremlins JSON, or mutmut 3 results (`-` for stdin). Unknown format exits non-zero. |
-| gate.sh | `gate.sh [lint\|types\|test\|build\|a11y\|crap\|mutation\|markers\|comments\|scope\|arch ...]` or `gate.sh test -- <targets>` | Refuses a dirty tree (`GATE_ALLOW_DIRTY=1` overrides), an unknown step, or a missing `gate.test`. With `-- <targets>`, runs only those tests through `gate.test.focus` and ends `FOCUSED:`, never `GATE:`. Flags a passing test step slower than `gate.test.budget`. Fails a function the diff touches whose `gate.crap` score is over `gate.crap.max`, and a diff whose added lines' mutants score under `gate.mutation.min`. Runs the gate one line per step, a ≤ 30-line failure excerpt (`GATE_EXCERPT_LINES`), full log in `.gate/<step>.log`. Exit 0 all pass, 1 otherwise. From a worktree that predates project.md, it reads the main checkout's. |
+| gate.sh | `gate.sh [lint\|types\|test\|build\|a11y\|crap\|mutation\|markers\|comments\|scope\|contract\|arch ...]` or `gate.sh test -- <targets>` | Refuses a dirty tree (`GATE_ALLOW_DIRTY=1` overrides), an unknown step, or a missing `gate.test`. With `-- <targets>`, runs only those tests through `gate.test.focus` and ends `FOCUSED:`, never `GATE:`. Flags a passing test step slower than `gate.test.budget`. Fails a function the diff touches whose `gate.crap` score is over `gate.crap.max`, and a diff whose added lines' mutants score under `gate.mutation.min`. Runs the gate one line per step, a ≤ 30-line failure excerpt (`GATE_EXCERPT_LINES`), full log in `.gate/<step>.log`. Exit 0 all pass, 1 otherwise. From a worktree that predates project.md, it reads the main checkout's. |
 | find-comments.sh | `find-comments.sh --base <ref>` or `find-comments.sh <file>...` | Prints `path:line: text` for every comment added since `<ref>`, or in the given files. Exit 1 when it finds one, 2 on bad usage. |
 | log-event.sh | `log-event.sh <ID\|-> <event> <verdict> [--sha S] [--patch-id P] [--evidence E] [--attempt N] [--score 0-100] [--hash H] [--category C]... [--signal TEXT]...` | Appends one JSON line to the main checkout's `vault/log.jsonl`. Events include `risk`, `scope` and `rollback`. Up to 5 signals of 200 chars. Unknown events, categories or evidence rungs, or a score outside 0-100, exit 1 and list the valid ones. Prints `RETRO DUE` when a category recurs across slices. |
+| contract.sh | `contract.sh lint <plan>` · `lock <ID> [--revise]` · `check [ID] [--ref REF]` | The slice contract. `lint` checks every plan slice has `{tests, budget}` or `"none: <reason>"` (check-plan.sh runs it). `lock` hashes the acceptance tests on `slice/<ID>` after confirming they fail and that nothing else changed, writes `contract.locked`, logs a `contract` event and commits. `check` (gate.sh's `contract` step, and the merge check) fails on a changed test or a diff over budget; exit 3 means the slice has no contract. |
 | adopt-plan.sh | `adopt-plan.sh [ID]...` · `--discard` | The Director's plan adoption in one call: re-runs check-plan.sh on vault/plan-draft.json, refuses a picked slice whose `depends_on` stays behind in the draft or an ID already live, appends the slices to task-tree.json, runs `risk-gate.sh assess` on each, deletes the draft and commits. `--discard` deletes a rejected draft. |
 | record-gate.sh | `record-gate.sh <ID> <self_review\|automated\|reviewer\|auditor> <verdict\|'skip: <reason>'> [--gate-line LINE] [log-event.sh options]` | One gate verdict in one call: sets the slice's gate in task-tree.json, appends the log.jsonl line (sha and patch_id read from gate.sh's result line), and commits both. Refuses a verdict the gate can't give, or one that contradicts the gate line, before writing anything. |
 | land-slice.sh | `land-slice.sh <ID> [-m MESSAGE]` | The merge in one call, from the main checkout: `risk-gate.sh check <ID> merge`, a `git merge-tree` conflict check that leaves main untouched, squash-merge, tag `<ID>-done`, gate 5 and status `done` in task-tree.json, `merge done` with the CONTROLS line in log.jsonl, a bookkeeping commit, then the branch and worktree removed. guard.sh runs the merge check on the command too, and blocks subagents from all three scripts. |
