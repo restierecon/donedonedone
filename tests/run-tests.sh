@@ -1936,6 +1936,7 @@ printf '#!/bin/bash\nsrc=$(cd "$(dirname "$0")" && pwd)\ncp "$src"/agents/*.md "
 chmod +x "$hsrc/install.sh"
 git -C "$hsrc" add -A && git -C "$hsrc" commit -q -m one
 git -C "$hsrc" remote add origin "$horigin" && git -C "$hsrc" push -q -u origin main
+hurl=$(git -C "$hsrc" remote get-url origin)
 hz() { HOME="$hhome" "$hhome/.claude/scripts/harness.sh" "$@" 2>&1; }
 HOME="$hhome" "$hsrc/install.sh" >/dev/null
 if [ -z "$(hz check)" ]; then ok "check is silent when the install matches its clone and the remote"; else bad "check is silent when the install matches its clone and the remote" "$(hz check)"; fi
@@ -1952,7 +1953,7 @@ git -C "$hsrc" push -q origin main
 git -C "$hsrc" reset -q --hard HEAD~1
 HOME="$hhome" "$hsrc/install.sh" >/dev/null
 out=$(hz check)
-if echo "$out" | grep -q "^update available: $horigin is at $(git -C "$horigin" rev-parse --short=7 main), ahead of the clone at $hsrc — run: $hhome/.claude/scripts/ddd update"; then
+if echo "$out" | grep -q "^update available: $hurl is at $(git -C "$horigin" rev-parse --short=7 main), ahead of the clone at $hsrc — run: $hhome/.claude/scripts/ddd update"; then
   ok "a remote that moved ahead of the clone is reported as an update"
 else
   bad "a remote that moved ahead of the clone is reported as an update" "$out"
@@ -2010,7 +2011,7 @@ else
 fi
 hook=$(hz project-hook | jq -r '.hooks.SessionStart[0].hooks[0].command')
 empty=$(mktemp -d)
-if HOME="$empty" sh -c "$hook" | grep -q "donedonedone is not installed on this machine.*git clone $horigin && ./install.sh" \
+if HOME="$empty" sh -c "$hook" | grep -q "donedonedone is not installed on this machine.*git clone $hurl && ./install.sh" \
    && [ -z "$(HOME="$hhome" sh -c "$hook")" ]; then
   ok "the project hook speaks only on a machine with no install, and names the repository to clone"
 else
