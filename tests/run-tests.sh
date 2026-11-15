@@ -1665,6 +1665,7 @@ cat > "$PLANS/good.json" <<'JSON'
 [
   {"id": "S010", "title": "Shopper can save a cart", "so_that": "I don't lose my picks",
    "status": "todo", "depends_on": [], "auditor_triggers": [], "ui_contract": null, "acceptance_criteria": ["cart persists across reload"],
+   "contract": {"tests": ["tests/cart"], "budget": 300},
    "verify": "tests/cart_test.sh", "retry_count": 0,
    "risk": {"dimensions": {"blast_radius": 1, "reversibility": 1, "security": 0, "complexity": 1, "uncertainty": 1},
             "rationale": "one module, a pattern the cart already uses", "hazards": [],
@@ -1675,6 +1676,7 @@ cat > "$PLANS/good.json" <<'JSON'
   {"id": "S011", "title": "Shopper can share a saved cart", "so_that": "a friend can buy for me",
    "status": "todo", "depends_on": ["S010", "S001", "S002"], "auditor_triggers": ["data-access", "user-input"],
    "ui_contract": "vault/ui/cart-share/contract.md", "acceptance_criteria": ["share link opens the cart"],
+   "contract": "none: fixture",
    "verify": "tests/share_test.sh", "retry_count": 0,
    "risk": {"dimensions": {"blast_radius": 2, "reversibility": 1, "security": 3, "complexity": 2, "uncertainty": 1},
             "rationale": "a link exposes one cart to another user", "hazards": [],
@@ -1798,11 +1800,11 @@ echo "# my own global rules" > "$home/.claude/CLAUDE.md"
 echo "old" > "$home/.claude/commands/init-vault.md"
 echo "old" > "$home/.claude/scripts/generate-copilot-agents.sh"
 echo '{"mine": true}' > "$home/.cursor/hooks.json"
-HOME="$home" "$INSTALL" >/dev/null 2>&1
-if [ "$(jq -r .mine "$home/.claude/settings.json")" = "true" ] && ls "$home"/.claude/settings.json.new-* >/dev/null 2>&1; then
-  ok "install keeps an existing settings.json and drops the new one beside it"
+HOME="$home" DONEDONEDONE_OFFLINE=1 "$INSTALL" >/dev/null 2>&1
+if [ "$(jq -r .mine "$home/.claude/settings.json")" = "true" ] && [ "$(jq -r .mine "$home"/.claude/settings.json.bak-*)" = "true" ]; then
+  ok "install keeps what an existing settings.json holds and backs the file up"
 else
-  bad "install keeps an existing settings.json and drops the new one beside it" "$(ls "$home/.claude")"
+  bad "install keeps what an existing settings.json holds and backs the file up" "$(ls "$home/.claude")"
 fi
 mapped=$(mktemp -d)
 git -C "$mapped" init -q -b main && printf 'echo hi\n' > "$mapped/a.sh" && git -C "$mapped" add -A && git -C "$mapped" -c user.email=t@t -c user.name=t commit -q -m i
@@ -1833,7 +1835,7 @@ rm -rf "$home"
 home=$(mktemp -d)
 mkdir -p "$home/.claude/skills/init-vault"
 echo "old skill" > "$home/.claude/skills/init-vault/SKILL.md"
-status=0; out=$(HOME="$home" "$INSTALL" 2>&1) || status=$?
+status=0; out=$(HOME="$home" DONEDONEDONE_OFFLINE=1 "$INSTALL" 2>&1) || status=$?
 if [ "$status" -eq 0 ] && [ ! -e "$home/.claude/skills/init-vault" ] \
    && [ "$(cat "$home"/.claude/init-vault-skill.bak-*/SKILL.md 2>/dev/null)" = "old skill" ]; then
   ok "install moves the renamed init-vault skill to a backup outside skills/, never deletes it"
@@ -1853,7 +1855,7 @@ echo old > "$home/.claude/agents/scribe.md"
 echo old > "$home/.claude/skills/compaction/SKILL.md"
 echo old > "$home/.copilot/agents/scribe.agent.md"
 echo old > "$home/.cursor/agents/scribe.md"
-status=0; out=$(HOME="$home" "$INSTALL" 2>&1) || status=$?
+status=0; out=$(HOME="$home" DONEDONEDONE_OFFLINE=1 "$INSTALL" 2>&1) || status=$?
 if [ "$status" -eq 0 ] && [ ! -e "$home/.claude/agents/scribe.md" ] && [ ! -e "$home/.claude/skills/compaction" ] \
    && [ ! -e "$home/.copilot/agents/scribe.agent.md" ] && [ ! -e "$home/.cursor/agents/scribe.md" ]; then
   ok "install retires the scribe agent and compaction skill from every live folder"
@@ -1868,6 +1870,162 @@ else
   bad "install moves the retired memory layer to backups and says so, never deletes it" "$out"
 fi
 rm -rf "$home"
+
+echo "== install.sh — settings merge and the version stamp =="
+home=$(mktemp -d)
+mkdir -p "$home/.claude"
+echo '{"mine": true, "env": {"CLAUDE_CODE_USE_POWERSHELL_TOOL": "1"}, "permissions": {"deny": ["Bash(mine *)"]},
+  "hooks": {"Stop": [{"hooks": [{"type": "command", "command": "my-stop.sh"}]}]}}' > "$home/.claude/settings.json"
+out=$(HOME="$home" DONEDONEDONE_OFFLINE=1 "$INSTALL" 2>&1)
+s="$home/.claude/settings.json"
+if [ "$(jq -r '.mine' "$s")" = "true" ] && [ "$(jq -r '.env.CLAUDE_CODE_USE_POWERSHELL_TOOL' "$s")" = "1" ] \
+   && jq -e '.permissions.deny | index("Bash(mine *)") and index("Bash(sudo *)")' "$s" >/dev/null \
+   && [ "$(jq -c '[.hooks.Stop[].hooks[].command]' "$s")" = '["my-stop.sh","~/.claude/scripts/checkpoint.sh"]' ] \
+   && jq -e '.hooks.SessionStart[0].hooks[0].command == "~/.claude/scripts/session-start.sh"' "$s" >/dev/null; then
+  ok "install adds its hooks and permissions to an existing settings.json and keeps every value that was there"
+else
+  bad "install adds its hooks and permissions to an existing settings.json and keeps every value that was there" "$(jq -c . "$s")"
+fi
+if [ "$(jq -r '.mine' "$home"/.claude/settings.json.bak-*)" = "true" ] && ! jq -e '.hooks.SessionStart' "$home"/.claude/settings.json.bak-* >/dev/null \
+   && echo "$out" | grep -q "merged this setup's hooks"; then
+  ok "the settings.json from before the merge is kept as a backup, and install says so"
+else
+  bad "the settings.json from before the merge is kept as a backup, and install says so" "$out"
+fi
+before=$(jq -cS . "$s")
+sleep 1
+HOME="$home" DONEDONEDONE_OFFLINE=1 "$INSTALL" >/dev/null 2>&1
+if [ "$(jq -cS . "$s")" = "$before" ] && [ "$(find "$home/.claude" -name 'settings.json.bak-*' | wc -l | tr -d ' ')" = "1" ]; then
+  ok "a second install changes nothing in settings.json and adds no hook twice"
+else
+  bad "a second install changes nothing in settings.json and adds no hook twice" "$(ls "$home/.claude")"
+fi
+if grep -q "^commit=$(git -C "$ROOT" rev-parse HEAD)$" "$home/.claude/donedonedone.version" && grep -q "^source=$ROOT$" "$home/.claude/donedonedone.version" \
+   && grep -q ' scripts/gate.sh$' "$home/.claude/donedonedone.manifest" && echo "$out" | grep -q "^Version: $(git -C "$ROOT" rev-parse --short=7 HEAD) "; then
+  ok "install records the commit it installed, where from, and a hash of every file it put in place"
+else
+  bad "install records the commit it installed, where from, and a hash of every file it put in place" "$(cat "$home/.claude/donedonedone.version")"
+fi
+if [ -z "$(HOME="$home" DONEDONEDONE_OFFLINE=1 "$home/.claude/scripts/harness.sh" check)" ] \
+   && HOME="$home" DONEDONEDONE_OFFLINE=1 "$home/.claude/scripts/ddd" version | grep -q "^status: up to date, files unmodified"; then
+  ok "a fresh install checks out clean, and ddd version says so"
+else
+  bad "a fresh install checks out clean, and ddd version says so" "$(HOME="$home" DONEDONEDONE_OFFLINE=1 "$home/.claude/scripts/ddd" version)"
+fi
+echo "not json" > "$s"
+out=$(HOME="$home" DONEDONEDONE_OFFLINE=1 "$INSTALL" 2>&1)
+if [ "$(cat "$s")" = "not json" ] && ls "$home"/.claude/settings.json.new-* >/dev/null 2>&1 && echo "$out" | grep -q "could not be merged"; then
+  ok "a settings.json that can't be merged is left alone, with the new one beside it"
+else
+  bad "a settings.json that can't be merged is left alone, with the new one beside it" "$out"
+fi
+rm -rf "$home"
+
+echo "== harness.sh — a session is told when the install is outdated, modified or too old =="
+hroot=$(mktemp -d)
+horigin="$hroot/origin.git" hsrc="$hroot/src" hhome="$hroot/home"
+git init -q --bare -b main "$horigin"
+git init -q -b main "$hsrc"
+git -C "$hsrc" config user.email t@t && git -C "$hsrc" config user.name t
+mkdir -p "$hsrc/agents" "$hsrc/scripts" "$hhome/.claude/agents"
+cp -R "$ROOT/scripts" "$hhome/.claude/scripts"
+cp "$ROOT/scripts/gate.sh" "$hsrc/scripts/gate.sh"
+echo one > "$hsrc/agents/a.md"
+# shellcheck disable=SC2016
+printf '#!/bin/bash\nsrc=$(cd "$(dirname "$0")" && pwd)\ncp "$src"/agents/*.md "$HOME/.claude/agents/"\n"$HOME/.claude/scripts/harness.sh" stamp "$src"\n' > "$hsrc/install.sh"
+chmod +x "$hsrc/install.sh"
+git -C "$hsrc" add -A && git -C "$hsrc" commit -q -m one
+git -C "$hsrc" remote add origin "$horigin" && git -C "$hsrc" push -q -u origin main
+hurl=$(git -C "$hsrc" remote get-url origin)
+hz() { HOME="$hhome" "$hhome/.claude/scripts/harness.sh" "$@" 2>&1; }
+HOME="$hhome" "$hsrc/install.sh" >/dev/null
+if [ -z "$(hz check)" ]; then ok "check is silent when the install matches its clone and the remote"; else bad "check is silent when the install matches its clone and the remote" "$(hz check)"; fi
+echo two > "$hsrc/agents/a.md"
+git -C "$hsrc" commit -q -am two
+out=$(hz check)
+if echo "$out" | grep -q "^outdated: .* is installed, and its clone at $hsrc is already at $(git -C "$hsrc" rev-parse --short=7 HEAD) — run: $hsrc/install.sh" \
+   && echo "$out" | head -1 | grep -q "tell the human once"; then
+  ok "a clone that was pulled but not installed is reported, with the command that fixes it"
+else
+  bad "a clone that was pulled but not installed is reported, with the command that fixes it" "$out"
+fi
+git -C "$hsrc" push -q origin main
+git -C "$hsrc" reset -q --hard HEAD~1
+HOME="$hhome" "$hsrc/install.sh" >/dev/null
+out=$(hz check)
+if echo "$out" | grep -q "^update available: $hurl is at $(git -C "$horigin" rev-parse --short=7 main), ahead of the clone at $hsrc — run: $hhome/.claude/scripts/ddd update"; then
+  ok "a remote that moved ahead of the clone is reported as an update"
+else
+  bad "a remote that moved ahead of the clone is reported as an update" "$out"
+fi
+mv "$horigin" "$horigin.away"
+if hz check | grep -q "^update available"; then ok "the remote is asked at most once a day: the answer is cached"; else bad "the remote is asked at most once a day: the answer is cached" "$(hz check)"; fi
+mv "$horigin.away" "$horigin"
+if [ -z "$(DONEDONEDONE_OFFLINE=1 hz check)" ]; then ok "DONEDONEDONE_OFFLINE=1 never asks the remote"; else bad "DONEDONEDONE_OFFLINE=1 never asks the remote" "$(DONEDONEDONE_OFFLINE=1 hz check)"; fi
+nv=$(mktemp -d)
+out=$(cd "$nv" && HOME="$hhome" "$hhome/.claude/scripts/session-start.sh" </dev/null 2>&1)
+if echo "$out" | grep -q "^update available"; then ok "session-start passes the notice on in a project with no vault"; else bad "session-start passes the notice on in a project with no vault" "$out"; fi
+out=$(cd "$nv" && echo '{"hook_event_name":"SessionStart"}' | HOME="$hhome" "$hhome/.claude/scripts/session-start.sh" 2>&1)
+if echo "$out" | jq -e '.hookSpecificOutput.additionalContext | test("update available")' >/dev/null 2>&1; then
+  ok "the notice reaches Claude Code as SessionStart context"
+else
+  bad "the notice reaches Claude Code as SessionStart context" "$out"
+fi
+rm -rf "$nv"
+echo "local edit" >> "$hsrc/agents/a.md"
+status=0; out=$(hz update) || status=$?
+if [ "$status" -eq 1 ] && echo "$out" | grep -q "uncommitted changes"; then ok "update refuses a clone with uncommitted changes"; else bad "update refuses a clone with uncommitted changes" "exit $status: $out"; fi
+git -C "$hsrc" checkout -q -- agents/a.md
+status=0; out=$(hz update) || status=$?
+if [ "$status" -eq 0 ] && [ "$(cat "$hhome/.claude/agents/a.md")" = "two" ] && [ -z "$(hz check)" ] \
+   && grep -q "^commit=$(git -C "$horigin" rev-parse main)$" "$hhome/.claude/donedonedone.version"; then
+  ok "update fast-forwards the clone, reinstalls from it and leaves nothing to report"
+else
+  bad "update fast-forwards the clone, reinstalls from it and leaves nothing to report" "exit $status: $out"
+fi
+if hz update | grep -q "^already up to date"; then ok "update is a no-op when nothing changed"; else bad "update is a no-op when nothing changed" "$(hz update)"; fi
+echo tampered >> "$hhome/.claude/scripts/gate.sh"
+rm "$hhome/.claude/agents/a.md"
+out=$(hz check)
+if echo "$out" | grep -q "^modified: 2 installed file(s) no longer match what install.sh put there (first: agents/a.md)"; then
+  ok "an installed file that was edited or deleted is reported"
+else
+  bad "an installed file that was edited or deleted is reported" "$out"
+fi
+status=0; out=$(hz status) || status=$?
+if [ "$status" -eq 1 ] && echo "$out" | grep -q "^installed: " && echo "$out" | grep -q "^modified: 2"; then ok "status exits 1 and lists what is wrong"; else bad "status exits 1 and lists what is wrong" "exit $status: $out"; fi
+HOME="$hhome" "$hsrc/install.sh" >/dev/null
+proj=$(mktemp -d)
+mkdir -p "$proj/vault"
+printf '# P\n- harness: 2099-01-01T00:00:00Z (abc1234)\n' > "$proj/vault/project.md"
+if hz require "$proj" | grep -q "^too old for this project: vault/project.md needs harness 2099-01-01T00:00:00Z or newer"; then
+  ok "a project that pins a newer harness than the one installed says so"
+else
+  bad "a project that pins a newer harness than the one installed says so" "$(hz require "$proj")"
+fi
+hz pin > "$proj/vault/project.md"
+if grep -q '^- harness: 20[0-9-]*T[0-9:]*Z ([0-9a-f]\{7\})$' "$proj/vault/project.md" && [ -z "$(hz require "$proj")" ]; then
+  ok "pin writes the installed revision, and a project pinned to it is satisfied"
+else
+  bad "pin writes the installed revision, and a project pinned to it is satisfied" "$(cat "$proj/vault/project.md")"
+fi
+hook=$(hz project-hook | jq -r '.hooks.SessionStart[0].hooks[0].command')
+empty=$(mktemp -d)
+if HOME="$empty" sh -c "$hook" | grep -q "donedonedone is not installed on this machine.*git clone $hurl && ./install.sh" \
+   && [ -z "$(HOME="$hhome" sh -c "$hook")" ]; then
+  ok "the project hook speaks only on a machine with no install, and names the repository to clone"
+else
+  bad "the project hook speaks only on a machine with no install, and names the repository to clone" "$hook"
+fi
+git -C "$hsrc" remote set-url origin "https://user:s3cret@example.test/x.git"
+HOME="$hhome" "$hsrc/install.sh" >/dev/null
+if grep -q '^origin=https://example.test/x.git$' "$hhome/.claude/donedonedone.version" && ! grep -q s3cret "$hhome/.claude/donedonedone.version"; then
+  ok "credentials in the clone's remote URL never reach the stamp"
+else
+  bad "credentials in the clone's remote URL never reach the stamp" "$(grep origin "$hhome/.claude/donedonedone.version")"
+fi
+rm -rf "$hroot" "$proj" "$empty"
+if [ -z "$("$ROOT/scripts/harness.sh" check 2>&1)" ]; then ok "check is silent when run from a clone, where nothing is installed"; else bad "check is silent when run from a clone, where nothing is installed" "$("$ROOT/scripts/harness.sh" check 2>&1)"; fi
 
 echo "== memory layer retired (resume = session-start.sh + git + task-tree.json) =="
 if [ ! -e "$ROOT/agents/scribe.md" ] && [ ! -e "$ROOT/skills/compaction" ]; then
@@ -2571,7 +2729,7 @@ LAND="$ROOT/scripts/land-slice.sh"
 in_repo() { (cd "$1" && shift && "$@" 2>&1); }
 plan_slice() {
   risk_slice "$1" "$(dims 1 1 0 1 1)" | jq -c --argjson d "${2:-[]}" \
-    '.title = "Shopper can keep cart \(.id)" | .depends_on = $d | .ui_contract = null
+    '.title = "Shopper can keep cart \(.id)" | .depends_on = $d | .ui_contract = null | .contract = "none: fixture"
      | .gates = {self_review: null, automated: null, reviewer: null, auditor: null, risk: null}'
 }
 d=$(make_risk_repo "[]")
@@ -2710,6 +2868,224 @@ fi
 status=0; out=$(in_repo "$d" "$LAND" S011) || status=$?
 if [ "$status" -eq 1 ]; then ok "land-slice refuses a slice that already landed"; else bad "land-slice refuses a slice that already landed" "exit $status: $out"; fi
 rm -rf "$d"
+
+echo "== risk-gate.sh — hazards come from the diff, whatever the plan predicted =="
+CONTRACT="$ROOT/scripts/contract.sh"
+drepo=$(make_risk_repo "[]")
+add_slice() {
+  jq --argjson s "$2" '.slices += [$s]' "$1/vault/task-tree.json" > "$1/t.json" && mv "$1/t.json" "$1/vault/task-tree.json"
+  rg "$1" assess "$(jq -r .id <<<"$2")" >/dev/null
+}
+diff_case() {
+  local id="$1" file="$2" text="$3" hazards="${4:-[]}" p
+  add_slice "$drepo" "$(risk_slice "$id" "$(dims 1 1 0 1 1)" '[]' "$hazards")"
+  mkdir -p "$drepo/$(dirname "$file")"
+  slice_change "$drepo" "$id" "$text" "$file"
+  p=$(pid_of "$drepo" "$id")
+  lg "$drepo" "$id" gate PASS --patch-id "$p"
+  lg "$drepo" "$id" reviewer APPROVED --patch-id "$p" --evidence unit-test-verified
+  rg "$drepo" check "$id" merge
+}
+expect_lift() {
+  local desc="$1" want="$2" out
+  shift 2
+  out=$(diff_case "$@")
+  if [ -z "$want" ]; then
+    if echo "$out" | grep -q "^RISK: PASS merge" && ! echo "$out" | grep -q "^NOTE: the diff raises"; then ok "$desc"; else bad "$desc" "$out"; fi
+  elif [ "$want" = same ]; then
+    if echo "$out" | grep -q "^RISK: " && ! echo "$out" | grep -q "^NOTE: the diff raises"; then ok "$desc"; else bad "$desc" "$out"; fi
+  elif echo "$out" | grep -q "^NOTE: the diff raises .* to $want " && echo "$out" | grep -q "^RISK: FAIL merge .* class=$want "; then
+    ok "$desc"
+  else
+    bad "$desc" "$out"
+  fi
+}
+expect_lift "a plain change inside scope merges at the planned class" "" D001 src/app.txt "more"
+expect_lift "a diff that touches an auth path lifts a low slice to high" high D002 src/auth/login.txt "x"
+expect_lift "a lockfile in the diff lifts a low slice to elevated" elevated D003 src/package-lock.json "{}"
+expect_lift "an added DROP TABLE line lifts a low slice to critical" critical D004 src/cleanup.txt "DROP TABLE carts;"
+expect_lift "a .env file lifts to high" high D005 src/.env "KEY=1"
+expect_lift "a .env.example file lifts nothing" "" D006 src/.env.example "KEY="
+expect_lift "a hazard the plan already declared is not counted twice" same D008 src/migrations/001.txt "x" '["schema-migration"]'
+expect_lift "an undeclared hazard lifts a slice that declared a different one" high D007 src/billing/note.txt "x" '["schema-migration"]'
+out=$(rg "$drepo" check D003 merge)
+if echo "$out" | grep -q "raises D003 from low to elevated — it touches new-dependency (src/package-lock.json)"; then
+  ok "the note names the hazard and the file that raised the class"
+else
+  bad "the note names the hazard and the file that raised the class" "$out"
+fi
+out=$(rg "$drepo" check D007 merge)
+if echo "$out" | grep -q "raises D007 from elevated to high — it touches money (src/billing/note.txt)"; then
+  ok "the note gives the class the slice had and the class the diff needs"
+else
+  bad "the note gives the class the slice had and the class the diff needs" "$out"
+fi
+P2=$(pid_of "$drepo" D002)
+lg "$drepo" D002 auditor CLEARED --patch-id "$P2"
+status=0; out=$(rg "$drepo" check D002 merge) || status=$?
+if [ "$status" -eq 1 ] && echo "$out" | grep -q "human-approval: a human runs approve-risk.sh merge D002"; then
+  ok "a diff-lifted slice waits for the human merge approval its new class requires"
+else
+  bad "a diff-lifted slice waits for the human merge approval its new class requires" "$out"
+fi
+seed_approval "$drepo" D002 merge approve "$(hash_in "$drepo" D002)" "$P2"
+if rg "$drepo" check D002 merge | grep -q "^RISK: PASS merge D002 class=high"; then
+  ok "the human merge approval lets the lifted slice land"
+else
+  bad "the human merge approval lets the lifted slice land" "$(rg "$drepo" check D002 merge)"
+fi
+git -C "$drepo" checkout -q slice/D002
+out=$(cd "$drepo" && "$GATE" scope 2>&1)
+git -C "$drepo" checkout -q main
+if echo "$out" | grep -q "^scope PASS .*the diff touches auth (src/auth/login.txt), not in risk.hazards: the merge will need high controls"; then
+  ok "the gate's scope step warns of the lift while the slice is still building"
+else
+  bad "the gate's scope step warns of the lift while the slice is still building" "$out"
+fi
+echo '{"diff_paths": {"auth": ""}}' > "$drepo/vault/risk-policy.json"
+if rg "$drepo" check D002 merge | grep -q "^NOTE: the diff raises"; then
+  bad "a human can switch a diff rule off in the policy file" "$(rg "$drepo" check D002 merge)"
+else
+  ok "a human can switch a diff rule off in the policy file"
+fi
+echo '{"diff_paths": {"auth": "("}}' > "$drepo/vault/risk-policy.json"
+status=0; out=$(rg "$drepo" check D002 merge) || status=$?
+if [ "$status" -eq 2 ] && echo "$out" | grep -q "must be valid regexes"; then ok "a broken diff rule fails closed"; else bad "a broken diff rule fails closed" "exit $status: $out"; fi
+echo '{"diff_lines": {"typo": "x"}}' > "$drepo/vault/risk-policy.json"
+status=0; out=$(rg "$drepo" check D002 merge) || status=$?
+if [ "$status" -eq 2 ] && echo "$out" | grep -q "keys must be hazards"; then ok "a diff rule for an unknown hazard fails closed"; else bad "a diff rule for an unknown hazard fails closed" "exit $status: $out"; fi
+rm -rf "$drepo"
+
+echo "== contract.sh — acceptance tests lock before the build and can't drift =="
+ct() { (cd "$1" && shift && "$CONTRACT" "$@" 2>&1); }
+contract_slice() { risk_slice "$1" "$(dims 1 1 0 1 1)" | jq -c --argjson c "$2" '.contract = $c'; }
+crepo=$(make_risk_repo "[]")
+printf '# P\n## Gate\n- gate.test: true\n- gate.test.focus: sh\n' > "$crepo/vault/project.md"
+git -C "$crepo" commit -q -am "focus"
+add_slice "$crepo" "$(contract_slice C001 '{"tests": ["tests/cart_test.sh"], "budget": 5}')"
+git -C "$crepo" commit -q -am "adopt C001"
+status=0; out=$(ct "$crepo" lock C001) || status=$?
+if [ "$status" -eq 2 ] && echo "$out" | grep -q "no slice/C001 branch"; then ok "a contract can't lock before the tester has a branch"; else bad "a contract can't lock before the tester has a branch" "exit $status: $out"; fi
+status=0; out=$(rg "$crepo" check C001 build) || status=$?
+if [ "$status" -eq 1 ] && echo "$out" | grep -q "contract: the contract of C001 is not locked"; then
+  ok "no builder starts on a slice whose contract is not locked"
+else
+  bad "no builder starts on a slice whose contract is not locked" "exit $status: $out"
+fi
+git -C "$crepo" checkout -q -b slice/C001
+mkdir -p "$crepo/tests"
+echo "true" > "$crepo/tests/cart_test.sh"
+git -C "$crepo" add tests && git -C "$crepo" commit -q -m "test: green from the start"
+status=0; out=$(ct "$crepo" lock C001) || status=$?
+if [ "$status" -eq 2 ] && echo "$out" | grep -q "already pass"; then ok "tests that pass before the build can't be locked"; else bad "tests that pass before the build can't be locked" "exit $status: $out"; fi
+echo "test -f src/cart.txt" > "$crepo/tests/cart_test.sh"
+status=0; out=$(ct "$crepo" lock C001) || status=$?
+if [ "$status" -eq 2 ] && echo "$out" | grep -q "uncommitted changes in the contract tests"; then ok "uncommitted tests can't be locked"; else bad "uncommitted tests can't be locked" "exit $status: $out"; fi
+git -C "$crepo" commit -q -am "test: cart file exists"
+status=0; out=$(ct "$crepo" lock C001) || status=$?
+if [ "$status" -eq 0 ] && echo "$out" | grep -q "^CONTRACT: LOCKED C001 hash=[0-9a-f]\{12\} .*budget=5 red=confirmed revision=0" \
+   && jq -e '.slices[] | select(.id == "C001") | .contract.locked.red == "confirmed"' "$crepo/vault/task-tree.json" >/dev/null \
+   && tail -1 "$crepo/vault/log.jsonl" | jq -e '.event == "contract" and .verdict == "locked"' >/dev/null \
+   && [ -z "$(git -C "$crepo" status --porcelain --untracked-files=no)" ]; then
+  ok "lock confirms the tests are red, records the hash, logs it and commits — one call"
+else
+  bad "lock confirms the tests are red, records the hash, logs it and commits — one call" "exit $status: $out"
+fi
+if rg "$crepo" check C001 build | grep -q "^RISK: PASS build C001"; then ok "a locked contract lets the builder start"; else bad "a locked contract lets the builder start" "$(rg "$crepo" check C001 build)"; fi
+if ct "$crepo" lock C001 | grep -q "already locked"; then ok "locking twice is a no-op"; else bad "locking twice is a no-op" "$(ct "$crepo" lock C001)"; fi
+echo cart > "$crepo/src/cart.txt"
+git -C "$crepo" add src && git -C "$crepo" commit -q -m "feat: cart"
+out=$(cd "$crepo" && "$GATE" contract 2>&1)
+if echo "$out" | grep -q "^contract PASS — 1 contract test files as locked (.*) · 1 of 5 budget lines"; then
+  ok "the gate's contract step passes a build that leaves the tests alone and stays in budget"
+else
+  bad "the gate's contract step passes a build that leaves the tests alone and stays in budget" "$out"
+fi
+echo "true" > "$crepo/tests/cart_test.sh"
+git -C "$crepo" commit -q -am "weaken the test"
+status=0; out=$(cd "$crepo" && "$GATE" contract 2>&1) || status=$?
+if [ "$status" -eq 1 ] && echo "$out" | grep -q "^contract FAIL .*CONTRACT-DISPUTE" && echo "$out" | grep -q "tests/cart_test.sh"; then
+  ok "a builder that edits a locked test turns the gate red and the file is named"
+else
+  bad "a builder that edits a locked test turns the gate red and the file is named" "exit $status: $out"
+fi
+PC=$(pid_of "$crepo" C001)
+lg "$crepo" C001 gate PASS --patch-id "$PC"; lg "$crepo" C001 reviewer APPROVED --patch-id "$PC" --evidence unit-test-verified
+status=0; out=$(rg "$crepo" check C001 merge) || status=$?
+if [ "$status" -eq 1 ] && echo "$out" | grep -q "contract: the contract tests changed since they were locked"; then
+  ok "an edited contract can't merge, whatever its verdicts"
+else
+  bad "an edited contract can't merge, whatever its verdicts" "exit $status: $out"
+fi
+status=0; out=$(ct "$crepo" lock C001) || status=$?
+if [ "$status" -eq 2 ] && echo "$out" | grep -q "lock C001 --revise"; then ok "a plain re-lock never absorbs changed tests"; else bad "a plain re-lock never absorbs changed tests" "exit $status: $out"; fi
+git -C "$crepo" reset -q --hard HEAD~1
+seq 1 9 > "$crepo/src/more.txt"
+git -C "$crepo" add src && git -C "$crepo" commit -q -m "feat: too much"
+status=0; out=$(cd "$crepo" && "$GATE" contract 2>&1) || status=$?
+if [ "$status" -eq 1 ] && echo "$out" | grep -q "^contract FAIL — the diff changes 10 lines outside the contract tests, over the contract budget of 5 .*SCOPE-EXPANSION"; then
+  ok "a diff over the contract budget turns the gate red"
+else
+  bad "a diff over the contract budget turns the gate red" "exit $status: $out"
+fi
+git -C "$crepo" reset -q --hard HEAD~1
+printf 'test -f src/cart.txt\ntest -s src/cart.txt\n' > "$crepo/tests/cart_test.sh"
+git -C "$crepo" commit -q -am "test: revise after a dispute"
+status=0; out=$(ct "$crepo" lock C001 --revise) || status=$?
+if [ "$status" -eq 0 ] && echo "$out" | grep -q "revision=1" && (cd "$crepo" && "$GATE" contract 2>&1) | grep -q "^contract PASS" \
+   && tail -1 "$crepo/vault/log.jsonl" | jq -e '.verdict == "revised"' >/dev/null; then
+  ok "one revision after a dispute re-locks the contract and is logged"
+else
+  bad "one revision after a dispute re-locks the contract and is logged" "exit $status: $out"
+fi
+echo "test -d src" >> "$crepo/tests/cart_test.sh"
+git -C "$crepo" commit -q -am "test: revise again"
+status=0; out=$(ct "$crepo" lock C001 --revise) || status=$?
+if [ "$status" -eq 2 ] && echo "$out" | grep -q "second dispute is a human decision"; then ok "a second revision is refused: it goes to the human"; else bad "a second revision is refused: it goes to the human" "exit $status: $out"; fi
+git -C "$crepo" reset -q --hard HEAD~1
+git -C "$crepo" checkout -q main
+PC=$(pid_of "$crepo" C001)
+lg "$crepo" C001 gate PASS --patch-id "$PC"; lg "$crepo" C001 reviewer APPROVED --patch-id "$PC" --evidence unit-test-verified
+if rg "$crepo" check C001 merge | grep -q "^RISK: PASS merge C001"; then
+  ok "the merge check reads a lock committed on the slice branch"
+else
+  bad "the merge check reads a lock committed on the slice branch" "$(rg "$crepo" check C001 merge)"
+fi
+git -C "$crepo" checkout -q -- vault 2>/dev/null
+add_slice "$crepo" "$(contract_slice C002 '{"tests": ["tests/list_test.sh"], "budget": 50}')"
+add_slice "$crepo" "$(contract_slice C003 '"none: a docs-only slice"')"
+git -C "$crepo" commit -q -am "adopt C002 C003"
+git -C "$crepo" checkout -q -b slice/C002
+mkdir -p "$crepo/tests"
+echo "test -f src/list.txt" > "$crepo/tests/list_test.sh"; echo list > "$crepo/src/list.txt"
+git -C "$crepo" add tests src && git -C "$crepo" commit -q -m "tests and code together"
+status=0; out=$(ct "$crepo" lock C002) || status=$?
+if [ "$status" -eq 2 ] && echo "$out" | grep -q "already changes files outside the contract tests (src/list.txt"; then
+  ok "a branch that already holds implementation can't lock: tests come first"
+else
+  bad "a branch that already holds implementation can't lock: tests come first" "exit $status: $out"
+fi
+git -C "$crepo" checkout -q main
+git -C "$crepo" checkout -q -b slice/C003
+out=$(cd "$crepo" && "$GATE" contract 2>&1)
+if echo "$out" | grep -q "^contract SKIP (slice C003 — none: a docs-only slice)"; then ok "a slice with no contract skips the step and says why"; else bad "a slice with no contract skips the step and says why" "$out"; fi
+if rg "$crepo" check C003 build | grep -q "^RISK: PASS build C003"; then ok "a slice with no contract still builds"; else bad "a slice with no contract still builds" "$(rg "$crepo" check C003 build)"; fi
+rm -rf "$crepo"
+
+cplans=$(mktemp -d)
+plan_with() { jq -n --argjson s "$(risk_slice S020 "$(dims 1 1 0 1 1)")" --argjson c "$1" '[$s | .contract = $c]' > "$cplans/p.json"; "$CONTRACT" lint "$cplans/p.json"; }
+if jq -n --argjson s "$(risk_slice S020 "$(dims 1 1 0 1 1)")" '[$s]' > "$cplans/p.json" && "$CONTRACT" lint "$cplans/p.json" | grep -q "S020: missing contract"; then
+  ok "a plan slice without a contract fails the plan"
+else
+  bad "a plan slice without a contract fails the plan" "$("$CONTRACT" lint "$cplans/p.json")"
+fi
+if plan_with '"none"' | grep -q 'must be an object or "none: <reason>"'; then ok "opting out of a contract needs a reason"; else bad "opting out of a contract needs a reason" "$(plan_with '"none"')"; fi
+if plan_with '{"tests": ["tests/*"], "budget": 10}' | grep -q "plain repo paths (no globs)"; then ok "contract tests are plain paths, never globs"; else bad "contract tests are plain paths, never globs" "$(plan_with '{"tests": ["tests/*"], "budget": 10}')"; fi
+if plan_with '{"tests": ["tests/a"], "budget": 0}' | grep -q "whole number of changed lines above 0"; then ok "a contract needs a budget above 0"; else bad "a contract needs a budget above 0" "$(plan_with '{"tests": ["tests/a"], "budget": 0}')"; fi
+if [ -z "$(plan_with '{"tests": ["tests/a", "tests/b/"], "budget": 120}')" ]; then ok "a well-formed contract passes the lint"; else bad "a well-formed contract passes the lint" "$(plan_with '{"tests": ["tests/a", "tests/b/"], "budget": 120}')"; fi
+rm -rf "$cplans"
+expect_block "a tester spawn needs the full brief too" guard_agent Agent tester 'write tests'
+expect_allow "a full brief spawns the tester" guard_agent Agent tester "$FULL_BRIEF"
 
 echo "== risk gate wiring (protocol prose) =="
 if grep -q '^## Risk Gate' "$ROOT/CLAUDE.md" && grep -q 'risk-gate.sh check <ID> merge' "$ROOT/CLAUDE.md" && grep -q 'You cannot approve' "$ROOT/CLAUDE.md"; then

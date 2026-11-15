@@ -8,7 +8,21 @@ event=$(echo "${input:-}" | jq -r '.hook_event_name // empty' 2>/dev/null)
 root=$(echo "${input:-}" | jq -r '.cwd // .workspace_roots[0]? // empty' 2>/dev/null)
 if [ -n "$root" ] && [ -d "$root" ]; then cd "$root" || exit 0; fi
 
-[ -d vault ] || exit 0
+emit() {
+  if [ "$event" = "sessionStart" ]; then
+    jq -Rs '{additional_context: .}'
+  elif [ "$event" = "SessionStart" ]; then
+    jq -Rs '{hookSpecificOutput: {hookEventName: "SessionStart", additionalContext: .}}'
+  else
+    cat
+  fi
+}
+
+notice=$("$here/harness.sh" check 2>/dev/null)
+if [ ! -d vault ]; then
+  [ -z "$notice" ] || printf '%s\n' "$notice" | emit
+  exit 0
+fi
 
 "$(dirname "$0")/vault-guard.sh" --snapshot </dev/null >/dev/null 2>&1
 
@@ -17,6 +31,9 @@ if [ -f AGENTS.md ] && grep -qF '<!-- skeletoncrew:protocol:begin' AGENTS.md; th
 fi
 
 context() {
+  [ -z "$notice" ] || printf '%s\n' "$notice"
+  "$here/harness.sh" require . 2>/dev/null
+
   if [ -d vault/memory ] || [ -d vault/handoffs ]; then
     echo "!! retired memory layer found (vault/memory or vault/handoffs): remove it via the init-codebase migration step (clean tree, git rm, own commit)."
   fi
@@ -42,11 +59,5 @@ context() {
   fi
 }
 
-if [ "$event" = "sessionStart" ]; then
-  context | jq -Rs '{additional_context: .}'
-elif [ "$event" = "SessionStart" ]; then
-  context | jq -Rs '{hookSpecificOutput: {hookEventName: "SessionStart", additionalContext: .}}'
-else
-  context
-fi
+context | emit
 exit 0

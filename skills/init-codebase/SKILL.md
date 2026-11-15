@@ -74,6 +74,13 @@ only what is missing, and always run step 6 and the configure-gates skill (step 
    Parallelism: max_parallel_slices: 3 (git-worktree parallel dispatch, see global
    protocol → Parallel Slice Dispatch) · Definition of Done (every slice independently
    testable, no TODO/FIXME, no comments, gates green).
+   Then add the harness pin: append the line `~/.claude/scripts/harness.sh pin` prints
+   (`- harness: <date> (<commit>)`) under the gate lines. A session on a machine whose
+   install is older than the pin is told to update before it works on this project.
+   Merge the hook `~/.claude/scripts/harness.sh project-hook` prints into the project's
+   `.claude/settings.json` (create the file if absent; keep any hooks already there).
+   It speaks only on a machine where this setup is not installed, so a teammate or a
+   fresh cloud container is told what to clone instead of working without guardrails.
 9. Create a project-level CLAUDE.md containing ONLY project specifics (dependency
    install step, anything unusual — gate commands live in project.md) — the protocol lives globally, don't repeat it.
 10. Run `~/.claude/scripts/agents-md.sh` to put the protocol into AGENTS.md — the file

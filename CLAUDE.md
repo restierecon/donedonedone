@@ -24,6 +24,7 @@ heavy reads go to agents; you consume structured verdicts (≤ 20 lines) only.
 | Agent | Purpose | Fires |
 |---|---|---|
 | planner | Turns a grilled spec into vertical slices (draft plan file + table) | Once per feature, after /grill |
+| tester | Writes a slice's failing acceptance tests on `slice/<ID>`, nothing else | Every slice with a contract, before its builder; once more on a CONTRACT-DISPUTE |
 | builder | Implements one vertical slice end-to-end | Every slice |
 | reviewer | Cold-eyes verification vs acceptance criteria + slop checklist | Every slice |
 | auditor | Adversarial security pass | Only slices touching auth, data access, user input, secrets, deps, or external calls |
@@ -35,7 +36,7 @@ everything else — including any retry after a REJECTED — inherits the sessio
 (guard.sh refuses sonnet for elevated and above). Reviewer is sonnet (fixed
 in its manifest); planner, auditor and retro inherit.
 
-Builder, reviewer and auditor briefs follow the brief-contract skill (GOAL · SCOPE ·
+Tester, builder, reviewer and auditor briefs follow the brief-contract skill (GOAL · SCOPE ·
 ACCEPTANCE · VERIFY · FORBIDDEN · REPORT · STANDING); guard.sh refuses a spawn missing any.
 A builder brief also carries `SLICE: <ID>` and `RISK: <class> — <scope, unchanged, rollback>`;
 when that slice's `auditor_triggers` is non-empty, its STANDING names the harden-diff
@@ -64,6 +65,22 @@ mid-build. A slice only blocks slices naming it in `depends_on`. Independent sli
 run concurrently: load the parallel-dispatch skill before starting a wave
 (max_parallel_slices in vault/project.md, default 3).
 
+## Contract (locked before any builder)
+Every slice carries a `contract`: `{tests, budget}` — the acceptance test paths and a
+ceiling on changed lines outside them — or `"none: <reason>"` when no test can prove it
+(docs, config). For a slice with a contract:
+1. Dispatch `tester` on `slice/<ID>`. It writes the failing tests and nothing else.
+2. `~/.claude/scripts/contract.sh lock <ID>`. It refuses a branch that changes any other
+   file, runs the tests and refuses ones that already pass, then records the hash in
+   task-tree.json, logs it and commits. guard.sh refuses a builder before the lock.
+3. Dispatch the builder. gate.sh's `contract` step fails if a locked test changed or the
+   diff is over budget, and so does the merge check.
+- Builder reports CONTRACT-DISPUTE → send the disputed test and the reason to `tester`.
+  REVISED → `contract.sh lock <ID> --revise`, then the builder continues. UPHELD → the
+  builder builds to the test. `--revise` works once per slice: a second dispute is an
+  escalation.
+- Over budget → treat as scope expansion below; raising `contract.budget` is a re-plan.
+
 ## Risk Gate (before any builder, again before any merge)
 Every slice carries a `risk` assessment (five dimensions rated 0-4, hazards, scope,
 rollback); `~/.claude/scripts/risk-gate.sh` scores it 0-100 deterministically and the
@@ -80,12 +97,19 @@ score. Load the risk-gate skill for the rubric, reassessment and approval steps.
   in their own terminal. You cannot approve, and never try to: no agent may write
   `.git/donedonedone/approvals.jsonl` or `vault/risk-policy.json`. Ask once via
   pending-review.md and continue with non-dependent slices.
+- Hazards are re-derived from the diff at merge: a path or added line that matches a
+  hazard rule (auth, secrets, money, a migration, a lockfile, DROP TABLE) and is not in
+  `risk.hazards` raises the class to that hazard's floor, whatever the plan said and
+  whatever it ruled out. gate.sh's `scope` line warns while the slice is still building:
+  run the controls the higher class needs, and ask for its approval, before landing.
+  The rules live in `vault/risk-policy.json` (`diff_paths`, `diff_lines`), human-only.
 - Scope expansion (a `scope` FAIL, a builder SCOPE-EXPANSION) → log a `scope` event,
   re-rate the slice, `risk-gate.sh assess <ID>`, then continue. Lowering a class needs a
   human `downgrade` approval.
 
 ## Completion Gates (slice is DONE only when all pass, in order)
-1. Builder self-check — mechanical: gate green at its SHA, each criterion names its
+1. Builder self-check — mechanical: gate green at its SHA (its `contract` step
+   included: locked tests untouched, diff within budget), each criterion names its
    test, a CLEANED line (clean-diff skill) and, with auditor_triggers, a HARDENED line
    (harden-diff skill). A claim, not evidence: gates 2-3 verify it
 2. Automated: you run `gate.sh` once, in the slice's checkout, at the builder's SHA.
@@ -212,6 +236,9 @@ files; git and task-tree.json are the resume state.
   worktrees) plus `git log`, task-tree.json and your tool's built-in memory — no vault
   memory files. If it reports a retired memory layer, run the init-codebase migration
   step first. Leftover `.worktrees/<ID>` get resumed or torn down before new work.
+- A `donedonedone install` block in the SessionStart output (outdated, update available,
+  modified, too old for this project) → tell the human its lines once, before other
+  work. Never run the update or the installer yourself: they replace the guardrails.
 - Ending a session mid-slice: commit the WIP on the slice branch (never main) so the
   next session finds it in git.
 - Never re-do gate-approved work.

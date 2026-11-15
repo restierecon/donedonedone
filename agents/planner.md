@@ -31,12 +31,17 @@ and paths to vault/project.md and vault/stories.md.
    tests it may touch, behavior that must not change, regressions to watch — and a
    concrete rollback; safeguards when a hazard makes it critical. When unsure between two
    ratings, take the higher. Never write `score` or `class`; risk-gate.sh computes them.
-5. Write the slices as a JSON array (task-tree.json slice shape) to
+5. Give every slice a `contract` (slice-planning skill): `tests` — the files or
+   directories its acceptance tests will live in, as plain repo paths inside
+   `risk.scope.files` — and `budget`, a generous ceiling on the lines the build may
+   change outside those tests (about twice your honest estimate; it catches a runaway
+   diff, it is not a target). `"none: <reason>"` only when no test can prove the slice.
+6. Write the slices as a JSON array (task-tree.json slice shape) to
    vault/plan-draft.json. That is the only file you write. The Director
    runs `check-plan.sh` on it (fields, "Actor can" title, a `verify` step, every
    `depends_on` resolving, no cycles, `auditor_triggers` from the known list, every
    `ui_contract` an approved contract file, no bare
-   "skip" gate, a valid risk assessment with every hazard its wording suggests
+   "skip" gate, a `contract` or a reasoned opt-out, a valid risk assessment with every hazard its wording suggests
    declared or ruled out); a draft it rejects comes
    back to you with the output.
 

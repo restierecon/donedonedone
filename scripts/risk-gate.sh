@@ -3,7 +3,7 @@
 # shellcheck source=/dev/null
 [ -f "$(dirname "$0")/jq-text.sh" ] && . "$(dirname "$0")/jq-text.sh"
 
-DEFAULT_POLICY='{"thresholds":{"moderate":21,"elevated":41,"high":61,"critical":81},"weights":{"blast_radius":25,"reversibility":25,"security":25,"complexity":10,"uncertainty":15}}'
+DEFAULT_POLICY='{"thresholds":{"moderate":21,"elevated":41,"high":61,"critical":81},"weights":{"blast_radius":25,"reversibility":25,"security":25,"complexity":10,"uncertainty":15},"diff_paths":{"schema-migration":"(^|/)(migrations?|alembic|db/migrate)/|\\.sql$|(^|/)schema\\.(prisma|sql|rb)$","new-dependency":"(^|/)(package-lock\\.json|npm-shrinkwrap\\.json|yarn\\.lock|pnpm-lock\\.yaml|bun\\.lockb?|requirements[^/]*\\.txt|poetry\\.lock|uv\\.lock|pipfile\\.lock|go\\.(mod|sum)|cargo\\.lock|gemfile\\.lock|composer\\.lock|packages\\.lock\\.json|pom\\.xml|build\\.gradle(\\.kts)?)$","auth":"(^|[/._-])(auth|authn|authz|authentication|authorization|login|oauth|sso|rbac|acl|permissions?|passwords?)([/._-]|$)","secrets":"(^|/)\\.env(\\.(?!example$|sample$|template$)[^/]*)?$|(^|[/._-])(secrets?|credentials?)([/._-]|$)|\\.(pem|p12|pfx|keystore)$|(^|/)id_(rsa|ed25519)","money":"(^|[/._-])(billing|payments?|checkout|invoic(e|es|ing)|subscriptions?|refunds?|stripe|paypal)([/._-]|$)"},"diff_lines":{"destructive-op":"\\bdrop\\s+(table|database|schema|column)\\b|\\btruncate\\s+table\\b"}}'
 
 LIB='
 def dims: ["blast_radius","reversibility","security","complexity","uncertainty"];
@@ -104,6 +104,14 @@ def derived($s; $policy):
      then "\($s): risk.score \($r.score | tojson) is not the computed \($a.score) — leave score and class to risk-gate.sh" else empty end),
     (if $r.class != null and $r.class != $a.class
      then "\($s): risk.class \($r.class | tojson) is not the computed \($a.class)" else empty end);
+def diff_found($policy; $names; $added):
+  [ ($policy.diff_paths | to_entries[] | select(.value | nonempty) | . as $e
+     | ([$names[] | select(ascii_downcase | test($e.value))][0] // empty) as $f
+     | {hazard: $e.key, why: $f}),
+    ($policy.diff_lines | to_entries[] | select(.value | nonempty) | . as $e
+     | select(any($added[]; ascii_downcase | test($e.value)))
+     | {hazard: $e.key, why: "an added line"}) ]
+  | group_by(.hazard) | map(.[0] + {class: hazard_floors[.[0].hazard]});
 def problems($s; $policy): [structure($s)] as $e | if ($e | length) > 0 then $e[] else derived($s; $policy) end;
 '
 
@@ -141,6 +149,11 @@ if [ -n "$root" ] && [ -f "$root/vault/risk-policy.json" ]; then
       elif ($w | keys | sort) != (dims | sort) then "weights must rate exactly \(dims | join(", "))"
       elif ([$w[]] | all(.[]; whole and . >= 0)) | not then "weights must be whole numbers >= 0"
       elif ([$w[]] | add) != 100 then "weights must add up to 100"
+      elif ([.diff_paths, .diff_lines] | all(.[]; type == "object")) | not then "diff_paths and diff_lines must map a hazard to a regex"
+      elif ([.diff_paths, .diff_lines] | map(keys[]) | all(.[]; IN(hazard_floors | keys[]))) | not
+        then "diff_paths and diff_lines keys must be hazards (one of: \(hazard_floors | keys | join(", ")))"
+      elif ([.diff_paths[], .diff_lines[]] | all(.[]; type == "string" and (. as $p | try ("" | test($p) | true) catch false))) | not
+        then "diff_paths and diff_lines values must be valid regexes, \"\" to switch one off"
       else empty end' <<<"$POLICY" 2>&1)
   [ -z "$policy_err" ] || die "vault/risk-policy.json: $policy_err. Failing closed."
   policy_note=" policy=vault/risk-policy.json"
@@ -220,6 +233,24 @@ out_of_scope() {
     done
     [ "$hit" -eq 1 ] || printf '%s\n' "$f"
   done
+}
+
+diff_hazards() {
+  local dir="$1" range="$2" declared="$3" names added
+  names=$(mktemp) && added=$(mktemp) || return 1
+  git -C "$dir" diff --name-only "$range" -- . ':(exclude)vault' > "$names"
+  git -C "$dir" diff -U0 "$range" -- . ':(exclude)vault' | grep '^+' | grep -v '^+++ ' | cut -c2-400 > "$added"
+  jqlib 'diff_found($policy; $names | split("\n") | map(select(length > 0)); $added | split("\n"))
+         | map(select(.hazard as $h | $declared | index($h) | not))' \
+    -n -c --rawfile names "$names" --rawfile added "$added" --argjson declared "$declared"
+  rm -f "$names" "$added"
+}
+
+contract_fail() {
+  local out status=0
+  out=$("$here/contract.sh" check "$1" --ref "slice/$1" 2>&1) || status=$?
+  case "$status" in 0|3) return 0 ;; esac
+  printf '%s\n' "$out" | head -1
 }
 
 summary() {
@@ -422,9 +453,7 @@ cmd_check() {
       echo "NOTE: $id was reassessed down from $max_recorded to $class — its controls stay at $max_recorded until a human runs approve-risk.sh downgrade $id"
     fi
   fi
-  controls=$(jqlib 'controls($c; $t)' -c -n --arg c "$eclass" --argjson t "$triggers")
-  [ "$stage" = build ] && controls=$(jq -c 'map(select(. == "authorization" or . == "full-model"))' <<<"$controls")
-
+  local found lift contract
   if [ "$stage" = merge ]; then
     if ! git -C "$root" rev-parse -q --verify "$base^{commit}" >/dev/null; then
       fails+=("no $base branch to merge into; set GATE_BASE")
@@ -435,8 +464,18 @@ cmd_check() {
       [ -n "$patch" ] || fails+=("slice/$id has no changes against $base outside vault/")
       scope_out=$(out_of_scope "$slice" "$root" "$base...slice/$id")
       [ -z "$scope_out" ] || fails+=("scope expanded beyond risk.scope.files: $(echo "$scope_out" | head -5 | tr '\n' ' ')— reassess before merging")
+      found=$(diff_hazards "$root" "$base...slice/$id" "$(jq -c '.risk.hazards' <<<"$slice")") || found='[]'
+      lift=$(jqlib '[.[].class] + [$c] | max_by(rank)' -r --arg c "$eclass" <<<"${found:-[]}")
+      if [ -n "$lift" ] && [ "$lift" != "$eclass" ]; then
+        echo "NOTE: the diff raises $id from $eclass to $lift — it touches $(jq -r 'map("\(.hazard) (\(.why))") | join(", ")' <<<"$found"), not in risk.hazards"
+        eclass="$lift"
+      fi
     fi
   fi
+  contract=$(contract_fail "$id")
+  [ -z "$contract" ] || fails+=("contract: $contract")
+  controls=$(jqlib 'controls($c; $t)' -c -n --arg c "$eclass" --argjson t "$triggers")
+  [ "$stage" = build ] && controls=$(jq -c 'map(select(. == "authorization" or . == "full-model"))' <<<"$controls")
 
   local mutation=false
   mutation_configured && mutation=true
@@ -485,7 +524,13 @@ cmd_scope() {
     exit 1
   fi
   n=$(git -C "$top" diff --name-only "$base...HEAD" -- . ':(exclude)vault' | grep -c .)
-  echo "$n changed files inside the approved scope"
+  local hazards note=""
+  hazards=$(diff_hazards "$top" "$base...HEAD" "$(jq -c '.risk.hazards' <<<"$slice")") || hazards='[]'
+  note=$(jqlib 'assess($policy).class as $c | ($found | map(select((.class | rank) > ($c | rank)))) as $up
+    | if ($up | length) == 0 then ""
+      else " · the diff touches \($up | map("\(.hazard) (\(.why))") | join(", ")), not in risk.hazards: the merge will need \($up | map(.class) | max_by(rank)) controls" end' \
+    -r --argjson found "${hazards:-[]}" <<<"$slice")
+  echo "$n changed files inside the approved scope$note"
 }
 
 cmd_pending() {

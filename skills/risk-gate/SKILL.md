@@ -135,6 +135,33 @@ per class and lists `UNDERESTIMATE?` slices for the retro. It never changes thre
 and a streak of clean slices is never a reason to loosen them. Only a human edits
 `vault/risk-policy.json`.
 
+## Hazards from the diff — the plan can raise a class, never hide one
+The assessment is a prediction. At merge, `check <ID> merge` reads the real diff and
+matches every changed path against `diff_paths` and every added line against
+`diff_lines`. A hazard found there and absent from `risk.hazards` raises the slice to
+that hazard's floor for this merge. `ruled_out` does not apply: it answers what the
+criteria's wording suggested, not what the code touched.
+
+| Hazard | Default rule |
+|---|---|
+| auth | a path segment named auth, login, oauth, sso, rbac, acl, permissions, passwords |
+| secrets | `.env` files (not `.env.example`), a segment named secrets or credentials, key files |
+| money | a path segment named billing, payments, checkout, invoices, subscriptions, refunds, stripe, paypal |
+| schema-migration | a migrations directory, a `.sql` file, a schema file |
+| new-dependency | a lockfile, or a manifest that pins versions itself (requirements.txt, go.mod, pom.xml) |
+| destructive-op | an added line with DROP TABLE / DATABASE / SCHEMA / COLUMN or TRUNCATE TABLE |
+
+The check prints `NOTE: the diff raises <ID> from <class> to <class> — it touches
+<hazard> (<file>)` and then requires the higher class's controls. gate.sh's `scope`
+line carries the same warning during the build, so the Director runs the auditor and
+asks for the approval before trying to land.
+- A real hazard the plan missed: add it to `risk.hazards`, `assess`, and log it — the
+  reassessment is recorded as a risk-underestimate.
+- A false match on this slice: the human's merge approval covers it; they see the diff.
+- A rule that keeps misfiring: a human edits it in `vault/risk-policy.json`
+  (`{"diff_paths": {"auth": "<regex>"}}`, `""` switches one off). Paths are matched
+  lowercased. An invalid regex or an unknown hazard fails every call closed.
+
 ## Commands
 `lint <plan>` · `table <plan>` · `score [file|-]` · `show <ID>` · `assess <ID>` ·
 `check <ID> build|merge` · `scope [ID]` · `pending` · `calibrate` · `audit <ID>`.

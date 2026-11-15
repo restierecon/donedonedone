@@ -21,8 +21,15 @@ another slice's worktree. If none is given, work on branch `slice/<ID>` as usual
    not change, how you'll verify it and how it rolls back. If the change needs a file
    outside `risk.scope.files`, stop now and report STATUS: SCOPE-EXPANSION with the
    files and why. The Director reassesses risk first; you never widen scope yourself.
-1. From the acceptance criteria, write tests FIRST. Each criterion maps to at least
-   one test that fails while the criterion is unmet. Run them — confirm they fail.
+1. Tests FIRST. When the brief names a locked contract, the acceptance tests already
+   exist in `contract.tests` on your branch: run them, confirm they fail, and build to
+   them. Never edit, move, skip or delete a locked test. One you believe is wrong —
+   it demands something the criteria do not, or contradicts another test — is
+   STATUS: CONTRACT-DISPUTE naming the test and the reason; the tester revises it or
+   upholds it, you never do. Add your own unit tests beside your code, outside the
+   locked paths. With no contract, write the tests yourself from the acceptance
+   criteria: each criterion maps to at least one test that fails while the criterion
+   is unmet. Run them — confirm they fail.
 2. Implement the minimum to go green, layer by layer through the slice.
    When STANDING names a UI contract, read it, open its prototype.html and screenshots,
    and build those states, that hierarchy and that copy with the project's own
@@ -91,6 +98,9 @@ examined 20+ files without progress, or the criteria appear contradictory.
 Stop and report SCOPE-EXPANSION the moment gate.sh's `scope` step fails or the work
 needs a file outside the approved scope. Never revert needed work to make `scope` pass,
 and never touch vault/ to widen it.
+Stop and report CONTRACT-DISPUTE the moment gate.sh's `contract` step fails on a
+changed test, and SCOPE-EXPANSION when it fails on the budget. Never weaken a locked
+test to go green, and never squeeze code to fit the budget.
 A clean failure report is success; thrashing is not.
 
 ## Self-Check (Tier 1 — mechanical, before every report)
@@ -99,7 +109,8 @@ reviewer reads the diff cold, and grading your own work is where leniency creeps
 1. `~/.claude/scripts/gate.sh` (all steps) passes at the SHA you report. Its `markers`
    step fails on any TODO/FIXME/XXX your diff adds, its `comments` step on any comment,
    its `scope` step on any changed file outside `risk.scope.files` (→ SCOPE-EXPANSION,
-   not a fix), its `crap` step on any function you touch scoring over `gate.crap.max`, its
+   not a fix), its `contract` step on any change to a locked test (→ CONTRACT-DISPUTE)
+   or a diff over `contract.budget` (→ SCOPE-EXPANSION), its `crap` step on any function you touch scoring over `gate.crap.max`, its
    `mutation` step on mutants your added lines survive under `gate.mutation.min`. Fix a
    `crap` FAIL by testing the function's untested branches or splitting it; fix a
    `mutation` FAIL by asserting what each listed survivor changes (mutation-survivors
@@ -112,7 +123,7 @@ A failing check → fix and re-run; each re-run counts toward Termination's limi
 
 ## Output Format (≤ 20 lines, never raw tool output)
 SLICE: [id] — [title]
-STATUS: COMPLETE / FAILED / SCOPE-EXPANSION — [one-line reason; for SCOPE-EXPANSION the files and why]
+STATUS: COMPLETE / FAILED / SCOPE-EXPANSION / CONTRACT-DISPUTE — [one-line reason; for SCOPE-EXPANSION the files and why; for CONTRACT-DISPUTE the test and what it wrongly demands]
 CHANGE PLAN: [smallest change · files · rollback — step 0, one line]
 BRANCH: slice/[id]   SHA: [short sha gate.sh ran on]   FILES: [list]
 GATE: [gate.sh's final line, e.g. GATE: PASS @ sha=<sha> patch_id=<id>]

@@ -83,6 +83,7 @@ vault/plan-draft.json; the Director copies approved slices into
 vault/task-tree.json. Slice shape:
 { "id": "S00n", "title": "Actor can ...", "so_that": "...",
   "status": "todo", "depends_on": [], "auditor_triggers": [], "ui_contract": null, "acceptance_criteria": ["..."],
+  "contract": {"tests": ["tests/x"], "budget": 300},
   "verify": "the command or demo that proves the criteria", "retry_count": 0,
   "risk": {"dimensions": {"blast_radius": 1, "reversibility": 1, "security": 0, "complexity": 1, "uncertainty": 1},
            "rationale": "...", "hazards": [], "ruled_out": {},
@@ -93,6 +94,14 @@ vault/task-tree.json. Slice shape:
 controls and autonomy the slice gets, and `scope` is the minimum necessary change the
 builder must stay inside. A slice whose honest rating comes out critical is worth a
 second look: splitting off the destructive part often leaves most of the work low.
+`contract` is what the build is held to. `tests` names the files or directories the
+slice's acceptance tests live in (plain paths, no globs, inside `risk.scope.files`): the
+tester writes them failing, `contract.sh lock` records their hash, and from then on the
+gate fails if a builder changes one. `budget` caps the changed lines outside those
+tests — set it at about twice an honest estimate, so it stops a runaway diff without
+squeezing a normal one. A slice no test can prove (docs, config) says
+`"contract": "none: <reason>"` — never omitted. Never write `contract.locked`;
+contract.sh does.
 `auditor_triggers` lists every trust boundary the slice's behavior crosses, from: auth,
 sessions, data-access, user-input, file-uploads, secrets, dependencies, external-calls,
 llm-tools — `[]` when it crosses none. It decides two things: the auditor gate runs, and

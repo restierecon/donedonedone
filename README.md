@@ -18,6 +18,14 @@ cd ~/claude-setup && ./install.sh
 brew install jq gitleaks semgrep   # guardrail dependencies; on Linux, your package manager
 ```
 
+Already have a `~/.claude/settings.json`? The installer adds this setup's hooks and
+permissions to it and keeps every value of yours; the file as it was is saved beside it
+as `settings.json.bak-<timestamp>`. Re-running the installer adds nothing twice.
+
+To see what is installed and whether it is current: `~/.claude/scripts/ddd version`.
+To upgrade: `~/.claude/scripts/ddd update` (see
+[Staying current](#staying-current)).
+
 No jq and no admin rights? `install.sh` fetches the official jq 1.8.1 binary into
 `~/.claude/bin`, checks it against a pinned SHA-256, and the hook scripts find it
 there (see [jq without admin rights](#jq-without-admin-rights)).
@@ -44,7 +52,7 @@ builds. Nothing after the grill should need you unless a slice escalates.
 | Path | What |
 |---|---|
 | CLAUDE.md | Global protocol — the main session IS the Director |
-| agents/ | planner · builder · reviewer · auditor · retro (least-privilege tools, model-per-agent) |
+| agents/ | planner · tester · builder · reviewer · auditor · retro (least-privilege tools, model-per-agent) |
 | skills/ | protocol-native: grill · ui-prototype · slice-planning · risk-gate · parallel-dispatch · architecture-review · learning-loop · configure-gates · test-speed · crap-hotspots · mutation-survivors · clean-diff · harden-diff · blast-radius · `/codebase-map` · brief-contract · `/init-codebase` · `/harvest` · `/create-verification-skill` · `/maintain-verification-skill` (opt-in, `/`-only: a project-local `verify-*` skill that lets the reviewer reach live-verified evidence) — plus a general engineering-practice library, a principles index (19 pstack principles, read on demand) and pstack's prose skills: unslop · technical-writing (docs/README/ADR work) (see Credits) |
 | settings.json | Permission deny/ask lists + hooks on 6 events + env that keeps Claude Code on Windows in Git Bash |
 | context-firewall/ | `ddd` — the context firewall: artifact store, per-type compressors, retrieval, ranking, stats (Python 3.8+ stdlib, installed to `~/.claude/context-firewall/`) |
@@ -133,7 +141,38 @@ Enforcement is mechanical, not prose:
   `risk-gate.sh audit <ID>` prints one slice's trail. `risk-gate.sh calibrate` lists
   slices whose class was likely too low, for the retro. It never changes thresholds.
 
+- **Hazards from the diff** — the assessment is a prediction, so the merge check reads
+  the real diff too. A changed path or added line that matches a hazard rule (an auth
+  or billing path, a `.env` file, a migration, a lockfile, DROP TABLE) and is not in
+  the slice's `hazards` raises its class to that hazard's floor for the merge, whatever
+  the plan said or ruled out. gate.sh's `scope` line warns during the build. The rules
+  are `diff_paths` and `diff_lines` in the human-only `vault/risk-policy.json`.
+
 The dial below adds oversight on top; it never removes a control the risk class requires.
+
+## Contract
+A slice is held to tests it did not write. Every slice in a plan carries a `contract`:
+the paths of its acceptance tests and a budget of changed lines outside them, or
+`"none: <reason>"` when no test can prove it.
+
+1. The `tester` agent writes the acceptance tests on `slice/<ID>`, failing, and nothing
+   else.
+2. `contract.sh lock <ID>` refuses a branch that changes any other file, runs the tests
+   and refuses ones that already pass, then records the hash of the test files in
+   task-tree.json, logs it and commits.
+3. guard.sh refuses a builder on a slice whose contract is not locked.
+4. gate.sh's `contract` step and the merge check fail when a locked test changed or the
+   diff is over budget.
+
+A builder that thinks a test is wrong reports CONTRACT-DISPUTE; the tester revises the
+test or upholds it, and `contract.sh lock <ID> --revise` re-locks once. A second
+dispute on the same slice goes to the human.
+
+What this does not cover: a test that encodes a wrong reading of the criteria is
+enforced as written, and `red=unverified` in the lock line means no `gate.test.focus`
+was configured to prove the tests failed first. The lock is a hash in task-tree.json,
+which the Director can write; it stops a builder, not a Director that ignores the
+protocol.
 
 ## UI prototype gate
 Left alone, a builder designs UI from its training data's average: card grids, side
@@ -694,8 +733,41 @@ Also:
 - gitleaks scan before every checkpoint commit
 - `autonomy: full` is only legal in a sandbox; new projects start `supervised`
 
+## Staying current
+`install.sh` records what it installed in `~/.claude/donedonedone.version` (the commit,
+its date, the clone it came from) and a hash of every file it put in place in
+`~/.claude/donedonedone.manifest`. At the start of every session, in any project, the
+session-start hook compares that record with reality and tells the agent to tell you,
+in one line, when:
+
+| It says | Meaning | Fix |
+|---|---|---|
+| `outdated` | The clone has newer commits than the install: you pulled and didn't install | `./install.sh` in the clone |
+| `update available` | The remote is ahead of the clone | `~/.claude/scripts/ddd update` |
+| `modified` | An installed file was edited or deleted since the install | `./install.sh` in the clone |
+| `too old for this project` | The project's `vault/project.md` pins a newer harness (`- harness: <date> (<commit>)`) | `~/.claude/scripts/ddd update` |
+
+`ddd update` fast-forwards the clone and runs its `install.sh`; it refuses a clone with
+uncommitted changes. Nothing updates on its own: these scripts are the guardrails, so
+new code reaches them only when you run the command.
+
+The remote is asked at most once a day, with a 5-second limit, and the answer is cached
+in `~/.claude/donedonedone.remote`. `DONEDONEDONE_OFFLINE=1` turns that question off;
+the other three checks are local.
+
+**A machine with no install** has no hook to notice it, so the project carries that
+check: /init-codebase adds a SessionStart hook to the project's `.claude/settings.json`
+that speaks only when `~/.claude/scripts/harness.sh` is missing, and names the
+repository to clone. That covers a teammate's laptop and a fresh cloud container. For
+cloud sessions, put the clone and `./install.sh` in the environment's setup script so
+the harness is there before the session starts.
+
+Limits: the check knows nothing about a clone that was deleted or installed from a
+tarball (`ddd version` says so; sessions stay quiet). Hooks this setup later drops stay
+in a merged `settings.json` until you remove them.
+
 ## Upgrading an existing install
-Pull, re-run `./install.sh`. It retires old `~/.claude/commands/init-vault.md` and
+`~/.claude/scripts/ddd update`, or pull and re-run `./install.sh`. It retires old `~/.claude/commands/init-vault.md` and
 `harvest.md` (now skills) to `.bak-<timestamp>` copies. /init-vault is now
 /init-codebase: install.sh moves a stale `~/.claude/skills/init-vault/` to
 `~/.claude/init-vault-skill.bak-<timestamp>/`, outside skills/ so it stops loading;
@@ -909,9 +981,10 @@ end to end); codebase-graph.py's in `tests/codebase-graph.sh`.
 | crap-score.py | `crap-score.py <coverage file> [-x <glob>]... [paths]` | Prints `<path>:<start>-<end> <score> <name>` per function for `gate.crap`: lizard complexity joined with LCOV, Cobertura, JaCoCo or coverage.py JSON line coverage. Unknown report format or missing lizard exits non-zero. |
 | codebase-graph.py | `codebase-graph.py build [--rev R] [--days N] [--coverage F] [--rules F] [--out D]` · `impact (--base R \| <files>…)` · `check --rules F --base R` | Entry point for the `codemap/` package. `build` writes `graph.json` + `graph.html` (from graph-viewer.html) to `.gate/` and prints a ≤ 20-line summary with the SEEN breakdown, exiting 1 when a setup's workflow.json has errors; `impact` prints the CHANGE IMPACT block; `check` exits 1 listing each forbidden dependency or new import-cycle edge HEAD adds over the base, and backs gate.sh's `arch` step. Reads committed trees only (`git cat-file`). Bad usage exits 2. |
 | mutation-report.py | `mutation-report.py <report \| ->` | Prints `<path>:<line> <killed\|survived\|timeout\|no-coverage> <description>` per mutant for `gate.mutation`, or `no-mutants`: reads mutation-testing-report-schema JSON, PIT XML, cargo-mutants outcomes.json, Gremlins JSON, or mutmut 3 results (`-` for stdin). Unknown format exits non-zero. |
-| gate.sh | `gate.sh [lint\|types\|test\|build\|a11y\|crap\|mutation\|markers\|comments\|scope\|arch ...]` or `gate.sh test -- <targets>` | Refuses a dirty tree (`GATE_ALLOW_DIRTY=1` overrides), an unknown step, or a missing `gate.test`. With `-- <targets>`, runs only those tests through `gate.test.focus` and ends `FOCUSED:`, never `GATE:`. Flags a passing test step slower than `gate.test.budget`. Fails a function the diff touches whose `gate.crap` score is over `gate.crap.max`, and a diff whose added lines' mutants score under `gate.mutation.min`. Runs the gate one line per step, a ≤ 30-line failure excerpt (`GATE_EXCERPT_LINES`), full log in `.gate/<step>.log`. Exit 0 all pass, 1 otherwise. From a worktree that predates project.md, it reads the main checkout's. |
+| gate.sh | `gate.sh [lint\|types\|test\|build\|a11y\|crap\|mutation\|markers\|comments\|scope\|contract\|arch ...]` or `gate.sh test -- <targets>` | Refuses a dirty tree (`GATE_ALLOW_DIRTY=1` overrides), an unknown step, or a missing `gate.test`. With `-- <targets>`, runs only those tests through `gate.test.focus` and ends `FOCUSED:`, never `GATE:`. Flags a passing test step slower than `gate.test.budget`. Fails a function the diff touches whose `gate.crap` score is over `gate.crap.max`, and a diff whose added lines' mutants score under `gate.mutation.min`. Runs the gate one line per step, a ≤ 30-line failure excerpt (`GATE_EXCERPT_LINES`), full log in `.gate/<step>.log`. Exit 0 all pass, 1 otherwise. From a worktree that predates project.md, it reads the main checkout's. |
 | find-comments.sh | `find-comments.sh --base <ref>` or `find-comments.sh <file>...` | Prints `path:line: text` for every comment added since `<ref>`, or in the given files. Exit 1 when it finds one, 2 on bad usage. |
 | log-event.sh | `log-event.sh <ID\|-> <event> <verdict> [--sha S] [--patch-id P] [--evidence E] [--attempt N] [--score 0-100] [--hash H] [--category C]... [--signal TEXT]...` | Appends one JSON line to the main checkout's `vault/log.jsonl`. Events include `risk`, `scope` and `rollback`. Up to 5 signals of 200 chars. Unknown events, categories or evidence rungs, or a score outside 0-100, exit 1 and list the valid ones. Prints `RETRO DUE` when a category recurs across slices. |
+| contract.sh | `contract.sh lint <plan>` · `lock <ID> [--revise]` · `check [ID] [--ref REF]` | The slice contract. `lint` checks every plan slice has `{tests, budget}` or `"none: <reason>"` (check-plan.sh runs it). `lock` hashes the acceptance tests on `slice/<ID>` after confirming they fail and that nothing else changed, writes `contract.locked`, logs a `contract` event and commits. `check` (gate.sh's `contract` step, and the merge check) fails on a changed test or a diff over budget; exit 3 means the slice has no contract. |
 | adopt-plan.sh | `adopt-plan.sh [ID]...` · `--discard` | The Director's plan adoption in one call: re-runs check-plan.sh on vault/plan-draft.json, refuses a picked slice whose `depends_on` stays behind in the draft or an ID already live, appends the slices to task-tree.json, runs `risk-gate.sh assess` on each, deletes the draft and commits. `--discard` deletes a rejected draft. |
 | record-gate.sh | `record-gate.sh <ID> <self_review\|automated\|reviewer\|auditor> <verdict\|'skip: <reason>'> [--gate-line LINE] [log-event.sh options]` | One gate verdict in one call: sets the slice's gate in task-tree.json, appends the log.jsonl line (sha and patch_id read from gate.sh's result line), and commits both. Refuses a verdict the gate can't give, or one that contradicts the gate line, before writing anything. |
 | land-slice.sh | `land-slice.sh <ID> [-m MESSAGE]` | The merge in one call, from the main checkout: `risk-gate.sh check <ID> merge`, a `git merge-tree` conflict check that leaves main untouched, squash-merge, tag `<ID>-done`, gate 5 and status `done` in task-tree.json, `merge done` with the CONTROLS line in log.jsonl, a bookkeeping commit, then the branch and worktree removed. guard.sh runs the merge check on the command too, and blocks subagents from all three scripts. |
@@ -923,6 +996,7 @@ end to end); codebase-graph.py's in `tests/codebase-graph.sh`.
 | vault-guard.sh | PreToolUse, PostToolUse, PostToolUseFailure, SubagentStop hook; `vault-guard.sh --snapshot` | Restores task-tree.json and log.jsonl in the main checkout when a subagent changes them (exit 2 tells it why); warns the Director about unexplained changes. Snapshots live in `.git/skeletoncrew-vault-guard/`. Claude Code only — other tools' payloads don't name the subagent. |
 | lint.sh | PostToolUse hook | Formats the edited file, exit 2 with lint errors. Reads Claude Code's `file_path`, Copilot's `filePath` and Cursor's top-level `file_path`; Cursor ignores the exit code, so there errors surface at the gate. |
 | checkpoint.sh | Stop hook | Commits progress on `slice/*` branches only (never main, a feature branch or a detached HEAD), inside worktrees too. Scans with `gitleaks git --staged` (v8.19+) or `gitleaks protect --staged` (older) and aborts on a finding. |
+| harness.sh | `harness.sh status` · `check` · `require [dir]` · `update` · `pin` · `project-hook` · `stamp <source>` (`ddd version` and `ddd update` call it) | The install's version record. `stamp` (run by install.sh) writes the commit, its date and the source clone to `~/.claude/donedonedone.version` and a hash per installed file to `donedonedone.manifest`. `check` prints nothing when the install matches its clone, the remote (asked once a day) and the manifest, else one line per problem with the command that fixes it. `require` compares the install with a project's `harness:` pin. `pin` prints that line; `project-hook` prints the project-level hook that reports a machine with no install. `update` fast-forwards the clone and re-runs its install.sh. |
 | session-start.sh | SessionStart hook | Injects live slices, slices the risk gate is holding, git status and leftover worktrees (plus a one-line migration hint while vault/memory or vault/handoffs exists; deletes nothing); plain text, or `{"additional_context": ...}` for Cursor. Refreshes the AGENTS.md protocol block. |
 | agents-md.sh | `agents-md.sh [project-dir]` | Writes the protocol into the project's AGENTS.md between its markers; leaves everything else in the file alone. |
 | generate-agents.sh | `generate-agents.sh <copilot\|cursor> [dest]` | Emits derived agents (always overwritten, never hand-edit). Copilot gets an `orchestrator` whose roster is every agent in `agents/`; it isn't called "director" because that name means the main Claude Code session. |
