@@ -6,9 +6,9 @@ GATE_DIR="$(cd "$(dirname "$0")" && pwd)"
 firewall_excerpt() {
   local step="$1" cmd="$2" log="$3" status="$4" out footer
   [ "${GATE_FIREWALL:-1}" = "0" ] && return 0
-  [ -x "$GATE_DIR/ddd" ] || return 0
-  out=$(cd "$top" && "$GATE_DIR/ddd" ingest --command "$cmd" --stdout "$log" --exit "$status" --budget 450 --quiet-passthrough --no-dedup --session "gate-$step" 2>/dev/null) || return 0
-  footer=$(printf '%s\n' "$out" | grep -E '^\[ddd\] (full output|omitted)' | tail -1)
+  [ -x "$GATE_DIR/tbv" ] || return 0
+  out=$(cd "$top" && "$GATE_DIR/tbv" ingest --command "$cmd" --stdout "$log" --exit "$status" --budget 450 --quiet-passthrough --no-dedup --session "gate-$step" 2>/dev/null) || return 0
+  footer=$(printf '%s\n' "$out" | grep -E '^\[tbv\] (full output|omitted)' | tail -1)
   if [ "$(printf '%s\n' "$out" | wc -l)" -gt "$EXCERPT_LINES" ]; then
     printf '%s\n' "$out" | head -"$((EXCERPT_LINES - 1))"
     printf '%s\n' "$footer"
@@ -111,8 +111,8 @@ logdir="$top/.gate"
 mkdir -p "$logdir"
 failed=()
 
-gates_dir="${GATE_WORKERS_DIR:-${TMPDIR:-/tmp}/ddd-gates-$(id -u)}"
-store="$(git -C "$top" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)/ddd-gate"
+gates_dir="${GATE_WORKERS_DIR:-${TMPDIR:-/tmp}/tbv-gates-$(id -u)}"
+store="$(git -C "$top" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)/tbv-gate"
 sampler=""
 trap 'stop_sampler; rm -f "$gates_dir/$$"' EXIT
 

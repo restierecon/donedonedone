@@ -1,4 +1,4 @@
-# Autonomous Engineering Setup for Claude Code
+# tbv (trust but verify): Autonomous Engineering Setup for Claude Code
 
 A lean, hardened multi-agent setup: 5 agents, 35 skills, mechanical guardrails,
 git-backed resume (no memory files), a learning loop that turns repeated failures into fixes, a risk gate that scales controls to each change's risk, a codebase map with architecture fitness rules, and an autonomy dial you turn up only as trust is earned.
@@ -13,7 +13,7 @@ branch-per-slice trunk discipline · mechanisms-over-instructions (hooks + git, 
 macOS or Linux:
 
 ```bash
-git clone https://github.com/restierecon/donedonedone ~/claude-setup
+git clone https://github.com/restierecon/tbv ~/claude-setup
 cd ~/claude-setup && ./install.sh
 brew install jq gitleaks semgrep   # guardrail dependencies; on Linux, your package manager
 ```
@@ -22,8 +22,8 @@ Already have a `~/.claude/settings.json`? The installer adds this setup's hooks 
 permissions to it and keeps every value of yours; the file as it was is saved beside it
 as `settings.json.bak-<timestamp>`. Re-running the installer adds nothing twice.
 
-To see what is installed and whether it is current: `~/.claude/scripts/ddd version`.
-To upgrade: `~/.claude/scripts/ddd update` (see
+To see what is installed and whether it is current: `~/.claude/scripts/tbv version`.
+To upgrade: `~/.claude/scripts/tbv update` (see
 [Staying current](#staying-current)).
 
 No jq and no admin rights? `install.sh` fetches the official jq 1.8.1 binary into
@@ -55,8 +55,8 @@ builds. Nothing after the grill should need you unless a slice escalates.
 | agents/ | planner · tester · builder · reviewer · auditor · retro (least-privilege tools, model-per-agent) |
 | skills/ | protocol-native: grill · ui-prototype · slice-planning · risk-gate · parallel-dispatch · architecture-review · learning-loop · configure-gates · test-speed · crap-hotspots · mutation-survivors · clean-diff · harden-diff · blast-radius · `/codebase-map` · brief-contract · `/init-codebase` · `/harvest` · `/create-verification-skill` · `/maintain-verification-skill` (opt-in, `/`-only: a project-local `verify-*` skill that lets the reviewer reach live-verified evidence) — plus a general engineering-practice library, a principles index (19 pstack principles, read on demand) and pstack's prose skills: unslop · technical-writing (docs/README/ADR work) (see Credits) |
 | settings.json | Permission deny/ask lists + hooks on 6 events + env that keeps Claude Code on Windows in Git Bash |
-| context-firewall/ | `ddd` — the context firewall: artifact store, per-type compressors, retrieval, ranking, stats (Python 3.8+ stdlib, installed to `~/.claude/context-firewall/`) |
-| scripts/ | ddd (the firewall's bash entry point, `PreToolUse` rewrite and `PostToolUse` hook) · guard.sh (PreToolUse) · vault-guard.sh (Pre/PostToolUse, SubagentStop — restores Director-only files) · lint.sh (PostToolUse) · checkpoint.sh (Stop) · session-start.sh (SessionStart) · codebase-graph.py + codemap/ + graph-viewer.html (code and workflow map of any repo, change impact, `arch` fitness check, drill-down HTML) · crap-score.py (lizard + coverage report → CRAP lines for `gate.crap`) · mutation-report.py (mutation tool report → mutant lines for `gate.mutation`) · detect-gates.py (reads a repo's manifests → the gate lines it supports today, and what each missing one needs) · gate.sh (quiet lint/types/test/build/a11y runner + diff-scoped CRAP, mutation, TODO/FIXME, no-comments and architecture-rule checks) · test-workers.sh (the per-gate worker budget behind `{workers}`, from CPUs, free memory, cgroup limits and running gates) · find-comments.sh (the comment detector behind that check) · log-event.sh (the Director's structured log.jsonl writer) · risk-gate.sh (scores each slice's risk, judges builder spawns and merges) · adopt-plan.sh · record-gate.sh · land-slice.sh (the Director's plan adoption, gate recording and merge, one call each) · approve-risk.sh (the human's approval command — refuses inside an agent) · check-plan.sh (the Director's lint for a planner draft: fields, "Actor can" titles, resolvable acyclic `depends_on`, `auditor_triggers` from a fixed list, every `ui_contract` an approved contract, gates as a verdict or `skip: <reason>`) · generate-agents.sh (Copilot/Cursor agents, install-time) · fetch-jq.sh (checksum-pinned jq into ~/.claude/bin when jq is missing, install-time) · agents-md.sh (protocol block in a project's AGENTS.md, for Cursor/Copilot) |
+| context-firewall/ | `tbv` — the context firewall: artifact store, per-type compressors, retrieval, ranking, stats (Python 3.8+ stdlib, installed to `~/.claude/context-firewall/`) |
+| scripts/ | tbv (the firewall's bash entry point, `PreToolUse` rewrite and `PostToolUse` hook) · guard.sh (PreToolUse) · vault-guard.sh (Pre/PostToolUse, SubagentStop — restores Director-only files) · lint.sh (PostToolUse) · checkpoint.sh (Stop) · session-start.sh (SessionStart) · codebase-graph.py + codemap/ + graph-viewer.html (code and workflow map of any repo, change impact, `arch` fitness check, drill-down HTML) · crap-score.py (lizard + coverage report → CRAP lines for `gate.crap`) · mutation-report.py (mutation tool report → mutant lines for `gate.mutation`) · detect-gates.py (reads a repo's manifests → the gate lines it supports today, and what each missing one needs) · gate.sh (quiet lint/types/test/build/a11y runner + diff-scoped CRAP, mutation, TODO/FIXME, no-comments and architecture-rule checks) · test-workers.sh (the per-gate worker budget behind `{workers}`, from CPUs, free memory, cgroup limits and running gates) · find-comments.sh (the comment detector behind that check) · log-event.sh (the Director's structured log.jsonl writer) · risk-gate.sh (scores each slice's risk, judges builder spawns and merges) · adopt-plan.sh · record-gate.sh · land-slice.sh (the Director's plan adoption, gate recording and merge, one call each) · approve-risk.sh (the human's approval command — refuses inside an agent) · check-plan.sh (the Director's lint for a planner draft: fields, "Actor can" titles, resolvable acyclic `depends_on`, `auditor_triggers` from a fixed list, every `ui_contract` an approved contract, gates as a verdict or `skip: <reason>`) · generate-agents.sh (Copilot/Cursor agents, install-time) · fetch-jq.sh (checksum-pinned jq into ~/.claude/bin when jq is missing, install-time) · agents-md.sh (protocol block in a project's AGENTS.md, for Cursor/Copilot) |
 | workflow.json | This setup's stage order for the workflow map; verified by the map's build and CI |
 | tests/ | Test harness for the hook scripts — run after any script edit; CI runs it too |
 | evals/ | 16-task benchmark + scorecard — run before trusting, re-run after any manifest edit |
@@ -132,7 +132,7 @@ Enforcement is mechanical, not prose:
 - **Human approvals** — only `~/.claude/scripts/approve-risk.sh <authorize|merge|downgrade> <ID>`
   and `~/.claude/scripts/approve-ui.sh <contract>`, run by you in your own terminal. It refuses without a TTY or inside an agent's shell
   (CLAUDECODE set), shows you what you're approving, and appends your decision (git
-  email, assessment hash, patch-id) to `.git/donedonedone/approvals.jsonl`. guard.sh blocks
+  email, assessment hash, patch-id) to `.git/tbv/approvals.jsonl`. guard.sh blocks
   every agent, the Director included, from writing that ledger or running the command;
   vault-guard.sh restores the ledger and the policy if any tool call changes them.
 - **Audit** — every assessment, reassessment, scope expansion, rollback and verdict is a
@@ -189,7 +189,7 @@ by the human, before planning (`ui-prototype` skill):
 3. You approve it yourself: `~/.claude/scripts/approve-ui.sh vault/ui/<feature>/contract.md`
    in your own terminal. Like `approve-risk.sh`, it refuses inside an agent's shell or
    without a TTY. It shows the contract and the files, then records your typed decision
-   in `.git/donedonedone/approvals.jsonl`, bound to a hash of the whole folder, so
+   in `.git/tbv/approvals.jsonl`, bound to a hash of the whole folder, so
    any later edit to the contract, prototype or screenshots voids the approval.
 4. Every slice that renders it carries `"ui_contract": "<path>"` (others `null`).
    `check-plan.sh` and `guard.sh` run `ui-approval.sh check` and refuse a slice whose
@@ -352,7 +352,7 @@ used yet. The budget is never below 1. Memory comes from the OS's own source:
   `CARGO_BUILD_JOBS` and `-p=` in `GOFLAGS`, unless the variable is already set.
 - **The per-worker size is measured.** While a full `test`, `crap` or `mutation` step
   runs, the gate samples the memory of everything it started once a second (`ps`
-  RSS) and stores peak ÷ workers + 25% in `.git/ddd-gate/worker-mb`, shared by every
+  RSS) and stores peak ÷ workers + 25% in `.git/tbv-gate/worker-mb`, shared by every
   worktree. The next gate sizes workers by that or **`gate.workers.mb`** (default
   1024), whichever is larger, and says so: `… 1536 MiB/worker, size measured on earlier
   runs`. A lighter run lowers the stored size by a quarter at most; focused runs never
@@ -366,7 +366,7 @@ used yet. The budget is never below 1. Memory comes from the OS's own source:
   sending it to the builder.
 - **`gate.workers.max`** caps the count. `GATE_WORKERS=<n>` in the environment
   overrides the calculation, and `GATE_WORKERS_RESERVE_MB` changes the reserve.
-- Running gates register a pid file in `$TMPDIR/ddd-gates-<uid>/` holding what they
+- Running gates register a pid file in `$TMPDIR/tbv-gates-<uid>/` holding what they
   claimed (workers × size); dead entries are dropped on the next run. A gate starting
   next to another subtracts the part of that claim the other gate's processes don't
   use yet, so two gates starting seconds apart can't both size themselves against the
@@ -621,19 +621,19 @@ manifest commits and compare cost and token counts.
 ## Context firewall
 Shell output that slips past `gate.sh` (diffs, searches, logs, installs, ad-hoc test
 runs) goes through the context firewall. Two hooks handle it:
-- a `PreToolUse` hook wraps simple, already-allowed noisy commands in `ddd run`, so
+- a `PreToolUse` hook wraps simple, already-allowed noisy commands in `tbv run`, so
   failing runs are compacted too
 - a `PostToolUse` hook catches everything else that succeeds
 
-The full stdout/stderr is kept as an artifact in `<repo>/.ddd/`. The model gets a compact, deterministic
+The full stdout/stderr is kept as an artifact in `<repo>/.tbv/`. The model gets a compact, deterministic
 view instead:
 - failing tests with their assertion lines
 - every changed line of a diff
 - search matches grouped by file
 - diagnostics, with repeats collapsed
 
-The view starts with a `[ddd] <type> | <artifact id> | …` header. Omitted parts are named
-along with the flag that fetches them (`~/.claude/scripts/ddd artifact <id> --failure 2`,
+The view starts with a `[tbv] <type> | <artifact id> | …` header. Omitted parts are named
+along with the flag that fetches them (`~/.claude/scripts/tbv artifact <id> --failure 2`,
 `--file`, `--lines`, `--raw`). Source code is never compressed. `gate.sh` failure
 excerpts use the same compressors. The firewall fails open: if anything goes wrong, the
 model sees the raw output. It needs Python 3.8+ and nothing else. Details, modes,
@@ -679,13 +679,13 @@ jq is missing, the payload isn't JSON, or a field has the wrong type).
   STANDING must name the harden-diff skill; a slice without the field fails closed.
 - The risk gate (see Risk gate): builder spawns and every git route that lands a
   `slice/<ID>` on main run `risk-gate.sh check`. No agent may write
-  `.git/donedonedone/approvals.jsonl`, `vault/risk-policy.json` or vault-guard's snapshot
+  `.git/tbv/approvals.jsonl`, `vault/risk-policy.json` or vault-guard's snapshot
   store (`.git/skeletoncrew-vault-guard/`), or run `approve-risk.sh`, `approve-ui.sh` or
   `vault-guard.sh`. Subagents may not run `risk-gate.sh`.
   A file tool's path is checked as given and again with `.`, `..`, doubled slashes and
   symlinks resolved; a shell word is resolved against the hook's cwd (following any
   `cd` in the command) and globs are matched per path component, so
-  `.git/donedone*/approvals?jsonl`, `cd .git && tee -a donedonedone/app*` and a
+  `.git/tb*/approvals?jsonl`, `cd .git && tee -a tbv/app*` and a
   symlink to `.git` are all refused. In a vault project an agent may also not allocate
   a pseudo-terminal or scrub its environment (`script`, `expect`, `unbuffer`, `socat`,
   python `pty`, `pexpect`, any mention of `CLAUDECODE`, `env -i`): those are how a
@@ -734,25 +734,25 @@ Also:
 - `autonomy: full` is only legal in a sandbox; new projects start `supervised`
 
 ## Staying current
-`install.sh` records what it installed in `~/.claude/donedonedone.version` (the commit,
+`install.sh` records what it installed in `~/.claude/tbv.version` (the commit,
 its date, the clone it came from) and a hash of every file it put in place in
-`~/.claude/donedonedone.manifest`. At the start of every session, in any project, the
+`~/.claude/tbv.manifest`. At the start of every session, in any project, the
 session-start hook compares that record with reality and tells the agent to tell you,
 in one line, when:
 
 | It says | Meaning | Fix |
 |---|---|---|
 | `outdated` | The clone has newer commits than the install: you pulled and didn't install | `./install.sh` in the clone |
-| `update available` | The remote is ahead of the clone | `~/.claude/scripts/ddd update` |
+| `update available` | The remote is ahead of the clone | `~/.claude/scripts/tbv update` |
 | `modified` | An installed file was edited or deleted since the install | `./install.sh` in the clone |
-| `too old for this project` | The project's `vault/project.md` pins a newer harness (`- harness: <date> (<commit>)`) | `~/.claude/scripts/ddd update` |
+| `too old for this project` | The project's `vault/project.md` pins a newer harness (`- harness: <date> (<commit>)`) | `~/.claude/scripts/tbv update` |
 
-`ddd update` fast-forwards the clone and runs its `install.sh`; it refuses a clone with
+`tbv update` fast-forwards the clone and runs its `install.sh`; it refuses a clone with
 uncommitted changes. Nothing updates on its own: these scripts are the guardrails, so
 new code reaches them only when you run the command.
 
 The remote is asked at most once a day, with a 5-second limit, and the answer is cached
-in `~/.claude/donedonedone.remote`. `DONEDONEDONE_OFFLINE=1` turns that question off;
+in `~/.claude/tbv.remote`. `TBV_OFFLINE=1` turns that question off;
 the other three checks are local.
 
 **A machine with no install** has no hook to notice it, so the project carries that
@@ -763,11 +763,11 @@ cloud sessions, put the clone and `./install.sh` in the environment's setup scri
 the harness is there before the session starts.
 
 Limits: the check knows nothing about a clone that was deleted or installed from a
-tarball (`ddd version` says so; sessions stay quiet). Hooks this setup later drops stay
+tarball (`tbv version` says so; sessions stay quiet). Hooks this setup later drops stay
 in a merged `settings.json` until you remove them.
 
 ## Upgrading an existing install
-`~/.claude/scripts/ddd update`, or pull and re-run `./install.sh`. It retires old `~/.claude/commands/init-vault.md` and
+`~/.claude/scripts/tbv update`, or pull and re-run `./install.sh`. It retires old `~/.claude/commands/init-vault.md` and
 `harvest.md` (now skills) to `.bak-<timestamp>` copies. /init-vault is now
 /init-codebase: install.sh moves a stale `~/.claude/skills/init-vault/` to
 `~/.claude/init-vault-skill.bak-<timestamp>/`, outside skills/ so it stops loading;
@@ -821,7 +821,7 @@ this setup works with zero conversion once `./install.sh` has run:
   (`chat.useClaudeMdFile`, on by default)
 - `~/.claude/skills/*/SKILL.md` → auto-discovered as personal Agent Skills (same
   format, invoked automatically or via `/skill-name`)
-- Hooks → `install.sh` writes `~/.copilot/hooks/donedonedone.json` in VS Code's native
+- Hooks → `install.sh` writes `~/.copilot/hooks/tbv.json` in VS Code's native
   format (PascalCase events, absolute script paths, a 60 s timeout like Claude Code's),
   which the **Local** session target loads with no setting to flip. Leave
   `chat.useClaudeHooks` off: with it on, VS Code also runs the `~/.claude/settings.json`
@@ -989,14 +989,14 @@ end to end); codebase-graph.py's in `tests/codebase-graph.sh`.
 | record-gate.sh | `record-gate.sh <ID> <self_review\|automated\|reviewer\|auditor> <verdict\|'skip: <reason>'> [--gate-line LINE] [log-event.sh options]` | One gate verdict in one call: sets the slice's gate in task-tree.json, appends the log.jsonl line (sha and patch_id read from gate.sh's result line), and commits both. Refuses a verdict the gate can't give, or one that contradicts the gate line, before writing anything. |
 | land-slice.sh | `land-slice.sh <ID> [-m MESSAGE]` | The merge in one call, from the main checkout: `risk-gate.sh check <ID> merge`, a `git merge-tree` conflict check that leaves main untouched, squash-merge, tag `<ID>-done`, gate 5 and status `done` in task-tree.json, `merge done` with the CONTROLS line in log.jsonl, a bookkeeping commit, then the branch and worktree removed. guard.sh runs the merge check on the command too, and blocks subagents from all three scripts. |
 | risk-gate.sh | `risk-gate.sh lint\|table <plan>` · `score [file\|-]` · `show\|assess\|audit <ID>` · `check <ID> build\|merge` · `scope [ID]` · `pending` · `calibrate` | Scores a slice's `risk` (0-100, class, floors, controls) the same way every time. `assess` records it in log.jsonl; `check` exits 1 listing every missing control and ends `RISK: PASS\|FAIL`; `scope` backs gate.sh's step; `pending` feeds the SessionStart hook. Exit 2 (fail closed) without jq or on a malformed `vault/risk-policy.json`. |
-| approve-risk.sh | `approve-risk.sh <authorize\|merge\|downgrade> <ID>` | The human's approval. Refuses without a TTY or with CLAUDECODE set; shows the assessment (merge: diffstat and controls); records the typed decision in `.git/donedonedone/approvals.jsonl`. Typing anything other than the prompt records a denial; an empty line cancels. |
+| approve-risk.sh | `approve-risk.sh <authorize\|merge\|downgrade> <ID>` | The human's approval. Refuses without a TTY or with CLAUDECODE set; shows the assessment (merge: diffstat and controls); records the typed decision in `.git/tbv/approvals.jsonl`. Typing anything other than the prompt records a denial; an empty line cancels. |
 | approve-ui.sh | `approve-ui.sh vault/ui/<slug>/contract.md` | The human's UI approval. Same refusals as approve-risk.sh; shows the contract and the folder's files; records the typed decision with a hash of the whole folder. |
 | ui-approval.sh | `ui-approval.sh check\|hash <contract>` | Read-only. `check` prints `UI: APPROVED … by <email>` (exit 0) only when the latest ledger decision for that contract is an approval of the folder as it is now; otherwise `UI: NOT APPROVED` with the reason and the command to run (exit 1). Behind check-plan.sh and guard.sh. |
 | guard.sh | PreToolUse hook (every tool) | Exit 2 blocks the call and feeds the reason back. Fails closed without jq or on a malformed payload. Understands Claude Code, VS Code Copilot (its own tool names; an unknown tool carrying a command is treated as a shell call) and Cursor (`beforeShellExecution` and `beforeReadFile`, answered with allow/deny JSON). See Safety model. |
 | vault-guard.sh | PreToolUse, PostToolUse, PostToolUseFailure, SubagentStop hook; `vault-guard.sh --snapshot` | Restores task-tree.json and log.jsonl in the main checkout when a subagent changes them (exit 2 tells it why); warns the Director about unexplained changes. Snapshots live in `.git/skeletoncrew-vault-guard/`. Claude Code only — other tools' payloads don't name the subagent. |
 | lint.sh | PostToolUse hook | Formats the edited file, exit 2 with lint errors. Reads Claude Code's `file_path`, Copilot's `filePath` and Cursor's top-level `file_path`; Cursor ignores the exit code, so there errors surface at the gate. |
 | checkpoint.sh | Stop hook | Commits progress on `slice/*` branches only (never main, a feature branch or a detached HEAD), inside worktrees too. Scans with `gitleaks git --staged` (v8.19+) or `gitleaks protect --staged` (older) and aborts on a finding. |
-| harness.sh | `harness.sh status` · `check` · `require [dir]` · `update` · `pin` · `project-hook` · `stamp <source>` (`ddd version` and `ddd update` call it) | The install's version record. `stamp` (run by install.sh) writes the commit, its date and the source clone to `~/.claude/donedonedone.version` and a hash per installed file to `donedonedone.manifest`. `check` prints nothing when the install matches its clone, the remote (asked once a day) and the manifest, else one line per problem with the command that fixes it. `require` compares the install with a project's `harness:` pin. `pin` prints that line; `project-hook` prints the project-level hook that reports a machine with no install. `update` fast-forwards the clone and re-runs its install.sh. |
+| harness.sh | `harness.sh status` · `check` · `require [dir]` · `update` · `pin` · `project-hook` · `stamp <source>` (`tbv version` and `tbv update` call it) | The install's version record. `stamp` (run by install.sh) writes the commit, its date and the source clone to `~/.claude/tbv.version` and a hash per installed file to `tbv.manifest`. `check` prints nothing when the install matches its clone, the remote (asked once a day) and the manifest, else one line per problem with the command that fixes it. `require` compares the install with a project's `harness:` pin. `pin` prints that line; `project-hook` prints the project-level hook that reports a machine with no install. `update` fast-forwards the clone and re-runs its install.sh. |
 | session-start.sh | SessionStart hook | Injects live slices, slices the risk gate is holding, git status and leftover worktrees (plus a one-line migration hint while vault/memory or vault/handoffs exists; deletes nothing); plain text, or `{"additional_context": ...}` for Cursor. Refreshes the AGENTS.md protocol block. |
 | agents-md.sh | `agents-md.sh [project-dir]` | Writes the protocol into the project's AGENTS.md between its markers; leaves everything else in the file alone. |
 | generate-agents.sh | `generate-agents.sh <copilot\|cursor> [dest]` | Emits derived agents (always overwritten, never hand-edit). Copilot gets an `orchestrator` whose roster is every agent in `agents/`; it isn't called "director" because that name means the main Claude Code session. |

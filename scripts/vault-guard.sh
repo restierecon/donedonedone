@@ -36,7 +36,7 @@ protected=(vault/task-tree.json vault/log.jsonl)
 human=(vault/risk-policy.json)
 ledger=()
 case "$common" in
-  "$main_root"/*) ledger=("${common#"$main_root"/}/donedonedone/approvals.jsonl"); human+=("${ledger[@]}") ;;
+  "$main_root"/*) ledger=("${common#"$main_root"/}/tbv/approvals.jsonl"); human+=("${ledger[@]}") ;;
 esac
 
 key() { printf '%s' "$1" | tr '/' '_'; }

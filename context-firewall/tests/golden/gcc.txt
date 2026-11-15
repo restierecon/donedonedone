@@ -1,4 +1,4 @@
-[ddd] build | art-ID | exit 1 | build:diagnostics/high | ~217->166 tok est
+[tbv] build | art-ID | exit 1 | build:diagnostics/high | ~217->166 tok est
 BUILD FAILED (exit 1)
 Errors: 1  Warnings: 3  Notes: 1
 ERRORS (1):
@@ -9,4 +9,4 @@ c.c:2:26 -Wimplicit-function-declaration implicit declaration of function 'undef
 c.c:2:17 -Wunused-variable unused variable 'x'
 NOTES (1):
 c.c:2:49 each undeclared identifier is reported only once for each function it appears in
-[ddd] full output: ddd artifact art-ID [--section NAME | --lines A-B | --raw]
+[tbv] full output: tbv artifact art-ID [--section NAME | --lines A-B | --raw]

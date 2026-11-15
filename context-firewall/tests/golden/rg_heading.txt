@@ -1,4 +1,4 @@
-[ddd] search | art-ID | exit 0 | search:heading/high | ~1.5k->822 tok est
+[tbv] search | art-ID | exit 0 | search:heading/high | ~1.5k->822 tok est
 SEARCH
 Query: slice
 Matches: 58  Files: 6
@@ -32,4 +32,4 @@ agents/planner.md (14): 3, 8, 9, 20, 22, 24, 25, 26, 30, 35, 37, 38, 39, 40
   8: You are the Planner. You turn one grilled spec into vertical slices, following the
   9: slice-planning skill exactly — load it first; it is the rulebook, this file is the job.
   ... 11 more in this file (--file agents/planner.md)
-[ddd] full output: ddd artifact art-ID [--section NAME | --lines A-B | --raw]
+[tbv] full output: tbv artifact art-ID [--section NAME | --lines A-B | --raw]

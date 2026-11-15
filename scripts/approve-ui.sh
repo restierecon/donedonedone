@@ -33,7 +33,7 @@ command -v jq >/dev/null 2>&1 || refuse "jq is required (brew install jq · wing
 
 common=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || refuse "not inside a git repo"
 root=$(dirname "$common")
-ledger="$common/donedonedone/approvals.jsonl"
+ledger="$common/tbv/approvals.jsonl"
 here="$(cd "$(dirname "$0")" && pwd)"
 
 hash=$("$here/ui-approval.sh" hash "$contract" 2>&1) || refuse "$hash"

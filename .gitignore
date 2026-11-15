@@ -2,5 +2,5 @@
 .remember/
 .ruff_cache/
 .worktrees/
-.ddd/
+.tbv/
 __pycache__/

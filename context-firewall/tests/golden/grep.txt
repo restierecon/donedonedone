@@ -1,4 +1,4 @@
-[ddd] search | art-ID | exit 0 | search:path:line/high | ~2.7k->934 tok est
+[tbv] search | art-ID | exit 0 | search:path:line/high | ~2.7k->934 tok est
 SEARCH
 Query: slice
 Matches: 94  Files: 7
@@ -37,4 +37,4 @@ agents/auditor.md (9): 3, 13, 14, 15, 18, 39, 50, 53, 60
   13: Slice ID and a working directory if this slice was built in a `git worktree`
   14: (parallel wave). Run scanners from inside that worktree — never check out the slice
   ... 6 more in this file (--file agents/auditor.md)
-[ddd] full output: ddd artifact art-ID [--section NAME | --lines A-B | --raw]
+[tbv] full output: tbv artifact art-ID [--section NAME | --lines A-B | --raw]

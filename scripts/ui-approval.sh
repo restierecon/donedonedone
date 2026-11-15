@@ -17,7 +17,7 @@ printf '%s\n' "$contract" | grep -qE '^vault/ui/[^/]+/contract\.md$' \
 
 common=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || die "not inside a git repo"
 root=$(dirname "$common")
-ledger="$common/donedonedone/approvals.jsonl"
+ledger="$common/tbv/approvals.jsonl"
 dir="$root/$(dirname "$contract")"
 
 folder_hash() {

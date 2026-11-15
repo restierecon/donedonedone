@@ -1,4 +1,4 @@
-[ddd] git-diff | art-ID | exit 0 | unified-diff/high | ~9.5k->313 tok est
+[tbv] git-diff | art-ID | exit 0 | unified-diff/high | ~9.5k->313 tok est
 GIT DIFF
 Files changed: 6  Insertions: +766  Deletions: -4
 Hunks hidden for 1 lock/generated file(s): package-lock.json
@@ -42,4 +42,4 @@ R src/helpers_old.ts -> src/helpers.ts  +0 -0  (similarity 100%)
 --- src/auth/token.ts  (raw L807-813)
 @@ -0,0 +1 @@
 +new
-[ddd] full output: ddd artifact art-ID [--section NAME | --lines A-B | --raw]
+[tbv] full output: tbv artifact art-ID [--section NAME | --lines A-B | --raw]

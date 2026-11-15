@@ -1,16 +1,16 @@
-# Context firewall (`ddd`)
+# Context firewall (`tbv`)
 
 Noisy tool output (test runs, diffs, searches, builds, installs, logs) is the biggest
 avoidable cost in an agent's context window. The context firewall sits between a shell
 command and the model:
 
 ```
-command ─▶ raw stdout/stderr ─▶ artifact store (.ddd/, kept in full)
+command ─▶ raw stdout/stderr ─▶ artifact store (.tbv/, kept in full)
                                    │
                                    ▼
               classify ─▶ compress ─▶ deduplicate ─▶ budget ─▶ model
                                                                │
-                                       ddd artifact <id> … ◀───┘ (asks for more)
+                                       tbv artifact <id> … ◀───┘ (asks for more)
 ```
 
 The rule it never breaks: **compression changes the representation, never the
@@ -24,7 +24,7 @@ It works from bash, Git Bash, PowerShell 5.1/7 and cmd.
 ## What the model sees
 
 ```
-[ddd] test | art-2cb9dfecf0 | exit 1 | pytest/high | ~1.7k->298 tok est
+[tbv] test | art-2cb9dfecf0 | exit 1 | pytest/high | ~1.7k->298 tok est
 TEST RESULT
 Status: FAILED
 Passed: 60  Failed: 3  Skipped: 1
@@ -34,7 +34,7 @@ FAILURES
    E       AssertionError: assert 'abc-r' == 'abc-refreshed'
    (raw L73-83; --failure 1)
 ...
-[ddd] full output: ~/.claude/scripts/ddd artifact art-2cb9dfecf0 [--section NAME | --lines A-B | --raw]
+[tbv] full output: ~/.claude/scripts/tbv artifact art-2cb9dfecf0 [--section NAME | --lines A-B | --raw]
 ```
 
 The header carries the provenance: output type, artifact id, exit code, which parser
@@ -46,14 +46,14 @@ Output that is already small (≤ 400 estimated tokens in balanced mode) passes 
 untouched. So does source code (`cat`, `head`, `Get-Content` … of a source file), and so
 does any output the firewall can't make smaller.
 
-## How it is wired into DoneDoneDone
+## How it is wired into tbv
 
 | Path | When | What |
 |---|---|---|
-| `PreToolUse` hook (`~/.claude/scripts/ddd pre`) | A Bash call that is **one simple command** of a compressible type (tests, builds, linters, `git diff/log/status`, `rg`/`grep`, `find`/`tree`/`ls -R`) | Rewrites it to `ddd run --session <id> -- <the same command>`, so the command's own output is already compact. This is the only path that works for a **failing** command, because Claude Code reports a non-zero exit through `PostToolUseFailure`, which can't replace output. |
-| `PostToolUse` hook (`~/.claude/scripts/ddd hook`) | Every other Bash/PowerShell call that succeeds (pipes, `&&` chains, unknown tools) | Stores the result and replaces what the model sees via `updatedToolOutput`, keeping the same shape (`stdout` = the compact view, `stderr` = ""). It also records Edit/Write targets as the session's active files, which ranking uses. |
+| `PreToolUse` hook (`~/.claude/scripts/tbv pre`) | A Bash call that is **one simple command** of a compressible type (tests, builds, linters, `git diff/log/status`, `rg`/`grep`, `find`/`tree`/`ls -R`) | Rewrites it to `tbv run --session <id> -- <the same command>`, so the command's own output is already compact. This is the only path that works for a **failing** command, because Claude Code reports a non-zero exit through `PostToolUseFailure`, which can't replace output. |
+| `PostToolUse` hook (`~/.claude/scripts/tbv hook`) | Every other Bash/PowerShell call that succeeds (pipes, `&&` chains, unknown tools) | Stores the result and replaces what the model sees via `updatedToolOutput`, keeping the same shape (`stdout` = the compact view, `stderr` = ""). It also records Edit/Write targets as the session's active files, which ranking uses. |
 | `gate.sh` failure excerpts | A gate step fails | The ≤ `GATE_EXCERPT_LINES` excerpt comes from the test/build/lint compressor instead of `grep`, with no cross-call dedup. Falls back to the old grep/tail excerpt when Python is missing or the log is small. `GATE_FIREWALL=0` turns it off. |
-| `ddd run -- <cmd>` | Cursor, Copilot, a plain terminal, PowerShell | Runs the command, stores it, prints the compact view and exits with the command's exit code. |
+| `tbv run -- <cmd>` | Cursor, Copilot, a plain terminal, PowerShell | Runs the command, stores it, prints the compact view and exits with the command's exit code. |
 
 Both hook paths were checked end to end against Claude Code 2.1.289 in headless mode:
 - a failing `pytest` run arrived at the model as the compact view
@@ -79,46 +79,46 @@ Anything else is left alone: the normal permission prompt runs, and only the
 - aliases and unresolvable programs
 
 To get compact output from failing runs of a command, allow it in settings, for example
-`"Bash(pytest:*)"` or `"Bash(npm test:*)"`. Inside DoneDoneDone, tests go through
+`"Bash(pytest:*)"` or `"Bash(npm test:*)"`. Inside tbv, tests go through
 `gate.sh` anyway.
 
 ### Failure behaviour
 
 Both hooks **fail open**. If Python is missing, the payload is unexpected, the store
 can't be written, or a compressor throws, the hook prints nothing and the original
-command runs with its raw output. A firewall failure is logged to `.ddd/events.jsonl`,
-and `ddd stats` counts it.
+command runs with its raw output. A firewall failure is logged to `.tbv/events.jsonl`,
+and `tbv stats` counts it.
 
 Some commands are never touched:
-- commands that call `ddd` itself (retrievals)
+- commands that call `tbv` itself (retrievals)
 - `gate.sh`, whose output is already compact
-- commands prefixed with `DDD_RAW=1`
+- commands prefixed with `TBV_RAW=1`
 - background commands
 
-`DDD_DISABLE=1` turns everything off.
+`TBV_DISABLE=1` turns everything off.
 
 A rewritten command's output arrives when the command ends, not streamed. If Claude
 Code's own Bash timeout kills a wrapped command, the partial output isn't kept; use
-`ddd run --timeout S -- …` for long runs.
+`tbv run --timeout S -- …` for long runs.
 
 ## Retrieval
 
 ```
-ddd artifact <id>                     whole artifact, line-numbered (bounded; --all for everything)
-ddd artifact <id> --lines 130-170     a line range
-ddd artifact <id> --section failures  a section of the compact view, unabridged
-ddd artifact <id> --failure 2         one test failure (also --test <name substring>)
-ddd artifact <id> --error 1           one error/diagnostic
-ddd artifact <id> --file src/a.ts     that file's diff block / matches / diagnostics / subtree
-ddd artifact <id> --raw               exact original stdout+stderr (--stream stdout|stderr)
-ddd artifact <id> --sent              exactly what the model was given
-ddd artifact <id> --meta              the artifact record (JSON)
-ddd show <id>                         drill-down: command, sizes, sent view, omitted sections, retrievals
-ddd recent                            recent artifacts
-ddd lookup <text>                     search stored artifacts
-ddd source <file> --outline           classes/functions with line ranges
-ddd source <file> --symbol Session.refresh   exact source of one symbol
-ddd source <file> --lines 40-80       exact lines
+tbv artifact <id>                     whole artifact, line-numbered (bounded; --all for everything)
+tbv artifact <id> --lines 130-170     a line range
+tbv artifact <id> --section failures  a section of the compact view, unabridged
+tbv artifact <id> --failure 2         one test failure (also --test <name substring>)
+tbv artifact <id> --error 1           one error/diagnostic
+tbv artifact <id> --file src/a.ts     that file's diff block / matches / diagnostics / subtree
+tbv artifact <id> --raw               exact original stdout+stderr (--stream stdout|stderr)
+tbv artifact <id> --sent              exactly what the model was given
+tbv artifact <id> --meta              the artifact record (JSON)
+tbv show <id>                         drill-down: command, sizes, sent view, omitted sections, retrievals
+tbv recent                            recent artifacts
+tbv lookup <text>                     search stored artifacts
+tbv source <file> --outline           classes/functions with line ranges
+tbv source <file> --symbol Session.refresh   exact source of one symbol
+tbv source <file> --lines 40-80       exact lines
 ```
 
 Artifact ids are stable. An unambiguous prefix also works. Results over
@@ -127,18 +127,18 @@ Artifact ids are stable. An unambiguous prefix also works. Results over
 ## Commands
 
 ```
-ddd run [--timeout S] [--shell|--pwsh] -- <command …>   (or just: ddd git status)
-ddd test | build | lint [args]     the project's gate.<step> from vault/project.md, else package.json
-ddd search <query> [paths]         rg, else git grep, else grep
-ddd ingest --command "<cmd>" --stdout <file|-> [--stderr f] [--exit N]   compress existing output
-ddd context --task "fix Session.refresh()" [--symbol X] [--file F]       ranked context pack
-ddd stats [--json] [--hours N]     context economy
-ddd bench <fixture-dir>            raw vs compact size per fixture and mode
-ddd prune --days 14                drop old artifacts and orphaned blobs
-ddd config                         effective settings
+tbv run [--timeout S] [--shell|--pwsh] -- <command …>   (or just: tbv git status)
+tbv test | build | lint [args]     the project's gate.<step> from vault/project.md, else package.json
+tbv search <query> [paths]         rg, else git grep, else grep
+tbv ingest --command "<cmd>" --stdout <file|-> [--stderr f] [--exit N]   compress existing output
+tbv context --task "fix Session.refresh()" [--symbol X] [--file F]       ranked context pack
+tbv stats [--json] [--hours N]     context economy
+tbv bench <fixture-dir>            raw vs compact size per fixture and mode
+tbv prune --days 14                drop old artifacts and orphaned blobs
+tbv config                         effective settings
 ```
 
-`~/.claude/scripts/ddd` (bash) and `ddd.ps1` (PowerShell) find a Python 3.8+:
+`~/.claude/scripts/tbv` (bash) and `tbv.ps1` (PowerShell) find a Python 3.8+:
 `$PYTHON`, then `python3`, `python`, `py -3`. Each candidate is tested before use, so
 the Windows Store `python3` stub is skipped.
 
@@ -173,8 +173,8 @@ When the runner's exit code and its parsed summary disagree, the status says so
   `[xN similar]`.
 - **Across calls:** when a command's output is byte-identical to one delivered earlier
   in the same Claude session, the model gets a two-line `NO NEW INFORMATION` pointer instead.
-  A plain `ddd run` from a terminal has no session, so it never does this unless you pass
-  `--session` or set `DDD_SESSION`.
+  A plain `tbv run` from a terminal has no session, so it never does this unless you pass
+  `--session` or set `TBV_SESSION`.
   The same applies when only timings, timestamps, hex ids or temp paths differ. The
   window is 20 minutes (`dedup.windowSeconds`). Strict mode never does this. A
   different exit code always counts as new information.
@@ -187,12 +187,12 @@ When the runner's exit code and its parsed summary disagree, the status says so
 | `balanced` (default) | routine work | as described above |
 | `aggressive` | only when you choose it | 0.4× budget, fewer lines per section; the header always shows `mode aggressive` |
 
-Set the mode with `DDD_MODE=strict`, `--mode` on a command, or `"mode"` in a config file.
+Set the mode with `TBV_MODE=strict`, `--mode` on a command, or `"mode"` in a config file.
 The firewall never switches mode by itself.
 
 ## Configuration
 
-`<repo>/.ddd/config.json` (per project), or `config.json` next to `ddd.py` (global).
+`<repo>/.tbv/config.json` (per project), or `config.json` next to `tbv.py` (global).
 Only the keys you change are needed:
 
 ```json
@@ -208,13 +208,13 @@ Only the keys you change are needed:
 }
 ```
 
-The store lives at `<git root>/.ddd/` (override: `DDD_HOME`). It writes its own
+The store lives at `<git root>/.tbv/` (override: `TBV_HOME`). It writes its own
 `.gitignore`, so it never makes a tree dirty. Output over `maxRawArtifactBytes` keeps
 its first and last halves, marks the cut, and the header says so.
 
-## Ranking (`ddd context`)
+## Ranking (`tbv context`)
 
-`ddd context` gathers candidates:
+`tbv context` gathers candidates:
 - failures from the latest test run
 - errors from the latest failing build/lint
 - symbols named in the task or with `--symbol`, as their exact source
@@ -228,15 +228,15 @@ excluded item is listed with how to fetch it.
 
 ## Measuring
 
-`ddd bench tests/fixtures` reports raw vs compact size, per fixture and mode, for the 44
+`tbv bench tests/fixtures` reports raw vs compact size, per fixture and mode, for the 44
 real and handcrafted outputs in this repo. On those fixtures, estimated tokens drop by about 50% in
 strict, 80% in balanced and 87% in aggressive, at under 40 ms per command. These numbers are about
 size only. Whether agents do as well with less context is a separate question, and the
 fixtures don't answer it. To measure that, run the same eval task (`evals/`) with
-`DDD_DISABLE=1` and without, then compare:
+`TBV_DISABLE=1` and without, then compare:
 - task success, test success and retries/rework
 - the model's own token counts, and latency
-- `ddd stats --json` (intercepts, reduction, duplicates, retrievals, firewall failures)
+- `tbv stats --json` (intercepts, reduction, duplicates, retrievals, firewall failures)
 
 A high retrieval count means the compact views leave out too much. That is the signal
 to move a project to `strict`, or to fix a compressor.

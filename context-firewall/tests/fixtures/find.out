@@ -76,7 +76,7 @@
 ./context-firewall/tests
 ./context-firewall/tests/golden
 ./context-firewall/tests/fixtures
-./context-firewall/ddd.py
+./context-firewall/tbv.py
 ./context-firewall/firewall
 ./context-firewall/firewall/cli.py
 ./context-firewall/firewall/classify.py

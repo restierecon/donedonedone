@@ -33,16 +33,16 @@ class ToolOutputBudget(unittest.TestCase):
             Section("file:src/a.ts", ["+x" * 40] * 200, priority=40),
             Section("file:src/b.ts", ["+y" * 40] * 200, priority=41),
         ])
-        text, omitted, partial = assemble.render(comp, artifact(), "balanced", 300, 10000, "ddd")
+        text, omitted, partial = assemble.render(comp, artifact(), "balanced", 300, 10000, "tbv")
         self.assertIn("--file src/b.ts", text)
-        self.assertIn("ddd artifact art-0123456789", text)
+        self.assertIn("tbv artifact art-0123456789", text)
         self.assertIn("file:src/b.ts", omitted)
         self.assertEqual(partial, ["file:src/a.ts"])
         self.assertIn("more lines (--file src/a.ts)", text)
 
     def test_essential_sections_are_kept_even_when_over_budget(self):
         comp = Compressed("test", "p", "high", sections=[Section("failures", [f"failure {i}" for i in range(500)], priority=5, essential=True)])
-        text, omitted, partial = assemble.render(comp, artifact(), "balanced", 50, 10000, "ddd")
+        text, omitted, partial = assemble.render(comp, artifact(), "balanced", 50, 10000, "tbv")
         self.assertIn("failure 0", text)
         self.assertEqual(omitted, [])
         self.assertIn("--section failures", text)
@@ -52,11 +52,11 @@ class ToolOutputBudget(unittest.TestCase):
             Section("low", ["low " * 50] * 5, priority=90),
             Section("high", ["high"] * 3, priority=1),
         ])
-        text, omitted, partial = assemble.render(comp, artifact(), "balanced", 150, 10000, "ddd")
+        text, omitted, partial = assemble.render(comp, artifact(), "balanced", 150, 10000, "tbv")
         self.assertIn("high\nhigh\nhigh", text)
         self.assertEqual(partial, ["low"])
         self.assertLess(text.index("\nlow "), text.index("\nhigh"))
-        text, omitted, partial = assemble.render(comp, artifact(), "balanced", 10, 10000, "ddd")
+        text, omitted, partial = assemble.render(comp, artifact(), "balanced", 10, 10000, "tbv")
         self.assertIn("high", text)
 
     def test_nothing_is_lost_when_the_budget_cuts(self):
@@ -113,7 +113,7 @@ class Ranking(unittest.TestCase):
             chosen, left = rank.build(str(self.root), store, settings(), task="fix Session.refresh()")
             self.assertEqual(chosen[0].type, "test-failure")
             self.assertIn("currently failing test", chosen[0].reason)
-            text = rank.render(chosen, left, "ddd")
+            text = rank.render(chosen, left, "tbv")
             self.assertIn("because: currently failing test", text)
 
     def test_requested_symbol_is_exact_source_and_dependencies_are_neighbours_only(self):

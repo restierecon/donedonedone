@@ -140,7 +140,7 @@ vault_project() {
 HUMAN_ONLY_MSG="BLOCKED: approvals and the risk policy are human-only. A human runs ~/.claude/scripts/approve-risk.sh or approve-ui.sh in their own terminal, never through an agent, and edits vault/risk-policy.json themselves. Tell the human what needs their decision and continue with other work."
 
 human_only_path() {
-  echo "$1" | lower | grep -qE '(^|/)vault/risk-policy\.json$|(^|/)\.git/(donedonedone|skeletoncrew-vault-guard)(/|$)'
+  echo "$1" | lower | grep -qE '(^|/)vault/risk-policy\.json$|(^|/)\.git/(tbv|skeletoncrew-vault-guard)(/|$)'
 }
 
 lexical() {
@@ -210,11 +210,11 @@ repo_dirs() {
 
 sensitive_paths() {
   local d f
-  for d in "$g_common/donedonedone" "$g_common/skeletoncrew-vault-guard"; do
+  for d in "$g_common/tbv" "$g_common/skeletoncrew-vault-guard"; do
     printf '%s\n' "$d"
     [ -d "$d" ] && for f in "$d"/* "$d"/.[!.]*; do [ -e "$f" ] && printf '%s\n' "$f"; done
   done
-  printf '%s\n' "$g_root/vault/risk-policy.json" "$g_common/donedonedone/approvals.jsonl" "$(cd -P "$here" && pwd -P)/approve-risk.sh" "$(cd -P "$here" && pwd -P)/approve-ui.sh"
+  printf '%s\n' "$g_root/vault/risk-policy.json" "$g_common/tbv/approvals.jsonl" "$(cd -P "$here" && pwd -P)/approve-risk.sh" "$(cd -P "$here" && pwd -P)/approve-ui.sh"
   [ "${1:-}" = subagent ] && printf '%s\n' "$g_root/vault" "$g_root/vault/task-tree.json" "$g_root/vault/log.jsonl"
 }
 
@@ -445,7 +445,7 @@ if secret_in_shell "$plain"; then
   block "BLOCKED: this command touches a secret (.env, key, secrets/). Ask the human for the value you need instead."
 fi
 
-if protected_name "$plain" 'approvals\.jsonl|risk-policy|approve-risk|approve-ui|vault-guard[^[:space:]]*[[:space:]]+--|--human-snapshot|\.git/(donedonedone|skeletoncrew-vault-guard)' \
+if protected_name "$plain" 'approvals\.jsonl|risk-policy|approve-risk|approve-ui|vault-guard[^[:space:]]*[[:space:]]+--|--human-snapshot|\.git/(tbv|skeletoncrew-vault-guard)' \
    && ! read_only_shell "$plain" "add commit" && vault_project; then
   block "$HUMAN_ONLY_MSG"
 fi

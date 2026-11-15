@@ -32,7 +32,7 @@ changes to the setup.
    `docs(vault): retro — <n> proposals`.
 
 ## Routing a proposal once a human accepts it
-- **scope: global** — the change lands in the donedonedone setup repo, not this
+- **scope: global** — the change lands in the tbv setup repo, not this
   project: edit there, re-run `./install.sh` (it regenerates the Cursor and Copilot
   agents too), re-run the eval the proposal names. A manifest change without a fresh
   scorecard doesn't count toward the dial.

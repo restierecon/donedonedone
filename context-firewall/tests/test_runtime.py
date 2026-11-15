@@ -16,13 +16,13 @@ from firewall import capture, hook, pipeline
 from firewall.models import CommandResult
 from firewall.store import ArtifactStore
 
-DDD = str(HERE.parent / "ddd.py")
+TBV = str(HERE.parent / "tbv.py")
 PY = sys.executable
 
 
-def ddd(*args, cwd=None, env=None, stdin=None):
+def tbv(*args, cwd=None, env=None, stdin=None):
     full_env = dict(os.environ, **(env or {}))
-    return subprocess.run([PY, DDD, *args], cwd=cwd, env=full_env, input=stdin, capture_output=True, text=True, encoding="utf-8", timeout=60)
+    return subprocess.run([PY, TBV, *args], cwd=cwd, env=full_env, input=stdin, capture_output=True, text=True, encoding="utf-8", timeout=60)
 
 
 class Capture(unittest.TestCase):
@@ -124,19 +124,19 @@ class Hook(unittest.TestCase):
         updated = out["hookSpecificOutput"]["updatedToolOutput"]
         self.assertEqual(out["hookSpecificOutput"]["hookEventName"], "PostToolUse")
         self.assertEqual(set(updated), {"stdout", "stderr", "interrupted", "isImage"})
-        self.assertTrue(updated["stdout"].startswith("[ddd] test | art-"))
+        self.assertTrue(updated["stdout"].startswith("[tbv] test | art-"))
         self.assertEqual(updated["stderr"], "")
         store = ArtifactStore.for_cwd(self.cwd)
         self.assertEqual(store.all()[0].session, "sess-1")
         self.assertEqual(store.all()[0].origin, "hook")
-        self.assertTrue((Path(self.cwd) / ".ddd" / ".gitignore").exists())
+        self.assertTrue((Path(self.cwd) / ".tbv" / ".gitignore").exists())
 
     def test_small_output_is_left_alone(self):
         self.assertIsNone(hook.handle(self.payload("git status", "On branch main\n")))
 
     def test_firewall_commands_and_raw_requests_are_never_rewritten(self):
         noisy = fixture("pytest_fail").stdout
-        for command in ("~/.claude/scripts/ddd artifact art-1 --raw", "python3 /x/ddd.py artifact art-1", "DDD_RAW=1 pytest -v"):
+        for command in ("~/.claude/scripts/tbv artifact art-1 --raw", "python3 /x/tbv.py artifact art-1", "TBV_RAW=1 pytest -v"):
             self.assertIsNone(hook.handle(self.payload(command, noisy)), command)
 
     def test_background_and_non_shell_tools_are_ignored(self):
@@ -162,7 +162,7 @@ class Hook(unittest.TestCase):
         self.assertIsInstance(hook.handle(p)["hookSpecificOutput"]["updatedToolOutput"], str)
 
     def test_disabled(self):
-        with mock.patch.dict(os.environ, {"DDD_DISABLE": "1"}):
+        with mock.patch.dict(os.environ, {"TBV_DISABLE": "1"}):
             self.assertIsNone(hook.handle(self.payload("pytest", fixture("pytest_fail").stdout)))
 
     def test_garbage_payload_produces_no_output(self):
@@ -172,7 +172,7 @@ class Hook(unittest.TestCase):
 
     def test_hook_process_end_to_end(self):
         payload = json.dumps(self.payload("npm test", fixture("jest").stdout))
-        done = ddd("hook", stdin=payload)
+        done = tbv("hook", stdin=payload)
         self.assertEqual(done.returncode, 0)
         self.assertIn("updatedToolOutput", done.stdout)
         self.assertIn("Session › refresh returns a new token", json.loads(done.stdout)["hookSpecificOutput"]["updatedToolOutput"]["stdout"])
@@ -181,63 +181,63 @@ class Hook(unittest.TestCase):
 class Cli(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        self.env = {"DDD_HOME": str(Path(self.tmp.name) / "store"), "DDD_COMMAND": "ddd"}
+        self.env = {"TBV_HOME": str(Path(self.tmp.name) / "store"), "TBV_COMMAND": "tbv"}
 
     def tearDown(self):
         self.tmp.cleanup()
 
     def test_run_propagates_exit_code_and_compresses(self):
         script = "import sys\nfor i in range(400): print(f'2026-10-04T10:00:00Z INFO step {i} ok')\nprint('FATAL: disk full')\nsys.exit(4)"
-        done = ddd("run", "--", PY, "-c", script, env=self.env)
+        done = tbv("run", "--", PY, "-c", script, env=self.env)
         self.assertEqual(done.returncode, 4)
         self.assertIn("FATAL: disk full", done.stdout)
-        self.assertTrue(done.stdout.startswith("[ddd] "))
+        self.assertTrue(done.stdout.startswith("[tbv] "))
         artifact_id = done.stdout.split(" | ")[1]
-        lines = ddd("artifact", artifact_id, "--lines", "401-401", env=self.env)
+        lines = tbv("artifact", artifact_id, "--lines", "401-401", env=self.env)
         self.assertEqual(lines.stdout.strip(), "401: FATAL: disk full")
-        raw = ddd("artifact", artifact_id, "--raw", env=self.env)
+        raw = tbv("artifact", artifact_id, "--raw", env=self.env)
         self.assertEqual(raw.stdout.count("\n"), 401)
-        show = ddd("show", artifact_id, env=self.env)
+        show = tbv("show", artifact_id, env=self.env)
         self.assertIn("--- sent to the model ---", show.stdout)
         self.assertIn("retrievals   2", show.stdout)
 
     def test_repeat_runs_without_a_session_are_never_called_duplicates(self):
         script = "for i in range(3000): print('same line', i)"
-        ddd("run", "--", PY, "-c", script, env=self.env)
-        second = ddd("run", "--", PY, "-c", script, env=self.env)
+        tbv("run", "--", PY, "-c", script, env=self.env)
+        second = tbv("run", "--", PY, "-c", script, env=self.env)
         self.assertNotIn("NO NEW INFORMATION", second.stdout)
-        ddd("run", "--session", "s1", "--", PY, "-c", script, env=self.env)
-        third = ddd("run", "--session", "s1", "--", PY, "-c", script, env=self.env)
+        tbv("run", "--session", "s1", "--", PY, "-c", script, env=self.env)
+        third = tbv("run", "--session", "s1", "--", PY, "-c", script, env=self.env)
         self.assertIn("NO NEW INFORMATION", third.stdout)
 
     def test_small_command_output_is_printed_untouched(self):
-        done = ddd("run", "--", PY, "-c", "import sys; print('hi'); print('warn', file=sys.stderr)", env=self.env)
+        done = tbv("run", "--", PY, "-c", "import sys; print('hi'); print('warn', file=sys.stderr)", env=self.env)
         self.assertEqual((done.stdout, done.stderr.strip()), ("hi\n", "warn"))
 
     def test_bare_command_shorthand(self):
-        done = ddd(PY, "-c", "print('x')", env=self.env)
+        done = tbv(PY, "-c", "print('x')", env=self.env)
         self.assertEqual(done.stdout, "x\n")
 
     def test_stats_after_activity(self):
-        ddd("run", "--", PY, "-c", "for i in range(3000): print('same line')", env=self.env)
-        stats = ddd("stats", env=self.env)
+        tbv("run", "--", PY, "-c", "for i in range(3000): print('same line')", env=self.env)
+        stats = tbv("stats", env=self.env)
         self.assertIn("Commands intercepted  1", stats.stdout)
         self.assertIn("estimates", stats.stdout)
-        data = json.loads(ddd("stats", "--json", env=self.env).stdout)
+        data = json.loads(tbv("stats", "--json", env=self.env).stdout)
         self.assertGreater(data["raw"], data["sent"])
 
     def test_bench_over_fixtures(self):
-        done = ddd("bench", str(HERE / "fixtures"), "--modes", "balanced", env=self.env)
+        done = tbv("bench", str(HERE / "fixtures"), "--modes", "balanced", env=self.env)
         self.assertEqual(done.returncode, 0)
         self.assertIn("TOTAL balanced", done.stdout)
 
     def test_unknown_artifact_is_a_clean_error(self):
-        done = ddd("artifact", "art-ffffffffff", env=self.env)
+        done = tbv("artifact", "art-ffffffffff", env=self.env)
         self.assertEqual(done.returncode, 1)
         self.assertIn("no artifact", done.stderr)
 
     def test_ingest_quiet_passthrough_for_gate(self):
-        done = ddd("ingest", "--command", "test", "--quiet-passthrough", env=self.env, stdin="ok\n")
+        done = tbv("ingest", "--command", "test", "--quiet-passthrough", env=self.env, stdin="ok\n")
         self.assertEqual((done.returncode, done.stdout), (3, ""))
 
 

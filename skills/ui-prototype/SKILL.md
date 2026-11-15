@@ -79,7 +79,7 @@ you write counts as it. The human runs, in their own terminal:
     ~/.claude/scripts/approve-ui.sh vault/ui/<feature-slug>/contract.md
 
 It refuses inside an agent's shell or without a TTY, shows the contract and every file
-in the folder, and records the typed decision in `.git/donedonedone/approvals.jsonl`,
+in the folder, and records the typed decision in `.git/tbv/approvals.jsonl`,
 bound to a hash of the whole folder (contract, prototype, screenshots). guard.sh blocks
 any agent from running it or writing that ledger.
 - Before asking: everything is final, screenshots included. Any later change to any

@@ -206,7 +206,7 @@ class SourceRetrieval(unittest.TestCase):
 
     def test_store_lives_at_the_repo_root(self):
         nested = self.root / "src"
-        self.assertEqual(ArtifactStore.for_cwd(str(nested)).root, (self.root / ".ddd").resolve())
+        self.assertEqual(ArtifactStore.for_cwd(str(nested)).root, (self.root / ".tbv").resolve())
 
 
 if __name__ == "__main__":

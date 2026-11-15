@@ -1,4 +1,4 @@
-$entry = Join-Path $PSScriptRoot 'ddd.py'
+$entry = Join-Path $PSScriptRoot 'tbv.py'
 $python = $null
 foreach ($candidate in @($env:PYTHON, 'python', 'python3', 'py')) {
     if (-not $candidate) { continue }
@@ -13,7 +13,7 @@ foreach ($candidate in @($env:PYTHON, 'python', 'python3', 'py')) {
 }
 if (-not $python) {
     if ($args.Count -gt 0 -and $args[0] -eq 'hook') { $null = $input | Out-String; exit 0 }
-    Write-Error 'ddd: needs Python 3.8+ on PATH (python, python3 or py -3)'
+    Write-Error 'tbv: needs Python 3.8+ on PATH (python, python3 or py -3)'
     exit 127
 }
 $exe = $python[0]

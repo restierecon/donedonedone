@@ -121,7 +121,7 @@ Scope that grows past the slice's purpose goes back to /grill, not into a reasse
 `approve-risk.sh <authorize|merge|downgrade> <ID>` runs only in an interactive
 terminal outside any agent (it refuses when CLAUDECODE is set or stdin isn't a TTY),
 shows the assessment (for merge: the diffstat and controls), and records the typed
-decision in `.git/donedonedone/approvals.jsonl` with the approver's git email, the
+decision in `.git/tbv/approvals.jsonl` with the approver's git email, the
 assessment hash and, for merge, the patch-id. A later decision supersedes an earlier
 one; a denial blocks. No agent can write that ledger or `vault/risk-policy.json`:
 guard.sh refuses it, and vault-guard.sh restores either file if a tool call changes it.
