@@ -3,9 +3,9 @@
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 if [ "${1:-}" = "--check-installed" ]; then
-  dest="$HOME/.claude"
+  dest="$HOME/.tbv"
   drift=0
-  diff -uB "$ROOT/CLAUDE.md" <(grep -v '^@' "$dest/CLAUDE.md") || drift=1
+  diff -uB "$ROOT/PROTOCOL.md" "$dest/PROTOCOL.md" || drift=1
   for d in agents scripts; do
     for f in "$ROOT/$d"/*; do diff -ru -x __pycache__ "$f" "$dest/$d/$(basename "$f")" || drift=1; done
   done
@@ -146,11 +146,11 @@ status=0
 echo '{"tool_name":"Bash","tool_input":{"command":"ls"}}' \
   | env HOME="$fakebin" PATH="$fakebin" "$(command -v bash)" "$GUARD" 2>/dev/null || status=$?
 if [ "$status" -eq 2 ]; then ok "blocks when jq is missing"; else bad "blocks when jq is missing" "exit $status, expected 2"; fi
-mkdir -p "$fakebin/.claude/bin"
+mkdir -p "$fakebin/.tbv/bin"
 status=0
 echo '{"tool_name":"Bash","tool_input":{"command":"ls"}}' \
   | env HOME="$fakebin" PATH="$fakebin" "$(command -v bash)" "$GUARD" 2>/dev/null || status=$?
-if [ "$status" -eq 2 ]; then ok "still blocks when ~/.claude/bin exists but holds no jq"; else bad "still blocks when ~/.claude/bin exists but holds no jq" "exit $status, expected 2"; fi
+if [ "$status" -eq 2 ]; then ok "still blocks when ~/.tbv/bin exists but holds no jq"; else bad "still blocks when ~/.tbv/bin exists but holds no jq" "exit $status, expected 2"; fi
 rm -rf "$fakebin"
 
 echo "== guard.sh — vault integrity (gate files are Director-only) =="
@@ -203,8 +203,8 @@ cursor_nav=$(jq -n '{tool_name: "mcp__claude-in-chrome__navigate", tool_input: {
 if [ -z "$cursor_nav" ]; then ok "navigate block prints no Cursor JSON outside Cursor"; else bad "navigate block prints no Cursor JSON outside Cursor" "$cursor_nav"; fi
 expect_block "subagent cannot Write log.jsonl"           guard_file Write 'vault/log.jsonl' reviewer
 expect_block "subagent cannot append to log.jsonl"       guard_bash 'echo "{}" >> vault/log.jsonl' builder
-expect_block "subagent cannot run log-event.sh"          guard_bash "$HOME/.claude/scripts/log-event.sh S001 reviewer APPROVED" reviewer
-expect_allow "Director may run log-event.sh"             guard_bash "$HOME/.claude/scripts/log-event.sh S001 reviewer APPROVED"
+expect_block "subagent cannot run log-event.sh"          guard_bash "$HOME/.tbv/scripts/log-event.sh S001 reviewer APPROVED" reviewer
+expect_allow "Director may run log-event.sh"             guard_bash "$HOME/.tbv/scripts/log-event.sh S001 reviewer APPROVED"
 expect_block "subagent cannot cp over task-tree.json"    guard_bash 'cp /tmp/x vault/task-tree.json' builder
 expect_block "subagent cannot sed -i task-tree.json"     guard_bash 'sed -i s/a/b/ vault/task-tree.json' builder
 expect_block "subagent cannot write log.jsonl from python" guard_bash "python3 -c \"open('vault/log.jsonl','a')\"" builder
@@ -1164,7 +1164,7 @@ else
 fi
 rm -rf "$repo" "$crlf_bin" "$lf_bin"
 
-echo "== jq without admin rights — ~/.claude/bin and fetch-jq.sh =="
+echo "== jq without admin rights — ~/.tbv/bin and fetch-jq.sh =="
 FETCH_JQ="$ROOT/scripts/fetch-jq.sh"
 jq_name=jq
 case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) jq_name=jq.exe ;; esac
@@ -1172,15 +1172,15 @@ file_url() { if command -v cygpath >/dev/null 2>&1; then echo "file:///$(cygpath
 sha256_of() { if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1"; else shasum -a 256 "$1"; fi | cut -d' ' -f1 | tr -d '*'; }
 nojq_home=$(mktemp -d)
 nojq_path=$(mktemp -d)
-mkdir -p "$nojq_home/.claude/bin"
+mkdir -p "$nojq_home/.tbv/bin"
 # shellcheck disable=SC2016
-printf '#!/bin/bash\nexec "%s" "$@"\n' "$real_jq" > "$nojq_home/.claude/bin/jq"
-chmod +x "$nojq_home/.claude/bin/jq"
+printf '#!/bin/bash\nexec "%s" "$@"\n' "$real_jq" > "$nojq_home/.tbv/bin/jq"
+chmod +x "$nojq_home/.tbv/bin/jq"
 # shellcheck disable=SC2016
 got=$(env HOME="$nojq_home" PATH="$nojq_path" "$(command -v bash)" -c '. "$1"; jq -rn "\"S001\""' _ "$ROOT/scripts/jq-text.sh" 2>/dev/null | tr -d '\r')
-if [ "$got" = "S001" ]; then ok "with no jq on PATH, the helper finds the one in ~/.claude/bin"; else bad "with no jq on PATH, the helper finds the one in ~/.claude/bin" "got: $got"; fi
+if [ "$got" = "S001" ]; then ok "with no jq on PATH, the helper finds the one in ~/.tbv/bin"; else bad "with no jq on PATH, the helper finds the one in ~/.tbv/bin" "got: $got"; fi
 got=$(HOME="$nojq_home" bash -c '. "$1"; type -P jq' _ "$ROOT/scripts/jq-text.sh")
-if [ "$got" = "$real_jq" ]; then ok "a jq already on PATH wins over ~/.claude/bin"; else bad "a jq already on PATH wins over ~/.claude/bin" "got: $got"; fi
+if [ "$got" = "$real_jq" ]; then ok "a jq already on PATH wins over ~/.tbv/bin"; else bad "a jq already on PATH wins over ~/.tbv/bin" "got: $got"; fi
 case "$(uname -s)" in
   MINGW*|MSYS*|CYGWIN*) ;;
   *)
@@ -1200,11 +1200,11 @@ case "$(uname -s)" in
       | env HOME="$nojq_home" PATH="$nojq_dirs" bash "$GUARD" >/dev/null 2>&1 || allow=$?
     leaked=$(env PATH="$nojq_dirs" bash -c 'command -v jq')
     if [ -n "$leaked" ]; then
-      bad "guard.sh enforces its rules with only the ~/.claude/bin jq" "could not hide the system jq: $leaked"
+      bad "guard.sh enforces its rules with only the ~/.tbv/bin jq" "could not hide the system jq: $leaked"
     elif [ "$status" -eq 2 ] && [ "$allow" -eq 0 ]; then
-      ok "guard.sh enforces its rules with only the ~/.claude/bin jq"
+      ok "guard.sh enforces its rules with only the ~/.tbv/bin jq"
     else
-      bad "guard.sh enforces its rules with only the ~/.claude/bin jq" "force-push exit $status (want 2), ls exit $allow (want 0)"
+      bad "guard.sh enforces its rules with only the ~/.tbv/bin jq" "force-push exit $status (want 2), ls exit $allow (want 0)"
     fi
     rm -rf "${shadows[@]}" ;;
 esac
@@ -1522,7 +1522,7 @@ rm -rf "$repo"
 repo=$(make_repo)
 printf '<!-- skeletoncrew:protocol:begin old -->\nstale\n<!-- skeletoncrew:protocol:end -->\n' > "$repo/AGENTS.md"
 out=$(cd /tmp && jq -n --arg r "$repo" '{hook_event_name: "sessionStart", workspace_roots: [$r]}' \
-  | AGENTS_MD_SRC="$ROOT/CLAUDE.md" "$SESSION_START" 2>/dev/null)
+  | AGENTS_MD_SRC="$ROOT/PROTOCOL.md" "$SESSION_START" 2>/dev/null)
 if echo "$out" | jq -e '.additional_context | test("git reality check")' >/dev/null 2>&1 \
    && grep -q "Autonomous Engineering Protocol" "$repo/AGENTS.md" && ! grep -q "^stale$" "$repo/AGENTS.md"; then
   ok "session-start answers Cursor with additional_context JSON and refreshes AGENTS.md"
@@ -1530,7 +1530,7 @@ else
   bad "session-start answers Cursor with additional_context JSON and refreshes AGENTS.md" "$out"
 fi
 printf '<!-- skeletoncrew:protocol:begin old -->\nstale\n<!-- skeletoncrew:protocol:end -->\n' > "$repo/AGENTS.md"
-(cd "$repo" && AGENTS_MD_SRC="$ROOT/CLAUDE.md" "$SESSION_START" </dev/null >/dev/null 2>&1)
+(cd "$repo" && AGENTS_MD_SRC="$ROOT/PROTOCOL.md" "$SESSION_START" </dev/null >/dev/null 2>&1)
 if ! grep -q "^stale$" "$repo/AGENTS.md"; then ok "session-start refreshes AGENTS.md under Claude Code too"; else bad "session-start refreshes AGENTS.md under Claude Code too" "still stale"; fi
 rm -rf "$repo"
 
@@ -1560,7 +1560,7 @@ if grep -q "^readonly: true" "$gen/cursor/retro.md" && grep -q "^tools: \['read'
 else
   bad "retro is read-only under Cursor and Copilot" "$(grep -h '^readonly\|^tools' "$gen/cursor/retro.md" "$gen/copilot/retro.agent.md")"
 fi
-if grep -q "^tools: \['read', 'edit', 'search', 'runCommands'\]" "$gen/copilot/builder.agent.md"; then
+if grep -q "^tools: \['read', 'edit', 'search', 'execute'\]" "$gen/copilot/builder.agent.md"; then
   ok "copilot collapses Write and Edit into one 'edit' toolset"
 else
   bad "copilot collapses Write and Edit into one 'edit' toolset" "$(grep '^tools' "$gen/copilot/builder.agent.md")"
@@ -1576,7 +1576,7 @@ if grep -q "gate.sh once per slice" "$gen/copilot/orchestrator.agent.md" && ! gr
 else
   bad "copilot orchestrator runs gate 2 itself, so it sees a test line over the budget" "$(grep -n 'gate' "$gen/copilot/orchestrator.agent.md")"
 fi
-skill_path=".claude/skills/crap-hotspots/SKILL.md"
+skill_path=".tbv/skills/crap-hotspots/SKILL.md"
 if grep -q "gate.crap.max" "$gen/cursor/builder.md" && grep -q "gate.crap.max" "$gen/copilot/builder.agent.md" \
    && grep -q "crap.log" "$gen/cursor/reviewer.md" && grep -q "crap.log" "$gen/copilot/reviewer.agent.md" \
    && grep -qF "$skill_path" "$gen/copilot/orchestrator.agent.md"; then
@@ -1587,8 +1587,8 @@ fi
 status=0; "$GENERATE" bogus >/dev/null 2>&1 || status=$?
 if [ "$status" -eq 1 ]; then ok "unknown target exits 1"; else bad "unknown target exits 1" "exit $status"; fi
 proj="$gen/proj"; mkdir -p "$proj"
-first=$(AGENTS_MD_SRC="$ROOT/CLAUDE.md" "$AGENTS_MD" "$proj")
-second=$(AGENTS_MD_SRC="$ROOT/CLAUDE.md" "$AGENTS_MD" "$proj")
+first=$(AGENTS_MD_SRC="$ROOT/PROTOCOL.md" "$AGENTS_MD" "$proj")
+second=$(AGENTS_MD_SRC="$ROOT/PROTOCOL.md" "$AGENTS_MD" "$proj")
 if [ -n "$first" ] && [ -z "$second" ] && grep -q "Autonomous Engineering Protocol" "$proj/AGENTS.md"; then
   ok "agents-md creates AGENTS.md once and is a no-op when unchanged"
 else
@@ -1601,13 +1601,13 @@ else
   bad "AGENTS.md tells Cursor and Copilot how to reach the bash scripts from PowerShell" "$(sed -n '2,6p' "$proj/AGENTS.md")"
 fi
 if grep -q "A \`crap\` FAIL goes back to the builder, and so does a \`mutation\` FAIL" "$proj/AGENTS.md" && grep -qF "$skill_path" "$proj/AGENTS.md" \
-   && grep -qF ".claude/skills/mutation-survivors/SKILL.md" "$proj/AGENTS.md"; then
+   && grep -qF ".tbv/skills/mutation-survivors/SKILL.md" "$proj/AGENTS.md"; then
   ok "AGENTS.md gives Cursor and Copilot the CRAP gate rule and the skill's path"
 else
   bad "AGENTS.md gives Cursor and Copilot the CRAP gate rule and the skill's path" "$(grep -n crap "$proj/AGENTS.md")"
 fi
 printf '# Mine above\n<!-- skeletoncrew:protocol:begin x -->\nstale\n<!-- skeletoncrew:protocol:end -->\n# Mine below\n' > "$proj/AGENTS.md"
-AGENTS_MD_SRC="$ROOT/CLAUDE.md" "$AGENTS_MD" "$proj" >/dev/null
+AGENTS_MD_SRC="$ROOT/PROTOCOL.md" "$AGENTS_MD" "$proj" >/dev/null
 if [ "$(head -1 "$proj/AGENTS.md")" = "# Mine above" ] && [ "$(tail -1 "$proj/AGENTS.md")" = "# Mine below" ] \
    && ! grep -q "^stale$" "$proj/AGENTS.md" && [ "$(grep -c 'skeletoncrew:protocol:begin' "$proj/AGENTS.md")" -eq 1 ]; then
   ok "agents-md replaces a stale block in place and keeps the user's own text"
@@ -1615,7 +1615,7 @@ else
   bad "agents-md replaces a stale block in place and keeps the user's own text" "$(head -3 "$proj/AGENTS.md")"
 fi
 printf '# Existing notes\n' > "$proj/AGENTS.md"
-AGENTS_MD_SRC="$ROOT/CLAUDE.md" "$AGENTS_MD" "$proj" >/dev/null
+AGENTS_MD_SRC="$ROOT/PROTOCOL.md" "$AGENTS_MD" "$proj" >/dev/null
 if [ "$(head -1 "$proj/AGENTS.md")" = "# Existing notes" ] && grep -q "skeletoncrew:protocol:end" "$proj/AGENTS.md"; then
   ok "agents-md appends the block to an AGENTS.md that has none"
 else
@@ -1808,13 +1808,13 @@ else
 fi
 mapped=$(mktemp -d)
 git -C "$mapped" init -q -b main && printf 'echo hi\n' > "$mapped/a.sh" && git -C "$mapped" add -A && git -C "$mapped" -c user.email=t@t -c user.name=t commit -q -m i
-if (cd "$mapped" && "$home/.claude/scripts/codebase-graph.py" build >/dev/null 2>&1) && [ -f "$mapped/.gate/graph.html" ] && [ ! -d "$home/.claude/scripts/codemap/__pycache__" ]; then
+if (cd "$mapped" && "$home/.tbv/scripts/codebase-graph.py" build >/dev/null 2>&1) && [ -f "$mapped/.gate/graph.html" ] && [ ! -d "$home/.tbv/scripts/codemap/__pycache__" ]; then
   ok "the installed codebase-graph.py runs with its codemap package and leaves no bytecode behind"
 else
-  bad "the installed codebase-graph.py runs with its codemap package and leaves no bytecode behind" "$(ls "$home/.claude/scripts")"
+  bad "the installed codebase-graph.py runs with its codemap package and leaves no bytecode behind" "$(ls "$home/.tbv/scripts")"
 fi
 rm -rf "$mapped"
-if grep -q "my own global rules" "$home"/.claude/CLAUDE.md.bak-* 2>/dev/null && cmp -s "$ROOT/CLAUDE.md" "$home/.claude/CLAUDE.md"; then
+if grep -q "my own global rules" "$home"/.claude/CLAUDE.md.bak-* 2>/dev/null && cmp -s "$ROOT/PROTOCOL.md" "$home/.claude/CLAUDE.md"; then
   ok "install backs up a differing CLAUDE.md before replacing it"
 else
   bad "install backs up a differing CLAUDE.md before replacing it" "$(ls "$home/.claude")"
@@ -1825,7 +1825,7 @@ else
   bad "install keeps an existing Cursor hooks.json and drops the new one beside it" "$(ls "$home/.cursor")"
 fi
 if [ ! -e "$home/.claude/commands/init-vault.md" ] && ls "$home"/.claude/commands/init-vault.md.bak-* >/dev/null 2>&1 \
-   && [ ! -e "$home/.claude/scripts/generate-copilot-agents.sh" ]; then
+   && [ ! -e "$home/.claude/scripts/generate-copilot-agents.sh" ] && [ ! -e "$home/.tbv/scripts/generate-copilot-agents.sh" ]; then
   ok "install retires the old init-vault command and the renamed agent generator"
 else
   bad "install retires the old init-vault command and the renamed agent generator" "$(ls "$home/.claude/commands" "$home/.claude/scripts")"
@@ -1880,8 +1880,8 @@ out=$(HOME="$home" TBV_OFFLINE=1 "$INSTALL" 2>&1)
 s="$home/.claude/settings.json"
 if [ "$(jq -r '.mine' "$s")" = "true" ] && [ "$(jq -r '.env.CLAUDE_CODE_USE_POWERSHELL_TOOL' "$s")" = "1" ] \
    && jq -e '.permissions.deny | index("Bash(mine *)") and index("Bash(sudo *)")' "$s" >/dev/null \
-   && [ "$(jq -c '[.hooks.Stop[].hooks[].command]' "$s")" = '["my-stop.sh","~/.claude/scripts/checkpoint.sh"]' ] \
-   && jq -e '.hooks.SessionStart[0].hooks[0].command == "~/.claude/scripts/session-start.sh"' "$s" >/dev/null; then
+   && [ "$(jq -c '[.hooks.Stop[].hooks[].command]' "$s")" = '["my-stop.sh","~/.tbv/scripts/checkpoint.sh"]' ] \
+   && jq -e '.hooks.SessionStart[0].hooks[0].command == "~/.tbv/scripts/session-start.sh"' "$s" >/dev/null; then
   ok "install adds its hooks and permissions to an existing settings.json and keeps every value that was there"
 else
   bad "install adds its hooks and permissions to an existing settings.json and keeps every value that was there" "$(jq -c . "$s")"
@@ -1900,17 +1900,17 @@ if [ "$(jq -cS . "$s")" = "$before" ] && [ "$(find "$home/.claude" -name 'settin
 else
   bad "a second install changes nothing in settings.json and adds no hook twice" "$(ls "$home/.claude")"
 fi
-if grep -q "^commit=$(git -C "$ROOT" rev-parse HEAD)$" "$home/.claude/tbv.version" && grep -q "^source=$ROOT$" "$home/.claude/tbv.version" \
-   && grep -q ' scripts/gate.sh$' "$home/.claude/tbv.manifest" && echo "$out" | grep -q "^Version: $(git -C "$ROOT" rev-parse --short=7 HEAD) "; then
+if grep -q "^commit=$(git -C "$ROOT" rev-parse HEAD)$" "$home/.tbv/tbv.version" && grep -q "^source=$ROOT$" "$home/.tbv/tbv.version" \
+   && grep -q ' scripts/gate.sh$' "$home/.tbv/tbv.manifest" && echo "$out" | grep -q "^Version: $(git -C "$ROOT" rev-parse --short=7 HEAD) "; then
   ok "install records the commit it installed, where from, and a hash of every file it put in place"
 else
-  bad "install records the commit it installed, where from, and a hash of every file it put in place" "$(cat "$home/.claude/tbv.version")"
+  bad "install records the commit it installed, where from, and a hash of every file it put in place" "$(cat "$home/.tbv/tbv.version")"
 fi
-if [ -z "$(HOME="$home" TBV_OFFLINE=1 "$home/.claude/scripts/harness.sh" check)" ] \
-   && HOME="$home" TBV_OFFLINE=1 "$home/.claude/scripts/tbv" version | grep -q "^status: up to date, files unmodified"; then
+if [ -z "$(HOME="$home" TBV_OFFLINE=1 "$home/.tbv/scripts/harness.sh" check)" ] \
+   && HOME="$home" TBV_OFFLINE=1 "$home/.tbv/scripts/tbv" version | grep -q "^status: up to date, files unmodified"; then
   ok "a fresh install checks out clean, and tbv version says so"
 else
-  bad "a fresh install checks out clean, and tbv version says so" "$(HOME="$home" TBV_OFFLINE=1 "$home/.claude/scripts/tbv" version)"
+  bad "a fresh install checks out clean, and tbv version says so" "$(HOME="$home" TBV_OFFLINE=1 "$home/.tbv/scripts/tbv" version)"
 fi
 echo "not json" > "$s"
 out=$(HOME="$home" TBV_OFFLINE=1 "$INSTALL" 2>&1)
@@ -1927,17 +1927,17 @@ horigin="$hroot/origin.git" hsrc="$hroot/src" hhome="$hroot/home"
 git init -q --bare -b main "$horigin"
 git init -q -b main "$hsrc"
 git -C "$hsrc" config user.email t@t && git -C "$hsrc" config user.name t
-mkdir -p "$hsrc/agents" "$hsrc/scripts" "$hhome/.claude/agents"
-cp -R "$ROOT/scripts" "$hhome/.claude/scripts"
+mkdir -p "$hsrc/agents" "$hsrc/scripts" "$hhome/.tbv/agents"
+cp -R "$ROOT/scripts" "$hhome/.tbv/scripts"
 cp "$ROOT/scripts/gate.sh" "$hsrc/scripts/gate.sh"
 echo one > "$hsrc/agents/a.md"
 # shellcheck disable=SC2016
-printf '#!/bin/bash\nsrc=$(cd "$(dirname "$0")" && pwd)\ncp "$src"/agents/*.md "$HOME/.claude/agents/"\n"$HOME/.claude/scripts/harness.sh" stamp "$src"\n' > "$hsrc/install.sh"
+printf '#!/bin/bash\nsrc=$(cd "$(dirname "$0")" && pwd)\ncp "$src"/agents/*.md "$HOME/.tbv/agents/"\n"$HOME/.tbv/scripts/harness.sh" stamp "$src"\n' > "$hsrc/install.sh"
 chmod +x "$hsrc/install.sh"
 git -C "$hsrc" add -A && git -C "$hsrc" commit -q -m one
 git -C "$hsrc" remote add origin "$horigin" && git -C "$hsrc" push -q -u origin main
 hurl=$(git -C "$hsrc" remote get-url origin)
-hz() { HOME="$hhome" "$hhome/.claude/scripts/harness.sh" "$@" 2>&1; }
+hz() { HOME="$hhome" "$hhome/.tbv/scripts/harness.sh" "$@" 2>&1; }
 HOME="$hhome" "$hsrc/install.sh" >/dev/null
 if [ -z "$(hz check)" ]; then ok "check is silent when the install matches its clone and the remote"; else bad "check is silent when the install matches its clone and the remote" "$(hz check)"; fi
 echo two > "$hsrc/agents/a.md"
@@ -1953,7 +1953,7 @@ git -C "$hsrc" push -q origin main
 git -C "$hsrc" reset -q --hard HEAD~1
 HOME="$hhome" "$hsrc/install.sh" >/dev/null
 out=$(hz check)
-if echo "$out" | grep -q "^update available: $hurl is at $(git -C "$horigin" rev-parse --short=7 main), ahead of the clone at $hsrc — run: $hhome/.claude/scripts/tbv update"; then
+if echo "$out" | grep -q "^update available: $hurl is at $(git -C "$horigin" rev-parse --short=7 main), ahead of the clone at $hsrc — run: $hhome/.tbv/scripts/tbv update"; then
   ok "a remote that moved ahead of the clone is reported as an update"
 else
   bad "a remote that moved ahead of the clone is reported as an update" "$out"
@@ -1963,9 +1963,9 @@ if hz check | grep -q "^update available"; then ok "the remote is asked at most 
 mv "$horigin.away" "$horigin"
 if [ -z "$(TBV_OFFLINE=1 hz check)" ]; then ok "TBV_OFFLINE=1 never asks the remote"; else bad "TBV_OFFLINE=1 never asks the remote" "$(TBV_OFFLINE=1 hz check)"; fi
 nv=$(mktemp -d)
-out=$(cd "$nv" && HOME="$hhome" "$hhome/.claude/scripts/session-start.sh" </dev/null 2>&1)
+out=$(cd "$nv" && HOME="$hhome" "$hhome/.tbv/scripts/session-start.sh" </dev/null 2>&1)
 if echo "$out" | grep -q "^update available"; then ok "session-start passes the notice on in a project with no vault"; else bad "session-start passes the notice on in a project with no vault" "$out"; fi
-out=$(cd "$nv" && echo '{"hook_event_name":"SessionStart"}' | HOME="$hhome" "$hhome/.claude/scripts/session-start.sh" 2>&1)
+out=$(cd "$nv" && echo '{"hook_event_name":"SessionStart"}' | HOME="$hhome" "$hhome/.tbv/scripts/session-start.sh" 2>&1)
 if echo "$out" | jq -e '.hookSpecificOutput.additionalContext | test("update available")' >/dev/null 2>&1; then
   ok "the notice reaches Claude Code as SessionStart context"
 else
@@ -1977,15 +1977,15 @@ status=0; out=$(hz update) || status=$?
 if [ "$status" -eq 1 ] && echo "$out" | grep -q "uncommitted changes"; then ok "update refuses a clone with uncommitted changes"; else bad "update refuses a clone with uncommitted changes" "exit $status: $out"; fi
 git -C "$hsrc" checkout -q -- agents/a.md
 status=0; out=$(hz update) || status=$?
-if [ "$status" -eq 0 ] && [ "$(cat "$hhome/.claude/agents/a.md")" = "two" ] && [ -z "$(hz check)" ] \
-   && grep -q "^commit=$(git -C "$horigin" rev-parse main)$" "$hhome/.claude/tbv.version"; then
+if [ "$status" -eq 0 ] && [ "$(cat "$hhome/.tbv/agents/a.md")" = "two" ] && [ -z "$(hz check)" ] \
+   && grep -q "^commit=$(git -C "$horigin" rev-parse main)$" "$hhome/.tbv/tbv.version"; then
   ok "update fast-forwards the clone, reinstalls from it and leaves nothing to report"
 else
   bad "update fast-forwards the clone, reinstalls from it and leaves nothing to report" "exit $status: $out"
 fi
 if hz update | grep -q "^already up to date"; then ok "update is a no-op when nothing changed"; else bad "update is a no-op when nothing changed" "$(hz update)"; fi
-echo tampered >> "$hhome/.claude/scripts/gate.sh"
-rm "$hhome/.claude/agents/a.md"
+echo tampered >> "$hhome/.tbv/scripts/gate.sh"
+rm "$hhome/.tbv/agents/a.md"
 out=$(hz check)
 if echo "$out" | grep -q "^modified: 2 installed file(s) no longer match what install.sh put there (first: agents/a.md)"; then
   ok "an installed file that was edited or deleted is reported"
@@ -2019,10 +2019,10 @@ else
 fi
 git -C "$hsrc" remote set-url origin "https://user:s3cret@example.test/x.git"
 HOME="$hhome" "$hsrc/install.sh" >/dev/null
-if grep -q '^origin=https://example.test/x.git$' "$hhome/.claude/tbv.version" && ! grep -q s3cret "$hhome/.claude/tbv.version"; then
+if grep -q '^origin=https://example.test/x.git$' "$hhome/.tbv/tbv.version" && ! grep -q s3cret "$hhome/.tbv/tbv.version"; then
   ok "credentials in the clone's remote URL never reach the stamp"
 else
-  bad "credentials in the clone's remote URL never reach the stamp" "$(grep origin "$hhome/.claude/tbv.version")"
+  bad "credentials in the clone's remote URL never reach the stamp" "$(grep origin "$hhome/.tbv/tbv.version")"
 fi
 rm -rf "$hroot" "$proj" "$empty"
 if [ -z "$("$ROOT/scripts/harness.sh" check 2>&1)" ]; then ok "check is silent when run from a clone, where nothing is installed"; else bad "check is silent when run from a clone, where nothing is installed" "$("$ROOT/scripts/harness.sh" check 2>&1)"; fi
@@ -2033,8 +2033,8 @@ if [ ! -e "$ROOT/agents/scribe.md" ] && [ ! -e "$ROOT/skills/compaction" ]; then
 else
   bad "scribe agent and compaction skill are not shipped" "still present"
 fi
-if grep -qE 'scribe|session\.md|hot\.md|handoffs' "$ROOT/CLAUDE.md"; then
-  bad "CLAUDE.md names no scribe or memory file" "$(grep -nE 'scribe|session\.md|hot\.md|handoffs' "$ROOT/CLAUDE.md")"
+if grep -qE 'scribe|session\.md|hot\.md|handoffs' "$ROOT/PROTOCOL.md"; then
+  bad "CLAUDE.md names no scribe or memory file" "$(grep -nE 'scribe|session\.md|hot\.md|handoffs' "$ROOT/PROTOCOL.md")"
 else
   ok "CLAUDE.md names no scribe or memory file"
 fi
@@ -2353,6 +2353,8 @@ expect_block "a builder brief whose RISK line understates the class is blocked" 
 expect_block "a builder brief with no RISK line is blocked" spawn_in "$repo" "$(brief S001 low | sed '/^RISK:/d')"
 expect_allow "a high-risk builder may start (humans approve its merge, not its start)" spawn_in "$repo" "$(brief S002 high)"
 expect_block "a high-risk builder can't drop to sonnet" spawn_in "$repo" "$(brief S002 high)" sonnet
+expect_block "a high-risk builder can't drop to the economy tier under any tool's name for it" spawn_in "$repo" "$(brief S002 high)" fast
+expect_allow "a high-risk builder may name the session model explicitly" spawn_in "$repo" "$(brief S002 high)" inherit
 expect_allow "a low-risk builder may run on sonnet" spawn_in "$repo" "$(brief S001 low)" sonnet
 status=0; out=$(rg "$repo" check S003 build) || status=$?
 if [ "$status" -eq 1 ] && echo "$out" | grep -q "approve-risk.sh authorize S003"; then ok "a critical slice stops before building, naming the authorization"; else bad "a critical slice stops before building, naming the authorization" "$out"; fi
@@ -2810,7 +2812,7 @@ else
   bad "land-slice runs the merge check itself and lands nothing without every control" "exit $status: $out"
 fi
 expect_block "guard.sh runs the merge check on land-slice.sh too" guard_in "$d" "$LAND S010"
-expect_block "guard.sh reads a quoted slice id after land-slice.sh" guard_in "$d" "$HOME/.claude/scripts/land-slice.sh 'S010' -m 'feat: x (S010)'"
+expect_block "guard.sh reads a quoted slice id after land-slice.sh" guard_in "$d" "$HOME/.tbv/scripts/land-slice.sh 'S010' -m 'feat: x (S010)'"
 expect_block "a subagent can't run record-gate.sh" guard_in "$d" "$RECORD S010 reviewer APPROVED" reviewer
 expect_block "a subagent can't run land-slice.sh" guard_in "$d" "$LAND S010" builder
 expect_block "a subagent can't run adopt-plan.sh" guard_in "$d" "$ADOPT" planner
@@ -3088,7 +3090,7 @@ expect_block "a tester spawn needs the full brief too" guard_agent Agent tester 
 expect_allow "a full brief spawns the tester" guard_agent Agent tester "$FULL_BRIEF"
 
 echo "== risk gate wiring (protocol prose) =="
-if grep -q '^## Risk Gate' "$ROOT/CLAUDE.md" && grep -q 'risk-gate.sh check <ID> merge' "$ROOT/CLAUDE.md" && grep -q 'You cannot approve' "$ROOT/CLAUDE.md"; then
+if grep -q '^## Risk Gate' "$ROOT/PROTOCOL.md" && grep -q 'risk-gate.sh check <ID> merge' "$ROOT/PROTOCOL.md" && grep -q 'You cannot approve' "$ROOT/PROTOCOL.md"; then
   ok "CLAUDE.md has the Risk Gate: merge check, and the Director can't approve"
 else
   bad "CLAUDE.md has the Risk Gate: merge check, and the Director can't approve" "missing"
@@ -3112,7 +3114,7 @@ rm -rf "$gen"
 echo "== validate-manifests.sh — imported skills carry their LICENSE =="
 vm=$(mktemp -d)
 mkdir -p "$vm/scripts"
-cp -R "$ROOT/agents" "$ROOT/skills" "$ROOT/CLAUDE.md" "$ROOT/settings.json" "$vm/"
+cp -R "$ROOT/agents" "$ROOT/skills" "$ROOT/PROTOCOL.md" "$ROOT/settings.json" "$vm/"
 cp "$ROOT/scripts/validate-manifests.sh" "$vm/scripts/"
 status=0; "$vm/scripts/validate-manifests.sh" >/dev/null 2>&1 || status=$?
 if [ "$status" -eq 0 ]; then ok "repo manifests pass"; else bad "repo manifests pass" "exit $status"; fi
@@ -3230,14 +3232,14 @@ cat > "$fake/bin/cygpath" <<EOF
 case "\$1" in
   -w) echo 'C:\\Program Files\\Git' ;;
   -u) echo "$fake/root" ;;
-  -m) echo "C:/Users/o'neil/.claude/scripts" ;;
+  -m) echo "C:/Users/o'neil/.tbv/scripts" ;;
 esac
 EOF
 chmod +x "$fake/bin/cygpath"
 HOME="$home" PATH="$fake/bin:$PATH" "$INSTALL" >/dev/null 2>&1
 win=$(jq -r '.hooks.PreToolUse[] | select(.command | endswith("/guard.sh")) | .windows' "$home/.copilot/hooks/tbv.json" 2>/dev/null)
 # shellcheck disable=SC2016
-want='& '"'"'C:\Program Files\Git\bin\bash.exe'"'"' '"'"'C:/Users/o'"''"'neil/.claude/scripts/guard.sh'"'"'; exit $LASTEXITCODE'
+want='& '"'"'C:\Program Files\Git\bin\bash.exe'"'"' '"'"'C:/Users/o'"''"'neil/.tbv/scripts/guard.sh'"'"'; exit $LASTEXITCODE'
 if [ "$win" = "$want" ]; then
   ok "install gives VS Code a Windows command PowerShell 5.1 can run: & 'bash.exe' 'script'; exit \$LASTEXITCODE"
 else
@@ -3290,13 +3292,13 @@ home=$(mktemp -d)
 HOME="$home" "$INSTALL" >/dev/null 2>&1
 hooks="$home/.copilot/hooks/tbv.json"
 missing=$(jq -r '.hooks[][].command' "$hooks" 2>/dev/null | tr -d '\r' | while IFS= read -r c; do [ -x "$c" ] || echo "$c"; done)
-if jq -e '(has("version") | not)
+if jq -e '.version == 1
       and (.hooks | keys == ["PostToolUse","PreToolUse","SessionStart","Stop","SubagentStop"])
       and ([.hooks[][] | .type == "command" and .timeout == 60] | all)' "$hooks" >/dev/null 2>&1 \
    && [ -z "$missing" ] && jq -r '.hooks.PreToolUse[].command' "$hooks" | tr -d '\r' | grep -q 'guard.sh$'; then
-  ok "install writes VS Code's native hooks file with absolute paths to the installed scripts"
+  ok "install writes one hooks file VS Code and the Copilot CLI both read, with absolute paths to the installed scripts"
 else
-  bad "install writes VS Code's native hooks file with absolute paths to the installed scripts" "missing: $missing $(cat "$hooks" 2>/dev/null)"
+  bad "install writes one hooks file VS Code and the Copilot CLI both read, with absolute paths to the installed scripts" "missing: $missing $(cat "$hooks" 2>/dev/null)"
 fi
 echo '{"mine": true}' > "$hooks"
 HOME="$home" "$INSTALL" >/dev/null 2>&1
@@ -3414,11 +3416,206 @@ else
 fi
 rm -rf "$home"
 
+echo "== install.sh — one install in ~/.tbv, one adapter per tool =="
+home=$(mktemp -d)
+status=0; out=$(HOME="$home" TBV_OFFLINE=1 TBV_TOOLS=cursor "$INSTALL" 2>&1) || status=$?
+if [ "$status" -eq 0 ] && [ -x "$home/.tbv/scripts/gate.sh" ] && cmp -s "$ROOT/PROTOCOL.md" "$home/.tbv/PROTOCOL.md" \
+   && [ -f "$home/.tbv/skills/grill/SKILL.md" ] && [ -f "$home/.cursor/skills/grill/SKILL.md" ] && [ -f "$home/.cursor/agents/builder.md" ] \
+   && [ -f "$home/.cursor/hooks.json" ] && [ ! -e "$home/.claude" ] && [ ! -e "$home/.copilot" ]; then
+  ok "TBV_TOOLS=cursor installs tbv with the Cursor adapter and creates nothing for Claude Code or Copilot"
+else
+  bad "TBV_TOOLS=cursor installs tbv with the Cursor adapter and creates nothing for Claude Code or Copilot" "exit $status: $(ls -a "$home") $out"
+fi
+if echo "$out" | grep -q '^Claude Code: not set up' && echo "$out" | grep -q '^GitHub Copilot (VS Code and CLI): not selected'; then
+  ok "install says which tools it left alone"
+else
+  bad "install says which tools it left alone" "$out"
+fi
+rm -rf "$home"
+
+home=$(mktemp -d)
+status=0; out=$(HOME="$home" TBV_OFFLINE=1 TBV_TOOLS=claude,vim "$INSTALL" 2>&1) || status=$?
+if [ "$status" -eq 1 ] && echo "$out" | grep -q "unknown tool 'vim'" && [ ! -e "$home/.tbv" ]; then
+  ok "an unknown tool in TBV_TOOLS stops the install before it writes anything"
+else
+  bad "an unknown tool in TBV_TOOLS stops the install before it writes anything" "exit $status: $out"
+fi
+rm -rf "$home"
+
+home=$(mktemp -d)
+HOME="$home" TBV_OFFLINE=1 TBV_TOOLS=claude,copilot "$INSTALL" >/dev/null 2>&1
+if grep -q '^model: economy$' "$home/.tbv/agents/reviewer.md" && grep -q '^model: sonnet$' "$home/.claude/agents/reviewer.md" \
+   && grep -q '^model: inherit$' "$home/.claude/agents/builder.md" && ! grep -q '^model:' "$home/.copilot/agents/reviewer.agent.md" \
+   && [ "$(sed 1,6d "$home/.claude/agents/reviewer.md")" = "$(sed 1,6d "$ROOT/agents/reviewer.md")" ]; then
+  ok "the economy tier becomes sonnet in Claude Code's agents and no model at all in Copilot's"
+else
+  bad "the economy tier becomes sonnet in Claude Code's agents and no model at all in Copilot's" "$(grep -H '^model' "$home/.tbv/agents/reviewer.md" "$home/.claude/agents/reviewer.md" "$home/.copilot/agents/reviewer.agent.md")"
+fi
+if cmp -s "$ROOT/PROTOCOL.md" "$home/.claude/CLAUDE.md" && [ -f "$home/.claude/skills/grill/SKILL.md" ] && [ -f "$home/.copilot/skills/grill/SKILL.md" ] \
+   && [ ! -e "$home/.claude/scripts" ] && [ ! -e "$home/.cursor" ] \
+   && [ "$(jq -r '[.hooks[][].hooks[].command] | map(select(startswith("~/.tbv/scripts/") | not)) | length' "$home/.claude/settings.json")" = "0" ]; then
+  ok "Claude Code gets the protocol, agents, skills and hooks that call ~/.tbv/scripts; no script lands in ~/.claude"
+else
+  bad "Claude Code gets the protocol, agents, skills and hooks that call ~/.tbv/scripts; no script lands in ~/.claude" "$(ls -a "$home" "$home/.claude")"
+fi
+if grep -q 'tbv run -- <command>' "$home/.copilot/agents/builder.agent.md" && ! grep -q 'tbv run -- <command>' "$home/.claude/agents/builder.md"; then
+  ok "agents for tools with no output-compacting hook are told to run noisy commands through tbv run"
+else
+  bad "agents for tools with no output-compacting hook are told to run noisy commands through tbv run" "$(tail -3 "$home/.copilot/agents/builder.agent.md")"
+fi
+rm -rf "$home"
+
+echo "== install.sh — an install made in ~/.claude moves to ~/.tbv =="
+home=$(mktemp -d)
+mkdir -p "$home/.claude/scripts" "$home/.claude/context-firewall" "$home/.claude/bin" "$home/.copilot/hooks" "$home/.cursor"
+printf '#!/bin/bash\necho old guard\n' > "$home/.claude/scripts/guard.sh"
+printf '#!/bin/bash\necho mine\n' > "$home/.claude/scripts/mine.sh"
+echo "commit=abc" > "$home/.claude/tbv.version"
+echo "old" > "$home/.claude/context-firewall/tbv.py"
+echo "jq" > "$home/.claude/bin/jq"
+echo '{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "~/.claude/scripts/guard.sh"}]},
+  {"matcher": "Bash", "hooks": [{"type": "command", "command": "~/.claude/scripts/tbv pre", "timeout": 15}]},
+  {"hooks": [{"type": "command", "command": "~/.claude/scripts/mine.sh"}]}]}}' > "$home/.claude/settings.json"
+jq -n --arg s "$home/.claude/scripts" '{hooks: {PreToolUse: [{type: "command", command: ($s + "/guard.sh"), timeout: 60}]}}' > "$home/.copilot/hooks/tbv.json"
+jq -n --arg s "$home/.claude/scripts" '{version: 1, hooks: {preToolUse: [{command: ($s + "/guard.sh"), failClosed: true}]}}' > "$home/.cursor/hooks.json"
+status=0; out=$(HOME="$home" TBV_OFFLINE=1 TBV_TOOLS=claude,copilot,cursor "$INSTALL" 2>&1) || status=$?
+s="$home/.claude/settings.json"
+if [ "$status" -eq 0 ] && [ "$(jq -c '[.hooks.PreToolUse[].hooks[].command]' "$s")" = '["~/.tbv/scripts/guard.sh","~/.tbv/scripts/tbv pre","~/.claude/scripts/mine.sh","~/.tbv/scripts/vault-guard.sh"]' ]; then
+  ok "settings.json hooks that ran tbv's scripts from ~/.claude now run them from ~/.tbv, once each, and your own hook is untouched"
+else
+  bad "settings.json hooks that ran tbv's scripts from ~/.claude now run them from ~/.tbv, once each, and your own hook is untouched" "exit $status: $(jq -c '.hooks.PreToolUse' "$s") $out"
+fi
+if [ "$(cat "$home"/.claude/tbv-legacy.bak-*/scripts/guard.sh | tail -1)" = "echo old guard" ] && [ "$(cat "$home"/.claude/tbv-legacy.bak-*/tbv.version)" = "commit=abc" ] \
+   && [ "$(cat "$home"/.claude/tbv-legacy.bak-*/context-firewall/tbv.py)" = "old" ] && [ ! -e "$home/.claude/tbv.version" ] && [ ! -e "$home/.claude/context-firewall" ] \
+   && [ "$(tail -1 "$home/.claude/scripts/mine.sh")" = "echo mine" ] && [ ! -L "$home/.claude/scripts/mine.sh" ] \
+   && [ -f "$home/.tbv/bin/jq" ] && [ -f "$home/.tbv/tbv.version" ] && echo "$out" | grep -q 'moved the install from ~/.claude to ~/.tbv'; then
+  ok "the old scripts, firewall and version record move to a backup, never deleted; a script of yours stays where it was"
+else
+  bad "the old scripts, firewall and version record move to a backup, never deleted; a script of yours stays where it was" "$(ls "$home/.claude" "$home/.claude/scripts") $out"
+fi
+case "$(uname -s)" in
+  MINGW*|MSYS*|CYGWIN*) echo "  SKIP  old script paths as links (Git Bash copies instead of linking)" ;;
+  *)
+    if [ -L "$home/.claude/scripts/gate.sh" ] && cmp -s "$home/.claude/scripts/gate.sh" "$ROOT/scripts/gate.sh" && cmp -s "$home/.claude/scripts/guard.sh" "$ROOT/scripts/guard.sh"; then
+      ok "each old script path under .claude/scripts links to the new copy, so a project's old gate lines still run"
+    else
+      bad "each old script path under .claude/scripts links to the new copy, so a project's old gate lines still run" "$(find "$home/.claude/scripts" -maxdepth 1 | head -5)"
+    fi ;;
+esac
+if [ "$(jq -r '.hooks.PreToolUse[0].command' "$home/.copilot/hooks/tbv.json" | tr -d '\r')" = "$home/.tbv/scripts/guard.sh" ] && ls "$home"/.copilot/hooks/tbv.json.bak-* >/dev/null 2>&1 \
+   && [ "$(jq -r '.hooks.preToolUse[0].command' "$home/.cursor/hooks.json" | tr -d '\r')" = "$home/.tbv/scripts/guard.sh" ] && ls "$home"/.cursor/hooks.json.bak-* >/dev/null 2>&1; then
+  ok "Copilot and Cursor hook files that only ran the old scripts are replaced, with the old file kept beside them"
+else
+  bad "Copilot and Cursor hook files that only ran the old scripts are replaced, with the old file kept beside them" "$(ls "$home/.copilot/hooks" "$home/.cursor")"
+fi
+before=$(jq -cS . "$s")
+out=$(HOME="$home" TBV_OFFLINE=1 TBV_TOOLS=claude,copilot,cursor "$INSTALL" 2>&1)
+if [ "$(jq -cS . "$s")" = "$before" ] && ! echo "$out" | grep -q 'moved the install' && [ "$(find "$home/.claude" -maxdepth 1 -name 'tbv-legacy.bak-*' | wc -l | tr -d ' ')" = "1" ]; then
+  ok "a second install after the move changes nothing and moves nothing again"
+else
+  bad "a second install after the move changes nothing and moves nothing again" "$out"
+fi
+rm -rf "$home"
+
+echo "== cloud-agent.sh — what GitHub Copilot's cloud agent reads from the repo =="
+CLOUD="$ROOT/scripts/cloud-agent.sh"
+proj=$(mktemp -d)
+status=0; out=$("$CLOUD" --source https://github.com/example/tbv --ref 0123abc "$proj" 2>&1) || status=$?
+wf="$proj/.github/workflows/copilot-setup-steps.yml"
+if [ "$status" -eq 0 ] && grep -q '^  copilot-setup-steps:$' "$wf" && grep -q 'git clone -q https://github.com/example/tbv ' "$wf" \
+   && grep -q 'checkout -q --detach 0123abc$' "$wf" && grep -q 'TBV_TOOLS=copilot ' "$wf" && ! grep -q '#' "$wf"; then
+  ok "the setup workflow has the job name the cloud agent looks for and installs tbv at a pinned commit"
+else
+  bad "the setup workflow has the job name the cloud agent looks for and installs tbv at a pinned commit" "exit $status: $out $(cat "$wf" 2>/dev/null)"
+fi
+ph="$proj/.github/hooks/tbv.json"
+if jq -e '.version == 1 and (.hooks | keys == ["PostToolUse","PreToolUse","SessionStart","Stop","SubagentStop"])
+     and ([.hooks[][] | .bash == .command and .timeoutSec == 60 and .powershell == "exit 0"] | all)
+     and (.hooks.PreToolUse[0].bash | contains(".tbv/scripts/guard.sh"))' "$ph" >/dev/null 2>&1; then
+  ok "the project hooks file runs the same scripts on the same events as the user-level one"
+else
+  bad "the project hooks file runs the same scripts on the same events as the user-level one" "$(cat "$ph" 2>/dev/null)"
+fi
+cmd=$(jq -r '.hooks.PreToolUse[0].bash' "$ph" | tr -d '\r')
+payload='{"hook_event_name":"PreToolUse","tool_name":"bash","tool_input":{"command":"git push --force origin main"}}'
+chome=$(mktemp -d)
+mkdir -p "$chome/.tbv"
+cp -R "$ROOT/scripts" "$chome/.tbv/scripts"
+status=0; out=$(printf '%s' "$payload" | HOME="$chome" GITHUB_ACTIONS=true bash -c "$cmd" 2>&1) || status=$?
+if [ "$status" -eq 2 ] && echo "$out" | grep -q BLOCKED && echo "$out" | grep -q '"permissionDecision":"deny"'; then
+  ok "on the runner the project hook runs guard.sh, which blocks the Copilot CLI's bash tool and answers with a deny decision"
+else
+  bad "on the runner the project hook runs guard.sh, which blocks the Copilot CLI's bash tool and answers with a deny decision" "exit $status: $out"
+fi
+mkdir -p "$chome/.copilot/hooks" && echo '{}' > "$chome/.copilot/hooks/tbv.json"
+status=0; out=$(printf '%s' "$payload" | HOME="$chome" bash -c "$cmd" 2>&1) || status=$?
+if [ "$status" -eq 0 ] && [ -z "$out" ]; then
+  ok "on a machine with the user-level hooks the project hook stands down, so nothing runs twice"
+else
+  bad "on a machine with the user-level hooks the project hook stands down, so nothing runs twice" "exit $status: $out"
+fi
+empty=$(mktemp -d)
+status=0; out=$(printf '%s' "$payload" | HOME="$empty" GITHUB_ACTIONS=true bash -c "$cmd" 2>&1) || status=$?
+if [ "$status" -eq 2 ] && echo "$out" | grep -q 'not installed on this runner'; then
+  ok "a runner where the setup step failed blocks every tool call instead of working unguarded"
+else
+  bad "a runner where the setup step failed blocks every tool call instead of working unguarded" "exit $status: $out"
+fi
+status=0; out=$(printf '%s' "$payload" | HOME="$empty" env -u GITHUB_ACTIONS bash -c "$cmd" 2>&1) || status=$?
+if [ "$status" -eq 0 ]; then
+  ok "a teammate's machine without tbv is not blocked by the project hook"
+else
+  bad "a teammate's machine without tbv is not blocked by the project hook" "exit $status: $out"
+fi
+rm -rf "$chome" "$empty"
+before=$(cat "$wf" "$ph")
+out=$("$CLOUD" --source https://github.com/example/tbv --ref 0123abc "$proj" 2>&1)
+if [ "$(cat "$wf" "$ph")" = "$before" ] && ! echo "$out" | grep -q '^wrote' && [ ! -e "$proj/.github/agents" ]; then
+  ok "a second run rewrites nothing, and no agents are written unless asked for"
+else
+  bad "a second run rewrites nothing, and no agents are written unless asked for" "$out"
+fi
+"$CLOUD" --with-agents --source https://github.com/example/tbv --ref 0123abc "$proj" >/dev/null 2>&1
+if [ -f "$proj/.github/agents/orchestrator.agent.md" ] && [ -f "$proj/.github/agents/builder.agent.md" ]; then
+  ok "--with-agents puts the Copilot agents in .github/agents, where the cloud agent finds them"
+else
+  bad "--with-agents puts the Copilot agents in .github/agents, where the cloud agent finds them" "$(ls "$proj/.github")"
+fi
+printf 'name: mine\njobs:\n  copilot-setup-steps:\n    runs-on: ubuntu-latest\n' > "$wf"
+out=$("$CLOUD" --source https://github.com/example/tbv --ref 0123abc "$proj" 2>&1)
+if [ "$(head -1 "$wf")" = "name: mine" ] && [ -f "$wf.tbv-new" ] && echo "$out" | grep -q 'kept your'; then
+  ok "a setup workflow of your own is kept, with tbv's beside it to merge"
+else
+  bad "a setup workflow of your own is kept, with tbv's beside it to merge" "$out"
+fi
+for bad_source in /home/me/tbv 'https://x/y; rm -rf z'; do
+  status=0; out=$("$CLOUD" --source "$bad_source" --ref 0123abc "$proj" 2>&1) || status=$?
+  if [ "$status" -eq 1 ]; then ok "refuses a source a runner can't clone or a step can't carry safely: $bad_source"; else bad "refuses a source a runner can't clone or a step can't carry safely: $bad_source" "exit $status: $out"; fi
+done
+status=0
+# shellcheck disable=SC2016
+out=$("$CLOUD" --source https://github.com/example/tbv --ref '$(id)' "$proj" 2>&1) || status=$?
+if [ "$status" -eq 1 ]; then ok "refuses a ref that isn't a commit, tag or branch name"; else bad "refuses a ref that isn't a commit, tag or branch name" "exit $status: $out"; fi
+rm -rf "$proj"
+
+echo "== guard.sh — Copilot CLI and Cursor agents =="
+repo=$(make_vault_repo)
+status=0; out=$(jq -n --arg cwd "$repo" '{hook_event_name: "PreToolUse", cwd: $cwd, tool_name: "view", tool_input: {path: ".env"}}' | "$GUARD" 2>&1) || status=$?
+if [ "$status" -eq 2 ]; then ok "the Copilot CLI's view tool can't read .env"; else bad "the Copilot CLI's view tool can't read .env" "exit $status: $out"; fi
+expect_block "an agent can't unset CURSOR_AGENT to pass for a human" guard_in "$repo" 'unset CURSOR_AGENT; true'
+rm -rf "$repo"
+for marker in CURSOR_AGENT COPILOT_AGENT TBV_AGENT; do
+  status=0; out=$(env -u CLAUDECODE "$marker=1" "$ROOT/scripts/approve-risk.sh" merge S001 2>&1) || status=$?
+  if [ "$status" -eq 1 ] && echo "$out" | grep -q "agent's shell ($marker is set)"; then ok "approve-risk.sh refuses when $marker is set"; else bad "approve-risk.sh refuses when $marker is set" "exit $status: $out"; fi
+done
+status=0; out=$(env -u CLAUDECODE CURSOR_AGENT=1 "$ROOT/scripts/approve-ui.sh" vault/ui/x/contract.md 2>&1) || status=$?
+if [ "$status" -eq 1 ] && echo "$out" | grep -q "agent's shell (CURSOR_AGENT is set)"; then ok "approve-ui.sh refuses inside a Cursor agent's shell"; else bad "approve-ui.sh refuses inside a Cursor agent's shell" "exit $status: $out"; fi
+
 echo "== codebase map wiring =="
 if grep -q 'codebase-graph.py impact --base main' "$ROOT/skills/blast-radius/SKILL.md"; then ok "blast-radius starts from the impact block"; else bad "blast-radius starts from the impact block" "missing"; fi
 if grep -q 'codebase-graph.py build' "$ROOT/skills/architecture-review/SKILL.md"; then ok "architecture-review builds the map first"; else bad "architecture-review builds the map first" "missing"; fi
 if grep -q '^DESIGN: complexity' "$ROOT/agents/reviewer.md"; then ok "reviewer reports a DESIGN line"; else bad "reviewer reports a DESIGN line" "missing"; fi
-if grep -q 'vault/architecture.json' "$ROOT/skills/grill/SKILL.md" && grep -q 'architecture.json' "$ROOT/CLAUDE.md"; then ok "grill and protocol name the fitness rules file"; else bad "grill and protocol name the fitness rules file" "missing"; fi
+if grep -q 'vault/architecture.json' "$ROOT/skills/grill/SKILL.md" && grep -q 'architecture.json' "$ROOT/PROTOCOL.md"; then ok "grill and protocol name the fitness rules file"; else bad "grill and protocol name the fitness rules file" "missing"; fi
 if grep -q 'scripts/\*.html' "$INSTALL"; then ok "install.sh ships the graph viewer template"; else bad "install.sh ships the graph viewer template" "missing"; fi
 
 echo ""

@@ -34,7 +34,7 @@ FAILURES
    E       AssertionError: assert 'abc-r' == 'abc-refreshed'
    (raw L73-83; --failure 1)
 ...
-[tbv] full output: ~/.claude/scripts/tbv artifact art-2cb9dfecf0 [--section NAME | --lines A-B | --raw]
+[tbv] full output: ~/.tbv/scripts/tbv artifact art-2cb9dfecf0 [--section NAME | --lines A-B | --raw]
 ```
 
 The header carries the provenance: output type, artifact id, exit code, which parser
@@ -50,10 +50,15 @@ does any output the firewall can't make smaller.
 
 | Path | When | What |
 |---|---|---|
-| `PreToolUse` hook (`~/.claude/scripts/tbv pre`) | A Bash call that is **one simple command** of a compressible type (tests, builds, linters, `git diff/log/status`, `rg`/`grep`, `find`/`tree`/`ls -R`) | Rewrites it to `tbv run --session <id> -- <the same command>`, so the command's own output is already compact. This is the only path that works for a **failing** command, because Claude Code reports a non-zero exit through `PostToolUseFailure`, which can't replace output. |
-| `PostToolUse` hook (`~/.claude/scripts/tbv hook`) | Every other Bash/PowerShell call that succeeds (pipes, `&&` chains, unknown tools) | Stores the result and replaces what the model sees via `updatedToolOutput`, keeping the same shape (`stdout` = the compact view, `stderr` = ""). It also records Edit/Write targets as the session's active files, which ranking uses. |
+| `PreToolUse` hook (`~/.tbv/scripts/tbv pre`) | A Bash call that is **one simple command** of a compressible type (tests, builds, linters, `git diff/log/status`, `rg`/`grep`, `find`/`tree`/`ls -R`) | Rewrites it to `tbv run --session <id> -- <the same command>`, so the command's own output is already compact. This is the only path that works for a **failing** command, because Claude Code reports a non-zero exit through `PostToolUseFailure`, which can't replace output. |
+| `PostToolUse` hook (`~/.tbv/scripts/tbv hook`) | Every other Bash/PowerShell call that succeeds (pipes, `&&` chains, unknown tools) | Stores the result and replaces what the model sees via `updatedToolOutput`, keeping the same shape (`stdout` = the compact view, `stderr` = ""). It also records Edit/Write targets as the session's active files, which ranking uses. |
 | `gate.sh` failure excerpts | A gate step fails | The ≤ `GATE_EXCERPT_LINES` excerpt comes from the test/build/lint compressor instead of `grep`, with no cross-call dedup. Falls back to the old grep/tail excerpt when Python is missing or the log is small. `GATE_FIREWALL=0` turns it off. |
 | `tbv run -- <cmd>` | Cursor, Copilot, a plain terminal, PowerShell | Runs the command, stores it, prints the compact view and exits with the command's exit code. |
+
+The two hooks are Claude Code's: it is the only one of the supported tools whose
+`PostToolUse` hook can replace what the model sees. Under Cursor and GitHub Copilot the
+explicit form does the same job, and the generated agents and the AGENTS.md block tell
+the agent to use it: `~/.tbv/scripts/tbv run -- <command>`.
 
 Both hook paths were checked end to end against Claude Code 2.1.289 in headless mode:
 - a failing `pytest` run arrived at the model as the compact view
@@ -138,7 +143,7 @@ tbv prune --days 14                drop old artifacts and orphaned blobs
 tbv config                         effective settings
 ```
 
-`~/.claude/scripts/tbv` (bash) and `tbv.ps1` (PowerShell) find a Python 3.8+:
+`~/.tbv/scripts/tbv` (bash) and `tbv.ps1` (PowerShell) find a Python 3.8+:
 `$PYTHON`, then `python3`, `python`, `py -3`. Each candidate is tested before use, so
 the Windows Store `python3` stub is skipped.
 

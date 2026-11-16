@@ -39,7 +39,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/.claude/scripts/session-start.sh"
+            "command": "~/.tbv/scripts/session-start.sh"
           }
         ]
       }
@@ -49,7 +49,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/.claude/scripts/guard.sh"
+            "command": "~/.tbv/scripts/guard.sh"
           }
         ]
       },
@@ -57,7 +57,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/.claude/scripts/vault-guard.sh"
+            "command": "~/.tbv/scripts/vault-guard.sh"
           }
         ]
       },
@@ -66,7 +66,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/.claude/scripts/tbv pre",
+            "command": "~/.tbv/scripts/tbv pre",
             "timeout": 15
           }
         ]
@@ -78,7 +78,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/.claude/scripts/lint.sh"
+            "command": "~/.tbv/scripts/lint.sh"
           }
         ]
       },
@@ -86,7 +86,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/.claude/scripts/vault-guard.sh"
+            "command": "~/.tbv/scripts/vault-guard.sh"
           }
         ]
       },
@@ -95,7 +95,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/.claude/scripts/tbv hook",
+            "command": "~/.tbv/scripts/tbv hook",
             "timeout": 15
           }
         ]
@@ -106,7 +106,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/.claude/scripts/checkpoint.sh"
+            "command": "~/.tbv/scripts/checkpoint.sh"
           }
         ]
       }
@@ -116,7 +116,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/.claude/scripts/vault-guard.sh"
+            "command": "~/.tbv/scripts/vault-guard.sh"
           }
         ]
       }
@@ -126,7 +126,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/.claude/scripts/vault-guard.sh"
+            "command": "~/.tbv/scripts/vault-guard.sh"
           }
         ]
       }

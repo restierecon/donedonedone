@@ -76,17 +76,17 @@ for variant in coverage pytest-cov; do
   git -C "$repo" init -q -b main
   git -C "$repo" config user.email test@test
   git -C "$repo" config user.name test
-  HOME="$install_home" "$PY" "$install_home/.claude/scripts/detect-gates.py" --apply "$repo" >/dev/null
+  HOME="$install_home" "$PY" "$install_home/.tbv/scripts/detect-gates.py" --apply "$repo" >/dev/null
   git -C "$repo" add -A
   git -C "$repo" commit -q -m "sample project"
-  status=0; out=$(cd "$repo" && HOME="$install_home" "$install_home/.claude/scripts/gate.sh" test crap 2>&1) || status=$?
+  status=0; out=$(cd "$repo" && HOME="$install_home" "$install_home/.tbv/scripts/gate.sh" test crap 2>&1) || status=$?
   if [ "$status" -eq 0 ] && echo "$out" | grep -q "^crap PASS"; then
     ok "python ($variant): the detected gate.test and gate.crap pass on main"
   else
     bad "python ($variant): the detected gate.test and gate.crap pass on main" "exit $status: $out"
   fi
   branch_with "$repo" slice/risky add_risky src/shop/shipping.py
-  status=0; out=$(cd "$repo" && HOME="$install_home" "$install_home/.claude/scripts/gate.sh" test crap 2>&1) || status=$?
+  status=0; out=$(cd "$repo" && HOME="$install_home" "$install_home/.tbv/scripts/gate.sh" test crap 2>&1) || status=$?
   if [ "$status" -eq 1 ] && echo "$out" | grep -q "^  src/shop/shipping.py:[0-9]* .*shipping 42.0$" && [ -z "$(git -C "$repo" status --porcelain)" ]; then
     ok "python ($variant): the detected lines fail an untested complexity-6 function at CRAP 42 and leave the tree clean"
   else

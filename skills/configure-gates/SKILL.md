@@ -11,7 +11,7 @@ live-verified evidence) or it waits on a human merge approval. This skill sets u
 step the repo can support today and turns the rest into planned work.
 
 Under Cursor or Copilot without a skill loader, read this file from
-`~/.claude/skills/configure-gates/SKILL.md`; everything it asks for is scripts and files.
+`~/.tbv/skills/configure-gates/SKILL.md`; everything it asks for is scripts and files.
 
 ## When
 - /init-codebase (it runs the detector before its question round, and this skill after
@@ -21,7 +21,7 @@ Under Cursor or Copilot without a skill loader, read this file from
 - After a tooling slice merges, or the human says a TOOL item is installed.
 
 ## 1. Detect — read-only, ≤ 20 lines, run it yourself
-`python3 ~/.claude/scripts/detect-gates.py` (`python` on Windows) from the main
+`python3 ~/.tbv/scripts/detect-gates.py` (`python` on Windows) from the main
 checkout. It reads only the repo's manifests and config, plus `PATH` for machine tools:
 
 | Line | Means | You |
@@ -40,7 +40,7 @@ checkout. It reads only the repo's manifests and config, plus `PATH` for machine
    a second run changes nothing.
 2. Commit vault/project.md and .gitignore alone:
    `chore(gate): configure gate commands`.
-3. Run `~/.claude/scripts/gate.sh` once on main, in a background subagent if
+3. Run `~/.tbv/scripts/gate.sh` once on main, in a background subagent if
    `gate.mutation` was written (a mutation run tests every mutant). Each written step
    must PASS. `crap` and `mutation` pass on main with "the diff touches no ..." —
    that still proves the command runs and prints the format the gate parses.

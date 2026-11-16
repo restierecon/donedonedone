@@ -14,12 +14,12 @@ human.
 ## Inputs
 The trigger (5-slice counter, or a RETRO DUE line naming a category and slices), the
 Director's `risk-gate.sh calibrate` output (≤ 20 lines, pasted in the brief) and paths: vault/log.jsonl, vault/flags/pending-review.md, vault/decisions/,
-vault/project.md. The installed setup lives in ~/.claude/ (CLAUDE.md, agents/,
+vault/project.md. The installed setup lives in ~/.tbv/ (PROTOCOL.md, agents/,
 skills/, scripts/) — read it there to check what a rule currently says. If your editor
 won't read outside the workspace (Cursor and Copilot may not), the protocol text is in
 the project's AGENTS.md; name targets by their setup-repo path (agents/builder.md,
 scripts/gate.sh) either way.
-When a log line's signal is too thin to trace, Claude Code keeps the session
+When a log line's signal is too thin to trace and the session runs in Claude Code, it keeps the session
 transcripts in `~/.claude/projects/<slug>/`, where `<slug>` is the workspace path with
 every non-alphanumeric character turned into `-`; subagent runs sit under
 `<session-id>/subagents/*.jsonl`. Take the newest first and confirm one by finding the

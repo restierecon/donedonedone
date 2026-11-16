@@ -74,7 +74,7 @@ class Settings:
 
 
 def default_command() -> str:
-    return os.environ.get("TBV_COMMAND") or "~/.claude/scripts/tbv"
+    return os.environ.get("TBV_COMMAND") or "~/.tbv/scripts/tbv"
 
 
 def _merge(base: Dict[str, Any], extra: Dict[str, Any]) -> Dict[str, Any]:

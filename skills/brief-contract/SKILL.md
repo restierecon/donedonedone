@@ -32,7 +32,7 @@ SCOPE: may write <paths>; may NOT write <paths>. Work only inside <worktree>.
 ACCEPTANCE:
 1. <criterion>
 2. <criterion>
-VERIFY: ~/.claude/scripts/gate.sh at your final commit; report the SHA.
+VERIFY: ~/.tbv/scripts/gate.sh at your final commit; report the SHA.
 FORBIDDEN: merging, force-push, editing vault/task-tree.json, new deps without justification.
 REPORT: manifest output format, ≤ 20 lines.
 STANDING:
@@ -59,7 +59,7 @@ A builder brief in a project with vault/task-tree.json also starts with
 `RISK: <class> — <scope.change>; unchanged: <...>; rollback: <...>` line whose class
 is the one `risk-gate.sh assess <ID>` printed. Before the spawn runs, guard.sh runs
 `risk-gate.sh check <ID> build`: an unrecorded or changed assessment, a critical slice
-without a human authorization, a RISK line naming another class, or `model: sonnet` on
+without a human authorization, a RISK line naming another class, or an economy model (`sonnet`, `fast`) on
 an elevated-or-higher slice refuses the spawn. guard.sh also reads that
 slice's `auditor_triggers`:
 - `[]` — nothing more to add.

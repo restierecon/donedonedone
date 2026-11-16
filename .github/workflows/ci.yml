@@ -154,7 +154,7 @@ jobs:
         shell: pwsh
         working-directory: ${{ runner.temp }}/demo
         run: |
-          & "$env:ProgramFiles\Git\bin\bash.exe" -c '~/.claude/scripts/gate.sh test -- one ''two words'''
+          & "$env:ProgramFiles\Git\bin\bash.exe" -c '~/.tbv/scripts/gate.sh test -- one ''two words'''
           if ($LASTEXITCODE -ne 0) { exit 1 }
           $log = (Get-Content -Raw .gate/test.log).Trim()
           if ($log -ne '<one><two words>') { Write-Error "test.log was: $log"; exit 1 }
@@ -163,7 +163,7 @@ jobs:
         shell: powershell
         working-directory: ${{ runner.temp }}/demo
         run: |
-          & "$env:ProgramFiles\Git\bin\bash.exe" -c '~/.claude/scripts/gate.sh test -- one ''two words'''
+          & "$env:ProgramFiles\Git\bin\bash.exe" -c '~/.tbv/scripts/gate.sh test -- one ''two words'''
           if ($LASTEXITCODE -ne 0) { exit 1 }
           $log = (Get-Content -Raw .gate/test.log).Trim()
           if ($log -ne '<one><two words>') { Write-Error "test.log was: $log"; exit 1 }
@@ -172,7 +172,7 @@ jobs:
         shell: pwsh
         working-directory: ${{ runner.temp }}/demo
         run: |
-          $out = & "$env:ProgramFiles\Git\bin\bash.exe" -c '~/.claude/scripts/gate.sh crap'
+          $out = & "$env:ProgramFiles\Git\bin\bash.exe" -c '~/.tbv/scripts/gate.sh crap'
           if ($LASTEXITCODE -ne 0) { Write-Error ($out -join "`n"); exit 1 }
           if (-not ($out -match 'crap PASS .* highest touched: f 2\.5')) { Write-Error ($out -join "`n"); exit 1 }
       - name: gate.sh crap step from Windows PowerShell 5.1 through Git Bash
@@ -180,7 +180,7 @@ jobs:
         shell: powershell
         working-directory: ${{ runner.temp }}/demo
         run: |
-          $out = & "$env:ProgramFiles\Git\bin\bash.exe" -c '~/.claude/scripts/gate.sh crap'
+          $out = & "$env:ProgramFiles\Git\bin\bash.exe" -c '~/.tbv/scripts/gate.sh crap'
           if ($LASTEXITCODE -ne 0) { Write-Error ($out -join "`n"); exit 1 }
           if (-not ($out -match 'crap PASS .* highest touched: f 2\.5')) { Write-Error ($out -join "`n"); exit 1 }
       - name: gate.sh mutation step from PowerShell 7 through Git Bash
@@ -188,6 +188,6 @@ jobs:
         shell: pwsh
         working-directory: ${{ runner.temp }}/demo
         run: |
-          $out = & "$env:ProgramFiles\Git\bin\bash.exe" -c '~/.claude/scripts/gate.sh mutation'
+          $out = & "$env:ProgramFiles\Git\bin\bash.exe" -c '~/.tbv/scripts/gate.sh mutation'
           if ($LASTEXITCODE -ne 0) { Write-Error ($out -join "`n"); exit 1 }
           if (-not ($out -match 'mutation PASS .* score 100% on 1 touched mutants')) { Write-Error ($out -join "`n"); exit 1 }

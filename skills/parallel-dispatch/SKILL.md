@@ -23,7 +23,7 @@ lists the ones that can't: unrecorded, or critical and waiting on a human). They
 up to `max_parallel_slices` (vault/project.md, default 3) at once:
 
 1. For each: `git worktree add .worktrees/<ID> -b slice/<ID>` from main, then run the
-   project's dependency-install step inside that worktree (see project CLAUDE.md) — a
+   project's dependency-install step inside that worktree (see the project specifics in AGENTS.md or the project CLAUDE.md) — a
    fresh worktree has no installed environment; gates can't run until it does.
 2. Fire that many `builder` Agent calls in a single message, one per worktree —
    instruct each to work only inside its assigned worktree path (the Agent tool has no

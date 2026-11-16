@@ -31,7 +31,11 @@ esac
 
 block() {
   echo "$1" >&2
-  [ "$cursor" -eq 1 ] && jq -cn --arg m "$1" '{permission: "deny", agent_message: $m, user_message: $m, agentMessage: $m, userMessage: $m}'
+  if [ "$cursor" -eq 1 ]; then
+    jq -cn --arg m "$1" '{permission: "deny", agent_message: $m, user_message: $m, agentMessage: $m, userMessage: $m}'
+  elif [ "$event" = "PreToolUse" ]; then
+    jq -cn --arg m "$1" '{permissionDecision: "deny", permissionDecisionReason: $m, hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: $m}}'
+  fi
   exit 2
 }
 allow() {
@@ -40,9 +44,9 @@ allow() {
 }
 
 case "$tool" in
-  Bash|Shell|runTerminalCommand|run_in_terminal|send_to_terminal|create_and_run_task) tool="Bash" ;;
-  Agent|Task|runSubagent) tool="Agent" ;;
-  Read|Grep|Glob|LS|NotebookRead|read_file|readFile|list_dir|listDirectory|file_search|grep_search) tool="Read" ;;
+  Bash|Shell|bash|shell|runTerminalCommand|run_in_terminal|send_to_terminal|create_and_run_task) tool="Bash" ;;
+  Agent|Task|task|runSubagent) tool="Agent" ;;
+  Read|Grep|Glob|LS|NotebookRead|view|grep|glob|read_file|readFile|list_dir|listDirectory|file_search|grep_search) tool="Read" ;;
   *)
     if [ -n "$cmd" ]; then tool="Bash"
     elif [ -n "$file_path" ]; then tool="Write"
@@ -137,7 +141,7 @@ vault_project() {
   [ -d "$(dirname "$common")/vault" ]
 }
 
-HUMAN_ONLY_MSG="BLOCKED: approvals and the risk policy are human-only. A human runs ~/.claude/scripts/approve-risk.sh or approve-ui.sh in their own terminal, never through an agent, and edits vault/risk-policy.json themselves. Tell the human what needs their decision and continue with other work."
+HUMAN_ONLY_MSG="BLOCKED: approvals and the risk policy are human-only. A human runs ~/.tbv/scripts/approve-risk.sh or approve-ui.sh in their own terminal, never through an agent, and edits vault/risk-policy.json themselves. Tell the human what needs their decision and continue with other work."
 
 human_only_path() {
   echo "$1" | lower | grep -qE '(^|/)vault/risk-policy\.json$|(^|/)\.git/(tbv|skeletoncrew-vault-guard)(/|$)'
@@ -186,11 +190,11 @@ file_forms() {
   resolve_file "$p"
 }
 
-FAKE_HUMAN_MSG="BLOCKED: in a vault project an agent may not allocate a pseudo-terminal or scrub its environment (script, expect, unbuffer, pty, CLAUDECODE, env -i) — those are the means to pass for a human at approve-risk.sh. Tell the human what needs their decision and continue with other work."
+FAKE_HUMAN_MSG="BLOCKED: in a vault project an agent may not allocate a pseudo-terminal or scrub its environment (script, expect, unbuffer, pty, CLAUDECODE, CURSOR_AGENT, COPILOT_AGENT, TBV_AGENT, env -i) — those are the means to pass for a human at approve-risk.sh. Tell the human what needs their decision and continue with other work."
 
 fakes_human() {
   local seg words
-  printf '%s\n' "$1" | grep -qE 'claudecode|(^|[^[:alnum:]_])(pty\.(spawn|fork|openpty)|forkpty|openpty|import[[:space:]]+pty|from[[:space:]]+pty|pexpect|node-pty|posix_openpt)([^[:alnum:]_]|$)|(^|[^[:alnum:]_-])env[[:space:]]+(-[a-z]*i|--ignore-environment)([[:space:]]|$)' && return 0
+  printf '%s\n' "$1" | grep -qE 'claudecode|cursor_agent|copilot_agent|tbv_agent|(^|[^[:alnum:]_])(pty\.(spawn|fork|openpty)|forkpty|openpty|import[[:space:]]+pty|from[[:space:]]+pty|pexpect|node-pty|posix_openpt)([^[:alnum:]_]|$)|(^|[^[:alnum:]_-])env[[:space:]]+(-[a-z]*i|--ignore-environment)([[:space:]]|$)' && return 0
   while IFS= read -r seg; do
     read -ra words <<< "$seg"
     case "${words[0]:-}" in script|unbuffer|expect|socat|empty|ptyrun|faketty|winpty) return 0 ;; esac
@@ -393,13 +397,14 @@ $(printf '%s\n' "$out" | tail -16)"
     || block "BLOCKED: slice $slice is $class risk, so the builder brief needs a line 'RISK: $class — <scope, unchanged behavior, rollback>' (brief-contract skill; got '${brief_class:-none}')."
   model=$(field '.tool_input.model' | lower)
   case "$class:$model" in
-    elevated:*sonnet*|elevated:*haiku*|high:*sonnet*|high:*haiku*|critical:*sonnet*|critical:*haiku*)
+    low:*|moderate:*|*:|*:inherit) ;;
+    *:*economy*|*:*sonnet*|*:*haiku*|*:*fast*|*:*mini*|*:*nano*|*:*flash*|*:*lite*)
       block "BLOCKED: slice $slice is $class risk; its builder inherits the session model (drop model: $model)." ;;
   esac
 }
 
 if [ "$tool" = "Agent" ]; then
-  subagent=$(field '.tool_input.subagent_type // .tool_input.agentName')
+  subagent=$(field '.tool_input.subagent_type // .tool_input.agentName // .tool_input.agent_type')
   case "$subagent" in
     builder|reviewer|auditor|tester)
       prompt=$(field '.tool_input.prompt')

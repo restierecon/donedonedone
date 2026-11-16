@@ -97,7 +97,7 @@ class SetupLens:
             if m:
                 self.add_component(m.group(1)[:-1], m.group(2), path)
         parent = posixpath.dirname(self.root.rstrip("/"))
-        for candidate in sorted({self.path("CLAUDE.md"), self.path("AGENTS.md"), posixpath.join(parent, "CLAUDE.md") if self.root else "CLAUDE.md"}):
+        for candidate in sorted({self.path("PROTOCOL.md"), self.path("CLAUDE.md"), self.path("AGENTS.md"), posixpath.join(parent, "CLAUDE.md") if self.root else "CLAUDE.md"}):
             if candidate in texts:
                 record = entity("protocol:" + candidate, "protocol", posixpath.basename(candidate), path=candidate,
                                 description="Loaded into every session — what it names is always in play")
@@ -233,8 +233,11 @@ class SetupLens:
             eid = "event:%s%s" % (self.root, value)
             return eid if eid in self.entities else None
         if kind == "protocol":
-            path = self.path(value or "CLAUDE.md")
-            return "protocol:" + path if "protocol:" + path in self.entities else None
+            for name in ([value] if value else ["PROTOCOL.md", "CLAUDE.md"]):
+                path = self.path(name)
+                if "protocol:" + path in self.entities:
+                    return "protocol:" + path
+            return None
         return None
 
     def load_workflow(self):

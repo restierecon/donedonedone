@@ -43,14 +43,14 @@ check_skill() {
 for f in "$ROOT"/agents/*.md; do check_agent "$f"; done
 for f in "$ROOT"/skills/*/SKILL.md; do check_skill "$f"; done
 
-table_agents=$(sed -n '/^## Agents$/,/^## /p' "$ROOT/CLAUDE.md" | grep -oE '^\| [a-z]+ ' | tr -d '| ')
+table_agents=$(sed -n '/^## Agents$/,/^## /p' "$ROOT/PROTOCOL.md" | grep -oE '^\| [a-z]+ ' | tr -d '| ')
 disk_agents=$(for f in "$ROOT"/agents/*.md; do basename "$f" .md; done)
 
 for a in $table_agents; do
-  echo "$disk_agents" | grep -qx "$a" || err "CLAUDE.md Agents table references '$a' with no agents/$a.md on disk"
+  echo "$disk_agents" | grep -qx "$a" || err "PROTOCOL.md Agents table references '$a' with no agents/$a.md on disk"
 done
 for a in $disk_agents; do
-  echo "$table_agents" | grep -qx "$a" || err "agents/$a.md exists but is not listed in CLAUDE.md's Agents table"
+  echo "$table_agents" | grep -qx "$a" || err "agents/$a.md exists but is not listed in PROTOCOL.md's Agents table"
 done
 
 if [ "$fail" -eq 0 ]; then

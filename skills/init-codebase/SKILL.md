@@ -29,19 +29,19 @@ only what is missing, and always run step 6 and the configure-gates skill (step 
    renumber.", then these starting orders:
    1. Work only inside the assigned branch or worktree; never touch main directly.
    2. Never edit vault/task-tree.json or vault/log.jsonl; return verdicts as text.
-   3. Run checks only through ~/.claude/scripts/gate.sh and report the SHA it ran on.
+   3. Run checks only through ~/.tbv/scripts/gate.sh and report the SHA it ran on.
    4. No new dependency without a one-line justification in the report.
    5. Nearby improvements go in the report as flag candidates, never in the diff.
 8. Create vault/project.md by asking me (one round of questions max) for:
    - Project name and one-line purpose
    - Stack (suggest from what you see in the repo if it's not empty)
-   - Every ASK line from `python3 ~/.claude/scripts/detect-gates.py` (read-only; run
+   - Every ASK line from `python3 ~/.tbv/scripts/detect-gates.py` (read-only; run
      it before asking — `python` on Windows), and a full-suite budget in seconds if
      not the default 300. Don't ask for gate commands it already proposes.
    Then write it with these sections: Purpose · Stack · Gate — the configure-gates
    skill writes and proves the gate lines in step 11, and this is the contract they
    follow (the human's ASK answers go in as they said): one line per step, read
-   by `~/.claude/scripts/gate.sh`, omit a step the stack doesn't have (except
+   by `~/.tbv/scripts/gate.sh`, omit a step the stack doesn't have (except
    `gate.test`, which the gate requires — write `- gate.test: none` only if the
    project truly has no tests):
    `- gate.lint: <cmd>` · `- gate.types: <cmd>` · `- gate.test: <cmd>` (with a
@@ -59,12 +59,12 @@ only what is missing, and always run step 6 and the configure-gates skill (step 
    out of memory · `- gate.workers.mb: <MiB>` only as a floor: the gate measures what
    one worker peaks at and sizes by the larger ·
    `- gate.crap: <cmd>` printing `<path>:<start>-<end> <score> <name>` per function,
-   usually `~/.claude/scripts/crap-score.py <coverage report> <src dir>` reading the
+   usually `~/.tbv/scripts/crap-score.py <coverage report> <src dir>` reading the
    report `gate.test` writes (README → CRAP → Per-stack setup has Python, React and Java
    lines; gitignore the report) · `- gate.crap.max: 30` ·
    `- gate.mutation: <cmd>` printing `<path>:<line> <killed|survived|timeout|no-coverage>
    <description>` per mutant (or `no-mutants`), usually the stack's mutation tool piped
-   through `~/.claude/scripts/mutation-report.py` (README → Mutation → Per-stack setup;
+   through `~/.tbv/scripts/mutation-report.py` (README → Mutation → Per-stack setup;
    clear the tool's cache first and gitignore its output) · `- gate.mutation.min: 80`; the
    built-in `markers` and `comments` steps need no line, but add
    `- gate.comments.skip: <path prefixes>` for generated code (migrations) and
@@ -74,24 +74,31 @@ only what is missing, and always run step 6 and the configure-gates skill (step 
    Parallelism: max_parallel_slices: 3 (git-worktree parallel dispatch, see global
    protocol → Parallel Slice Dispatch) · Definition of Done (every slice independently
    testable, no TODO/FIXME, no comments, gates green).
-   Then add the harness pin: append the line `~/.claude/scripts/harness.sh pin` prints
+   Then add the harness pin: append the line `~/.tbv/scripts/harness.sh pin` prints
    (`- harness: <date> (<commit>)`) under the gate lines. A session on a machine whose
    install is older than the pin is told to update before it works on this project.
-   Merge the hook `~/.claude/scripts/harness.sh project-hook` prints into the project's
-   `.claude/settings.json` (create the file if absent; keep any hooks already there).
+   Merge the hook `~/.tbv/scripts/harness.sh project-hook` prints into the project's
+   `.claude/settings.json` (create the file if absent; keep any hooks already there)
+   when the project is worked on with Claude Code.
    It speaks only on a machine where this setup is not installed, so a teammate or a
    fresh cloud container is told what to clone instead of working without guardrails.
-9. Create a project-level CLAUDE.md containing ONLY project specifics (dependency
-   install step, anything unusual — gate commands live in project.md) — the protocol lives globally, don't repeat it.
-10. Run `~/.claude/scripts/agents-md.sh` to put the protocol into AGENTS.md — the file
-    Cursor and GitHub Copilot read (Claude Code ignores it and reads the global CLAUDE.md).
+   If GitHub Copilot's cloud agent will work on this repository, ask the human, then run
+   `~/.tbv/scripts/cloud-agent.sh` (it writes `.github/workflows/copilot-setup-steps.yml`
+   and `.github/hooks/tbv.json`; `--with-agents` adds `.github/agents/`).
+9. Put the project specifics (dependency install step, anything unusual — gate commands
+   live in project.md) at the top of AGENTS.md, above the protocol block step 10 writes;
+   Cursor and Copilot read that file. Claude Code does not: when the project is worked on
+   with it, also create a project-level CLAUDE.md with the same project specifics and
+   nothing else — never the protocol, which Claude Code already loads globally.
+10. Run `~/.tbv/scripts/agents-md.sh` to put the protocol into AGENTS.md — the file
+    Cursor and GitHub Copilot read (Claude Code reads its own copy, ~/.claude/CLAUDE.md).
     It only manages its own marked block, so an existing AGENTS.md keeps its content, and
     the session-start hook keeps the block current after upgrades.
 11. Commit: `git add -A && git commit -m "chore: init autonomous workflow vault"`.
-    Then run the configure-gates skill (~/.claude/skills/configure-gates/SKILL.md): it
+    Then run the configure-gates skill (~/.tbv/skills/configure-gates/SKILL.md): it
     writes every gate line the repo supports, proves each one on main, and turns the
     rest into one SLICE card for /grill and one TOOL card for me.
-12. Existing codebase: run `python3 ~/.claude/scripts/codebase-graph.py build` (codebase-map
+12. Existing codebase: run `python3 ~/.tbv/scripts/codebase-graph.py build` (codebase-map
     skill), read the intent docs its FACTS list, then give me an onboarding brief in the
     conversation (≤ 30 lines; nothing written to disk, so nothing goes stale). It covers
     what the project says it is, what the code shows (stack, dependencies, entry points,
@@ -105,9 +112,9 @@ only what is missing, and always run step 6 and the configure-gates skill (step 
     Show me `.gate/graph.html`. Offer once to record any boundary I name as a rule in
     vault/architecture.json (the gate's `arch` step skips until that file exists on main).
     With `gate.crap` set: run the crap-hotspots skill
-    (~/.claude/skills/crap-hotspots/SKILL.md) once for a baseline card in
+    (~/.tbv/skills/crap-hotspots/SKILL.md) once for a baseline card in
     vault/flags/pending-review.md, then commit it. Same with `gate.mutation` set: the
-    mutation-survivors skill (~/.claude/skills/mutation-survivors/SKILL.md).
+    mutation-survivors skill (~/.tbv/skills/mutation-survivors/SKILL.md).
 13. Optional, offer once: "Run /create-verification-skill to generate
     .claude/skills/verify-<project>/ so the reviewer can drive the real app?" Run it only
     on a yes (needs a runnable app — skip for an empty repo); never re-ask in later sessions.

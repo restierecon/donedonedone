@@ -24,7 +24,7 @@ earning its keep. "Vanishes" is your refactor candidate.
 1. Read vault/project.md (domain language) and vault/decisions/ FIRST — never
    re-suggest what an ADR has already rejected, unless friction has become severe
    enough to say so explicitly ("contradicts ADR-00n, but worth reopening because…").
-2. Run `python3 ~/.claude/scripts/codebase-graph.py build` (codebase-map skill), with
+2. Run `python3 ~/.tbv/scripts/codebase-graph.py build` (codebase-map skill), with
    `--rules vault/architecture.json` if that file exists and `--coverage` if the project
    writes a report. Its flagged modules (cycles, rule violations, hubs, hotspots,
    untested code) seed the explore subagent's list, and each `why` line is a card's
@@ -41,7 +41,7 @@ earning its keep. "Vanishes" is your refactor candidate.
      three reached → extraction candidate)
    - Code untestable through its current interface
    - With `gate.crap` set in project.md: the repo-wide CRAP hotspots, measured and
-     classified per the crap-hotspots skill (~/.claude/skills/crap-hotspots/SKILL.md)
+     classified per the crap-hotspots skill (~/.tbv/skills/crap-hotspots/SKILL.md)
 4. For each candidate, one card: Files · Problem (in domain language) · Evidence (the
    graph's numbers or file:line) · Options considered with their trade-off (coupling,
    cognitive load, change cost) · Proposed deepening · Benefit in locality/leverage

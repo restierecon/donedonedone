@@ -28,7 +28,8 @@ def default_store_path(cwd: str) -> Path:
     override = os.environ.get("TBV_HOME")
     if override:
         return Path(override).expanduser()
-    return find_root(cwd) / ".tbv"
+    store = find_root(cwd) / ".tbv"
+    return store / "store" if (store / "PROTOCOL.md").is_file() else store
 
 
 def to_bytes(text: str) -> bytes:

@@ -28,7 +28,7 @@ labelled unproven. Never invent a caller or an API; a search that finds nothing 
    env var, schema/column, route, CLI flag or file format it adds, changes or deletes,
    including behavior the diff doesn't spell out (new default, reordered side effect).
 2. **Find consumers outside the diff.** Start with
-   `python3 ~/.claude/scripts/codebase-graph.py impact --base main` (codebase-map
+   `python3 ~/.tbv/scripts/codebase-graph.py impact --base main` (codebase-map
    skill): direct and indirect importers, tests in reach, cycles the change touches.
    It sees static imports only, so then, for each item, Grep the repo for references in
    files the diff does NOT touch: imports, call sites, string keys, docs, scripts, CI,
@@ -39,7 +39,7 @@ labelled unproven. Never invent a caller or an API; a search that finds nothing 
    pinned dependency source, ordering/teardown timing.
 4. **Find the one fact it's safe because of.** Most risky-looking changes are safe
    because of a single fact ("every caller passes the new arg"). Spend time proving that.
-5. **Prove by running.** Run the existing suite via `~/.claude/scripts/gate.sh test`
+5. **Prove by running.** Run the existing suite via `~/.tbv/scripts/gate.sh test`
    (or the project's test command it wraps), or a one-off read-only command —
    `python -c`, `node -e`, invoking the CLI with the old flag — against the slice's
    checkout. Don't write files into the repo; scratch scripts go in a temp dir.

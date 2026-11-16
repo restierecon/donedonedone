@@ -14,11 +14,11 @@ The gate's `crap` step blocks a slice only for functions its diff touches. Hotsp
 diff doesn't touch are planned work: found here, fixed in their own slices.
 
 Under Cursor or Copilot without a skill loader, read this file from
-`~/.claude/skills/crap-hotspots/SKILL.md`; everything it asks for is gate.sh and files.
+`~/.tbv/skills/crap-hotspots/SKILL.md`; everything it asks for is gate.sh and files.
 
 ## 1. Measure — in a subagent, so the full score list stays out of your context
 Needs `gate.crap` in vault/project.md (contract: README → CRAP). Have a subagent that
-can run commands run `~/.claude/scripts/gate.sh test crap` once, so the scores rest on
+can run commands run `~/.tbv/scripts/gate.sh test crap` once, so the scores rest on
 fresh coverage, then rank every line of `.gate/crap.log` (the full output of
 `gate.crap`, not just touched functions). It returns ≤ 20 lines: the 10 highest
 scores as `path:start name score`, how many functions exceed `gate.crap.max`, and for

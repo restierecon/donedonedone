@@ -7,7 +7,7 @@ description: Use with every architecture review (same 5-slice counter), immediat
 
 Per-slice capture, batched learning. Every gate verdict, Tier 3 tiebreak, escalation
 and human correction is already in vault/log.jsonl (the Director writes it through
-`~/.claude/scripts/log-event.sh`). There are no memory files and reasoning trails
+`~/.tbv/scripts/log-event.sh`). There are no memory files and reasoning trails
 die with the session, so the log is the only surviving record of what went wrong — this skill turns it into
 changes to the setup.
 
@@ -19,7 +19,7 @@ changes to the setup.
 - On request.
 
 ## Steps
-1. Run `~/.claude/scripts/risk-gate.sh calibrate` (≤ 20 lines, read-only) and paste
+1. Run `~/.tbv/scripts/risk-gate.sh calibrate` (≤ 20 lines, read-only) and paste
    its output into the brief. Dispatch the `retro` agent with the trigger and the vault paths. Hand it paths, not
    log contents. Always the `retro` type, never general-purpose: its Read, Grep, Glob
    tools make it read-only by harness, not by prose.
@@ -33,14 +33,14 @@ changes to the setup.
 
 ## Routing a proposal once a human accepts it
 - **scope: global** — the change lands in the tbv setup repo, not this
-  project: edit there, re-run `./install.sh` (it regenerates the Cursor and Copilot
-  agents too), re-run the eval the proposal names. A manifest change without a fresh
+  project: edit there, re-run `./install.sh` (it regenerates every tool's
+  agents), re-run the eval the proposal names. A manifest change without a fresh
   scorecard doesn't count toward the dial.
 - **scope: project** — grilled and planned like any feature (a lint rule or gate step
   in this repo is a slice).
 - **Rejected** with a load-bearing reason — offer an ADR so the retro stops proposing it.
 
 ## Never
-- Apply a proposal, or edit anything under ~/.claude, from inside a project session.
+- Apply a proposal, or edit anything under ~/.tbv or a tool's own folder (~/.claude, ~/.copilot, ~/.cursor), from inside a project session.
 - Skip step 3 — without the retro line, the next run re-reports the same window and
   RETRO DUE keeps firing on patterns already handled.

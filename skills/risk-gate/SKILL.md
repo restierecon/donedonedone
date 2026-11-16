@@ -6,7 +6,7 @@ description: Scores every slice's change risk 0-100 before any builder starts, m
 # Risk Gate
 
 Risk decides autonomy. Every slice carries a `risk` assessment from the plan onward;
-`~/.claude/scripts/risk-gate.sh` turns it into a score, a class and the controls that
+`~/.tbv/scripts/risk-gate.sh` turns it into a score, a class and the controls that
 class requires, the same way every time. Hooks enforce the result: guard.sh refuses a
 builder spawn and any git command that would land `slice/<ID>` on main until
 `risk-gate.sh check` passes; gate.sh's `scope` step fails a diff that leaves the
@@ -91,10 +91,10 @@ changes it.
    class, hash) and prints one RISK line per slice.
 2. Builder brief: a `RISK: <class> — <scope.change>; unchanged: …; rollback: …` line.
    guard.sh checks the class word against the computed one. Elevated and above: no
-   `model: sonnet`.
+   economy model (`sonnet`, `fast`).
 3. Critical: stop that slice. Add a pending-review.md entry (3-line summary: what,
    the safeguards, cost to reverse) asking the human to run
-   `~/.claude/scripts/approve-risk.sh authorize <ID>` in their own terminal. Continue
+   `~/.tbv/scripts/approve-risk.sh authorize <ID>` in their own terminal. Continue
    with other slices. `risk-gate.sh pending` and the SessionStart hook list held slices.
 4. Merge with `land-slice.sh <ID>`. It runs `risk-gate.sh check <ID> merge` before
    touching main (guard.sh runs it on the command too) and lands nothing on a FAIL.
@@ -119,7 +119,7 @@ Scope that grows past the slice's purpose goes back to /grill, not into a reasse
 
 ## Human approvals
 `approve-risk.sh <authorize|merge|downgrade> <ID>` runs only in an interactive
-terminal outside any agent (it refuses when CLAUDECODE is set or stdin isn't a TTY),
+terminal outside any agent (it refuses when an agent marker such as CLAUDECODE or CURSOR_AGENT is set, when a Claude Code, Copilot CLI or Cursor agent process started it, or when stdin isn't a TTY),
 shows the assessment (for merge: the diffstat and controls), and records the typed
 decision in `.git/tbv/approvals.jsonl` with the approver's git email, the
 assessment hash and, for merge, the patch-id. A later decision supersedes an earlier
