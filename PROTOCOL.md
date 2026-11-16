@@ -14,9 +14,9 @@ heavy reads go to agents; you consume structured verdicts (≤ 20 lines) only.
 - Calls independent? Parallelize them.
 - Output > 20 lines you won't use? Route it to a subagent.
 - Hand agents file paths, not file contents — they read what they need.
-- Lint/types/tests/build run only through `~/.claude/scripts/gate.sh`, never raw.
+- Lint/types/tests/build run only through `~/.tbv/scripts/gate.sh`, never raw.
 - Shell output starting `[tbv]` was compacted by the context firewall; the full output is kept.
-  Need an omitted part? `~/.claude/scripts/tbv artifact <id>` with `--failure N`, `--file`,
+  Need an omitted part? `~/.tbv/scripts/tbv artifact <id>` with `--failure N`, `--file`,
   `--section`, `--lines A-B` or `--raw` — never re-run the command to see it.
 - About to restate what the user said? Delete it.
 
@@ -30,10 +30,11 @@ heavy reads go to agents; you consume structured verdicts (≤ 20 lines) only.
 | auditor | Adversarial security pass | Only slices touching auth, data access, user input, secrets, deps, or external calls |
 | retro | Mines log.jsonl for failures that recur across slices; proposes the fix to the setup | With every architecture review; at once when log-event.sh prints RETRO DUE (learning-loop skill) |
 
-Model routing: builder runs on `sonnet` (pass `model` on the Agent call) for slices
+Model routing: builder runs on the `economy` tier (pass `model` on the spawn: `sonnet`
+in Claude Code; a tool with no per-spawn model keeps the session model) for slices
 with ≤ 4 criteria, no auditor trigger, no one-way door and risk class low or moderate;
 everything else — including any retry after a REJECTED — inherits the session model
-(guard.sh refuses sonnet for elevated and above). Reviewer is sonnet (fixed
+(guard.sh refuses an economy model for elevated and above). Reviewer is economy (fixed
 in its manifest); planner, auditor and retro inherit.
 
 Tester, builder, reviewer and auditor briefs follow the brief-contract skill (GOAL · SCOPE ·
@@ -53,9 +54,9 @@ approves with `approve-ui.sh` (ui-prototype skill) — no slice designs UI on it
 dispatch `planner` with the grilled spec; it
 writes vault/plan-draft.json and returns a table. If it reports OPEN
 QUESTIONS, take them back to /grill — never plan around a gap. Run
-`~/.claude/scripts/check-plan.sh` on the draft (it must exit 0; a FAIL goes back to the
+`~/.tbv/scripts/check-plan.sh` on the draft (it must exit 0; a FAIL goes back to the
 planner with its output), present the table with its risk column, then adopt the approved
-slices in one call: `~/.claude/scripts/adopt-plan.sh` (all of them) or `adopt-plan.sh <ID>…`
+slices in one call: `~/.tbv/scripts/adopt-plan.sh` (all of them) or `adopt-plan.sh <ID>…`
 (a subset). It re-runs check-plan.sh, copies the slices into task-tree.json, runs
 `risk-gate.sh assess` on each, deletes the draft and commits. A rejected or abandoned
 plan, or one sent back to /grill: `adopt-plan.sh --discard`.
@@ -70,7 +71,7 @@ Every slice carries a `contract`: `{tests, budget}` — the acceptance test path
 ceiling on changed lines outside them — or `"none: <reason>"` when no test can prove it
 (docs, config). For a slice with a contract:
 1. Dispatch `tester` on `slice/<ID>`. It writes the failing tests and nothing else.
-2. `~/.claude/scripts/contract.sh lock <ID>`. It refuses a branch that changes any other
+2. `~/.tbv/scripts/contract.sh lock <ID>`. It refuses a branch that changes any other
    file, runs the tests and refuses ones that already pass, then records the hash in
    task-tree.json, logs it and commits. guard.sh refuses a builder before the lock.
 3. Dispatch the builder. gate.sh's `contract` step fails if a locked test changed or the
@@ -83,7 +84,7 @@ ceiling on changed lines outside them — or `"none: <reason>"` when no test can
 
 ## Risk Gate (before any builder, again before any merge)
 Every slice carries a `risk` assessment (five dimensions rated 0-4, hazards, scope,
-rollback); `~/.claude/scripts/risk-gate.sh` scores it 0-100 deterministically and the
+rollback); `~/.tbv/scripts/risk-gate.sh` scores it 0-100 deterministically and the
 class sets the controls: low → gate + reviewer · moderate → + reviewer evidence
 unit-test-verified · elevated → + deep tests, session-model builder · high → + auditor
 and a human merge approval · critical → + a human authorization before building.
@@ -118,8 +119,8 @@ score. Load the risk-gate skill for the rubric, reassessment and approval steps.
    A `SKIP (no gate.<step> …)` line doesn't block the slice: after it merges, run the
    configure-gates skill unless an open pending-review card names that step.
    A `crap` FAIL goes back to the builder, and so does a `mutation` FAIL; hotspots
-   outside the diff go to the crap-hotspots skill (~/.claude/skills/crap-hotspots/SKILL.md),
-   survivors to mutation-survivors (~/.claude/skills/mutation-survivors/SKILL.md).
+   outside the diff go to the crap-hotspots skill (~/.tbv/skills/crap-hotspots/SKILL.md),
+   survivors to mutation-survivors (~/.tbv/skills/mutation-survivors/SKILL.md).
    A FAIL ending in `OOM: killed for memory` is the machine, not a test verdict (the
    gate already retried it at half the workers): don't send it to the builder; run the
    gate once more after the other running gates finish, and only a second OOM goes to
@@ -131,14 +132,14 @@ score. Load the risk-gate skill for the rubric, reassessment and approval steps.
 5. Risk: `risk-gate.sh check <ID> merge` PASS — every control its class requires,
    including any human approval, at the current patch-id
 After each of gates 1-4, record it in one call:
-`~/.claude/scripts/record-gate.sh <ID> <self_review|automated|reviewer|auditor> <verdict> --gate-line "<gate.sh result line>" --evidence <rung>`.
+`~/.tbv/scripts/record-gate.sh <ID> <self_review|automated|reviewer|auditor> <verdict> --gate-line "<gate.sh result line>" --evidence <rung>`.
 It writes task-tree.json, appends the log.jsonl line (sha and patch_id read from the
 gate line; without one, pass `--sha` and `--patch-id`) and commits. The rung comes from
 the agent's EVIDENCE line: live-verified | unit-test-verified | type-check-only |
 verifier-blocked | verifier-failed. Gate 5 is recorded by land-slice.sh (Merge below).
 A gate that doesn't apply (e.g. auditor, no trigger) is recorded as
 `"skip: <reason>"` — never omitted. Any other log event (Tier 3, escalation,
-correction, scope) still goes through `~/.claude/scripts/log-event.sh`.
+correction, scope) still goes through `~/.tbv/scripts/log-event.sh`.
 Gate green is input to a verdict, not a verdict. You do this
 yourself. On REJECTED/BLOCKED/CLEARED-WITH-FINDINGS, pass each
 CRITICAL line as `--signal` with its `--category`; log Tier 3 tiebreaks, escalations and
@@ -158,7 +159,7 @@ those lines; removing them elsewhere is scope creep.
 Verdicts count only at the patch-id they were given (`git diff main...slice/<ID> -- .
 ':(exclude)vault' | git patch-id --stable`): a rebase alone changes only the sha and
 they stand; a changed diff makes them stale, so re-run the gates.
-All gates pass → `~/.claude/scripts/land-slice.sh <ID> [-m '<type>(<scope>): <subject> (<ID>)']`,
+All gates pass → `~/.tbv/scripts/land-slice.sh <ID> [-m '<type>(<scope>): <subject> (<ID>)']`,
 from the main checkout. It runs `risk-gate.sh check <ID> merge` at the current patch-id
 (guard.sh runs it too), refuses a conflict before touching main, squash-merges
 (checkpoint noise stays on the branch), tags `<ID>-done`, records gate 5, logs
@@ -174,8 +175,8 @@ merged, and never prune to make a failure disappear. `/harvest` backfills in bul
 - Slice start: `git checkout -b slice/<ID>` (parallel wave: a worktree — see the
   parallel-dispatch skill). Slice abandoned: delete branch and worktree.
 - Commits: Conventional Commits, imperative, slice ID — `feat(auth): add login endpoint (S002)`
-- No session links or Claude Code footers in commits, PRs or PR comments: omit
-  `Claude-Session:` trailers, claude.ai URLs and "Generated with/by Claude Code" lines,
+- No session links or tool footers in commits, PRs or PR comments: omit
+  `Claude-Session:` trailers, session URLs and "Generated with/by <tool>" lines,
   and strip any footer a tool appends after posting; keep `Co-Authored-By`.
 
 ## Resolution Protocol (exhaust before flagging a human)

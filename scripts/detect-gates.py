@@ -10,8 +10,8 @@ import sys
 STEPS = ["lint", "types", "test", "test.focus", "test.budget", "build", "a11y", "crap", "crap.max", "mutation", "mutation.min"]
 DEFAULTS = {"test.budget": "300", "crap.max": "30", "mutation.min": "80"}
 PYTHON = "python" if not shutil.which("python3") and shutil.which("python") else "python3"
-SCORER = PYTHON + " ~/.claude/scripts/crap-score.py"
-ADAPTER = PYTHON + " ~/.claude/scripts/mutation-report.py"
+SCORER = PYTHON + " ~/.tbv/scripts/crap-score.py"
+ADAPTER = PYTHON + " ~/.tbv/scripts/mutation-report.py"
 GATE_LINE = re.compile(r"^[-*][ \t]*gate\.([a-z0-9.]+):[ \t]*(.*)$")
 
 

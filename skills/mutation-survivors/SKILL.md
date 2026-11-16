@@ -15,7 +15,7 @@ fails under `gate.mutation.min` (default 80%). It always lists the survivors, ev
 pass. Survivors outside the diff are planned work: found here, fixed in their own slices.
 
 Under Cursor or Copilot without a skill loader, read this file from
-`~/.claude/skills/mutation-survivors/SKILL.md`; everything it asks for is gate.sh and files.
+`~/.tbv/skills/mutation-survivors/SKILL.md`; everything it asks for is gate.sh and files.
 
 ## 1. Measure — in a subagent, so the full mutant list stays out of your context
 Needs `gate.mutation` in vault/project.md (contract: README → Mutation). For a slice:

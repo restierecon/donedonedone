@@ -11,7 +11,7 @@ each one with a test, so the auditor confirms instead of discovers.
 
 Run it once per slice whose brief's STANDING names it: after the criteria are green,
 before clean-diff, the final `gate.sh` and the report. Under Cursor or Copilot without
-a skill loader, read this file from `~/.claude/skills/harden-diff/SKILL.md`.
+a skill loader, read this file from `~/.tbv/skills/harden-diff/SKILL.md`.
 
 ## 1. Map the boundaries the diff crosses
 From `git diff main...HEAD -- . ':(exclude)vault'`, list every place data crosses a

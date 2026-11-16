@@ -247,7 +247,7 @@ setup_repo() {
   d=$(new_repo)
   mkdir -p "$d/agents" "$d/skills/clean-diff" "$d/skills/orphan" "$d/skills/grill" "$d/scripts"
   # shellcheck disable=SC2016
-  printf -- '---\nname: builder\ndescription: Builds one slice.\ntools: Read, Edit, Bash\nmodel: sonnet\n---\nRun the clean-diff skill, then `~/.claude/scripts/gate.sh`.\n' > "$d/agents/builder.md"
+  printf -- '---\nname: builder\ndescription: Builds one slice.\ntools: Read, Edit, Bash\nmodel: sonnet\n---\nRun the clean-diff skill, then `~/.tbv/scripts/gate.sh`.\n' > "$d/agents/builder.md"
   # shellcheck disable=SC2016
   printf -- '---\nname: reviewer\ndescription: Reviews cold.\ntools: Read\nmodel: sonnet\n---\nRead the `builder` report.\n' > "$d/agents/reviewer.md"
   printf -- '---\nname: clean-diff\ndescription: Strip slop.\n---\nBody.\n' > "$d/skills/clean-diff/SKILL.md"
@@ -257,7 +257,7 @@ setup_repo() {
   printf '#!/bin/bash\necho guard\n' > "$d/scripts/guard.sh"
   printf '#!/bin/bash\necho tool\n' > "$d/scripts/tool.sh"
   printf 'Always start with the grill skill.\n' > "$d/CLAUDE.md"
-  printf '{"hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [{"type": "command", "command": "~/.claude/scripts/guard.sh"}]}], "Stop": [{"hooks": [{"type": "command", "command": "npx something"}]}]}}\n' > "$d/settings.json"
+  printf '{"hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [{"type": "command", "command": "~/.tbv/scripts/guard.sh"}]}], "Stop": [{"hooks": [{"type": "command", "command": "npx something"}]}]}}\n' > "$d/settings.json"
   echo "$d"
 }
 repo=$(setup_repo)
@@ -452,8 +452,8 @@ repo=$(setup_repo)
 mkdir -p "$repo/skills/plan"
 printf -- '---\nname: planner\ndescription: Plans.\ntools: Read\nmodel: sonnet\n---\nBody.\n' > "$repo/agents/planner.md"
 printf -- '---\nname: plan\ndescription: Plan things.\n---\nAsk the planner to draft slices.\n' > "$repo/skills/plan/SKILL.md"
-printf '{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "~/.claude/scripts/guard.sh"}]}]}}\n' > "$repo/settings.json"
-printf '{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "~/.claude/scripts/gate.sh"}]}]}}\n' > "$repo/settings.local.json"
+printf '{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "~/.tbv/scripts/guard.sh"}]}]}}\n' > "$repo/settings.json"
+printf '{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "~/.tbv/scripts/gate.sh"}]}]}}\n' > "$repo/settings.local.json"
 printf '{"stages": [{"id": "build", "uses": ["agent:builder", "skill:plan"]}], "on_demand": ["agent:reviewer", "skill:orphan"]}\n' > "$repo/workflow.json"
 commit "$repo" init
 out=$(build "$repo"); status=$?

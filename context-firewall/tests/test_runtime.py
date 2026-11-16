@@ -136,7 +136,7 @@ class Hook(unittest.TestCase):
 
     def test_firewall_commands_and_raw_requests_are_never_rewritten(self):
         noisy = fixture("pytest_fail").stdout
-        for command in ("~/.claude/scripts/tbv artifact art-1 --raw", "python3 /x/tbv.py artifact art-1", "TBV_RAW=1 pytest -v"):
+        for command in ("~/.tbv/scripts/tbv artifact art-1 --raw", "python3 /x/tbv.py artifact art-1", "TBV_RAW=1 pytest -v"):
             self.assertIsNone(hook.handle(self.payload(command, noisy)), command)
 
     def test_background_and_non_shell_tools_are_ignored(self):

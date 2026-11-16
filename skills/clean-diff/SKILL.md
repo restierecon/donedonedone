@@ -11,7 +11,7 @@ pass finds the same things first, while fixing them is one edit.
 
 Run it once per slice: after the tests are green and refactored, before the final
 `gate.sh` and the report. Under Cursor or Copilot without a skill loader, read this
-file from `~/.claude/skills/clean-diff/SKILL.md`.
+file from `~/.tbv/skills/clean-diff/SKILL.md`.
 
 ## 1. List what the diff adds
 `git diff main...HEAD --stat -- . ':(exclude)vault'`, then

@@ -109,7 +109,7 @@ the builder's brief must name the harden-diff skill (guard.sh blocks the spawn
 otherwise). When unsure whether a boundary is crossed, list it.
 A gate value is null (not yet run), a verdict, or "skip: <reason>" (e.g. auditor on a
 slice with no trigger) — never omitted, never a bare "skip".
-`~/.claude/scripts/check-plan.sh` validates this shape mechanically (fields, title form, auditor_triggers vocabulary,
+`~/.tbv/scripts/check-plan.sh` validates this shape mechanically (fields, title form, auditor_triggers vocabulary,
 every `depends_on` resolving to the draft, task-tree.json or stories.md, no cycles, a
 valid `risk` with every hazard its wording suggests declared or ruled out) and prints
 each slice's risk class and controls;

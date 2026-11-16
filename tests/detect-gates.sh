@@ -58,7 +58,7 @@ has "python with uv: every declared tool becomes a ready line, run through uv" "
   "READY  - gate.test: COVERAGE_FILE=.gate/.coverage uv run python -m pytest -q --timeout=10 --cov=src --cov-report=lcov:.gate/coverage.lcov" \
   "READY  - gate.test.focus: uv run python -m pytest -q {}" \
   "READY  - gate.build: uv run python -m build" \
-  "READY  - gate.crap: $PYN ~/.claude/scripts/crap-score.py .gate/coverage.lcov src" \
+  "READY  - gate.crap: $PYN ~/.tbv/scripts/crap-score.py .gate/coverage.lcov src" \
   "READY  - gate.crap.max: 30" \
   "READY  - gate.mutation.min: 80" \
   "N/A    gate.a11y — no UI framework in the Python manifests" \
@@ -72,7 +72,7 @@ branch = true' requirements-dev.txt 'django>=5' tests/test_app.py '')
 out=$(detect "$d")
 has "python: config sections count as evidence; coverage.py writes its report into .gate/" "$out" \
   "READY  - gate.test: COVERAGE_FILE=.gate/.coverage $PYN -m coverage run -m pytest -q && COVERAGE_FILE=.gate/.coverage $PYN -m coverage lcov -q -o .gate/coverage.lcov" \
-  "READY  - gate.crap: $PYN ~/.claude/scripts/crap-score.py .gate/coverage.lcov -x 'test_*.py' -x '*_test.py' ."
+  "READY  - gate.crap: $PYN ~/.tbv/scripts/crap-score.py .gate/coverage.lcov -x 'test_*.py' -x '*_test.py' ."
 matches "python: a server-rendered UI needs an a11y slice" "$out" '^SLICE  gate\.a11y — server-rendered UI'
 matches "python: missing linter and type checker become slice proposals, not silent skips" "$out" '^SLICE  gate\.lint — no linter declared; add ruff'
 matches "python: mutmut not yet declared is a slice with the config it needs" "$out" '^SLICE  gate\.mutation — add mutmut 3 .*source_paths = \["\./"\]|^SLICE  gate\.mutation — add mutmut 3'
@@ -90,7 +90,7 @@ has "vitest with lcov coverage and pnpm: coverage on, crap ready, a11y and stryk
   "READY  - gate.test: pnpm exec vitest run --minWorkers=1 --maxWorkers={workers} --coverage" \
   "READY  - gate.test.focus: pnpm exec vitest run --minWorkers=1 --maxWorkers={workers} {}" \
   "READY  - gate.build: pnpm -s build" \
-  "READY  - gate.crap: $PYN ~/.claude/scripts/crap-score.py coverage/lcov.info -x '*.test.*' -x '*.spec.*' src" \
+  "READY  - gate.crap: $PYN ~/.tbv/scripts/crap-score.py coverage/lcov.info -x '*.test.*' -x '*.spec.*' src" \
   "IGNORE dist/ coverage/"
 matches "react without an accessibility check: a11y is a slice naming the packages" "$out" '^SLICE  gate\.a11y — UI \(react\) .*@axe-core/playwright'
 matches "vitest without stryker: mutation slice names the vitest runner plugin" "$out" '^SLICE  gate\.mutation — add @stryker-mutator/core and @stryker-mutator/vitest-runner'
@@ -105,8 +105,8 @@ has "jest: coverage goes to .gate/, a fixing lint script is skipped, an a11y scr
   "READY  - gate.test: npx jest --maxWorkers={workers} --coverage --coverageReporters=lcov --coverageDirectory=.gate/coverage" \
   "READY  - gate.test.focus: npx jest --maxWorkers={workers} {}" \
   "READY  - gate.a11y: npm run -s test:a11y" \
-  "READY  - gate.crap: $PYN ~/.claude/scripts/crap-score.py .gate/coverage/lcov.info -x '*.test.*' -x '*.spec.*' ." \
-  "READY  - gate.mutation: npx stryker run --concurrency {workers} --reporters json && $PYN ~/.claude/scripts/mutation-report.py reports/mutation/mutation.json" \
+  "READY  - gate.crap: $PYN ~/.tbv/scripts/crap-score.py .gate/coverage/lcov.info -x '*.test.*' -x '*.spec.*' ." \
+  "READY  - gate.mutation: npx stryker run --concurrency {workers} --reporters json && $PYN ~/.tbv/scripts/mutation-report.py reports/mutation/mutation.json" \
   "N/A    gate.types — plain JavaScript (no typescript with a tsconfig.json)"
 rm -rf "$d"
 
@@ -149,8 +149,8 @@ out=$(detect "$d")
 has "maven with jacoco, pit and checkstyle through mvnw: all ready" "$out" \
   "READY  - gate.lint: ./mvnw -q -B checkstyle:check" \
   "READY  - gate.test: ./mvnw -q -B test" \
-  "READY  - gate.crap: $PYN ~/.claude/scripts/crap-score.py target/site/jacoco/jacoco.xml src/main/java" \
-  "READY  - gate.mutation: ./mvnw -q -B test-compile org.pitest:pitest-maven:mutationCoverage -Dthreads={workers} -DoutputFormats=XML -DtimestampedReports=false && $PYN ~/.claude/scripts/mutation-report.py target/pit-reports/mutations.xml" \
+  "READY  - gate.crap: $PYN ~/.tbv/scripts/crap-score.py target/site/jacoco/jacoco.xml src/main/java" \
+  "READY  - gate.mutation: ./mvnw -q -B test-compile org.pitest:pitest-maven:mutationCoverage -Dthreads={workers} -DoutputFormats=XML -DtimestampedReports=false && $PYN ~/.tbv/scripts/mutation-report.py target/pit-reports/mutations.xml" \
   "IGNORE target/"
 rm -rf "$d"
 
@@ -159,7 +159,7 @@ tasks.jacocoTestReport { reports { xml.required = true } }' gradlew '')
 out=$(detect "$d")
 has "gradle with jacoco xml: the test step produces the report crap reads" "$out" \
   "READY  - gate.test: ./gradlew -q --max-workers={workers} test jacocoTestReport" \
-  "READY  - gate.crap: $PYN ~/.claude/scripts/crap-score.py build/reports/jacoco/test/jacocoTestReport.xml src/main/java"
+  "READY  - gate.crap: $PYN ~/.tbv/scripts/crap-score.py build/reports/jacoco/test/jacocoTestReport.xml src/main/java"
 matches "gradle without pitest: mutation is a slice naming the plugin settings" "$out" "^SLICE  gate\.mutation — apply info\.solidsoft\.pitest with outputFormats"
 rm -rf "$d"
 
@@ -177,8 +177,8 @@ fake_tool "$nobin" gremlins; fake_tool "$nobin" gocover-cobertura
 out=$(detect_on_path "$nobin" "$d")
 has "go with gremlins and gocover-cobertura on PATH: both ready, gate.test writes the coverage" "$out" \
   "READY  - gate.test: go test -coverprofile=.gate/cover.out ./... && gocover-cobertura < .gate/cover.out > .gate/coverage.xml" \
-  "READY  - gate.crap: $PYN ~/.claude/scripts/crap-score.py .gate/coverage.xml ." \
-  "READY  - gate.mutation: gremlins unleash --diff \"\$GATE_BASE\" --output .gate/gremlins.json && $PYN ~/.claude/scripts/mutation-report.py .gate/gremlins.json"
+  "READY  - gate.crap: $PYN ~/.tbv/scripts/crap-score.py .gate/coverage.xml ." \
+  "READY  - gate.mutation: gremlins unleash --diff \"\$GATE_BASE\" --output .gate/gremlins.json && $PYN ~/.tbv/scripts/mutation-report.py .gate/gremlins.json"
 rm -rf "$d" "$nobin"
 
 nobin=$(mktemp -d)
@@ -199,7 +199,7 @@ d=$(repo pyproject.toml '[tool.pytest.ini_options]
 out=$(detect_on_path "$nobin" "$d")
 has "a machine with python but no python3 (Windows): every command names python" "$out" \
   "READY  - gate.test: COVERAGE_FILE=.gate/.coverage python -m coverage run -m pytest -q && COVERAGE_FILE=.gate/.coverage python -m coverage lcov -q -o .gate/coverage.lcov" \
-  "READY  - gate.crap: python ~/.claude/scripts/crap-score.py .gate/coverage.lcov -x 'test_*.py' -x '*_test.py' ."
+  "READY  - gate.crap: python ~/.tbv/scripts/crap-score.py .gate/coverage.lcov -x 'test_*.py' -x '*_test.py' ."
 rm -rf "$d" "$nobin"
 
 echo "== detect-gates.py — several stacks, none, and lines a human already set =="
@@ -211,7 +211,7 @@ has "python + react: lint and test chain both stacks, and only the stack crap fo
   "STACK: python (pyproject.toml) + node (package.json)" \
   "READY  - gate.lint: $PYN -m ruff check -q . && npm run -s lint" \
   "READY  - gate.test: $PYN -m pytest -q && npx vitest run --minWorkers=1 --maxWorkers={workers} --coverage" \
-  "READY  - gate.crap: $PYN ~/.claude/scripts/crap-score.py coverage/lcov.info -x '*.test.*' -x '*.spec.*' ."
+  "READY  - gate.crap: $PYN ~/.tbv/scripts/crap-score.py coverage/lcov.info -x '*.test.*' -x '*.spec.*' ."
 matches "python + react: two focus commands can't share one line, so it asks" "$out" '^ASK    gate\.test\.focus — one command per step, and python and node each have one'
 rm -rf "$d"
 

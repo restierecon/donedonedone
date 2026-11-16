@@ -82,7 +82,7 @@ class Planning(unittest.TestCase):
         tool = self.root / "pytest"
         tool.write_text("#!/bin/sh\necho hi\n", encoding="utf-8")
         tool.chmod(tool.stat().st_mode | stat.S_IEXEC)
-        self.env = mock.patch.dict(os.environ, {"CLAUDE_CONFIG_DIR": str(self.config), "TBV_SELF": "/home/me/.claude/scripts/tbv"})
+        self.env = mock.patch.dict(os.environ, {"CLAUDE_CONFIG_DIR": str(self.config), "TBV_SELF": "/home/me/.tbv/scripts/tbv"})
         self.env.start()
 
     def tearDown(self):
@@ -102,7 +102,7 @@ class Planning(unittest.TestCase):
         out = rewrite.plan(self.payload("./pytest -q tests/test_a.py"))
         spec = out["hookSpecificOutput"]
         self.assertEqual(spec["permissionDecision"], "allow")
-        self.assertEqual(spec["updatedInput"]["command"], "/home/me/.claude/scripts/tbv run --session abc-123 --origin hook -- ./pytest -q tests/test_a.py")
+        self.assertEqual(spec["updatedInput"]["command"], "/home/me/.tbv/scripts/tbv run --session abc-123 --origin hook -- ./pytest -q tests/test_a.py")
         self.assertEqual(spec["updatedInput"]["description"], "d")
 
     def test_nothing_is_granted_that_settings_do_not_already_allow(self):
@@ -129,7 +129,7 @@ class Planning(unittest.TestCase):
 
     def test_firewall_and_raw_requests_pass(self):
         self.allow("Bash")
-        for command in ("~/.claude/scripts/tbv artifact art-1", "~/.claude/scripts/gate.sh test", "TBV_RAW=1 ./pytest"):
+        for command in ("~/.tbv/scripts/tbv artifact art-1", "~/.tbv/scripts/gate.sh test", "TBV_RAW=1 ./pytest"):
             self.assertIsNone(rewrite.plan(self.payload(command, mode="bypassPermissions")), command)
 
     def test_disabled_or_without_a_shim_path(self):

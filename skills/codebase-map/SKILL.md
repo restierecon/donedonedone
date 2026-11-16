@@ -10,17 +10,17 @@ go stale. Nothing has to keep it in sync. It reads committed trees only, so comm
 before you build.
 
 ## Commands (run from anywhere in the repo; Python 3, lizard for complexity)
-- `python3 ~/.claude/scripts/codebase-graph.py build [--coverage <report>] [--rules vault/architecture.json] [--days 90]`
+- `python3 ~/.tbv/scripts/codebase-graph.py build [--coverage <report>] [--rules vault/architecture.json] [--days 90]`
   writes `.gate/graph.json` and `.gate/graph.html` for HEAD (`--rev` for another
   revision) and prints a summary of at most 20 lines: GRAPH totals, a SEEN line
   saying how much of the repo it analysed and how, the flagged folders and files,
   and one SETUP line per Claude Code setup it found. It exits 1 when a setup's
   workflow.json has errors; the map is still written.
-- `python3 ~/.claude/scripts/codebase-graph.py impact (--base main | <files>…)` prints a
+- `python3 ~/.tbv/scripts/codebase-graph.py impact (--base main | <files>…)` prints a
   CHANGE IMPACT block: direct and indirect dependents, modules reached, tests in reach,
   docs that mention the change, setup components it touches, cycles, and an estimated
   regression risk.
-- `python3 ~/.claude/scripts/codebase-graph.py check --rules <file> --base main` reports
+- `python3 ~/.tbv/scripts/codebase-graph.py check --rules <file> --base main` reports
   the architecture violations HEAD adds over the base. gate.sh's `arch` step runs it.
 
 ## What it reads (any repo)

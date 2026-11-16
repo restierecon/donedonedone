@@ -19,7 +19,7 @@ short() { printf '%s' "$1" | cut -c1-7; }
 
 installed_files() {
   local src="$1"
-  (cd "$src" && find agents scripts skills context-firewall -type f ! -path '*/__pycache__/*' 2>/dev/null) \
+  (cd "$src" && find PROTOCOL.md agents scripts skills context-firewall -type f ! -path '*/__pycache__/*' 2>/dev/null) \
     | LC_ALL=C sort | while IFS= read -r f; do [ -f "$dest/$f" ] && printf '%s\n' "$f"; done
 }
 
@@ -206,7 +206,7 @@ cmd_project_hook() {
         "hooks": [
           {
             "type": "command",
-            "command": "[ -x \"\$HOME/.claude/scripts/harness.sh\" ] || echo 'tbv is not installed on this machine and this project (vault/) is built with it. Tell the human before other work: git clone ${origin:-<the tbv repository>} && ./install.sh'"
+            "command": "[ -x \"\$HOME/.tbv/scripts/harness.sh\" ] || echo 'tbv is not installed on this machine and this project (vault/) is built with it. Tell the human before other work: git clone ${origin:-<the tbv repository>} && ./install.sh'"
           }
         ]
       }

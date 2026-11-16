@@ -1,8 +1,8 @@
-# tbv (trust but verify): Autonomous Engineering Setup for Claude Code
+# tbv (trust but verify): Autonomous Engineering Setup for Coding Agents
 
 A lean, hardened multi-agent setup: 5 agents, 35 skills, mechanical guardrails,
 git-backed resume (no memory files), a learning loop that turns repeated failures into fixes, a risk gate that scales controls to each change's risk, a codebase map with architecture fitness rules, and an autonomy dial you turn up only as trust is earned.
-Built for Claude Code; also works with GitHub Copilot in VS Code and with Cursor (see below).
+Works with Claude Code, Cursor and GitHub Copilot (VS Code, the Copilot CLI and the cloud agent): one install in `~/.tbv`, plus a thin adapter in each tool's own folder (see [Tools](#tools)).
 
 Built on: vertical slices (tracer bullets) · red-green-refactor TDD · the test pyramid ·
 deep modules and the deletion test (Ousterhout) · ADRs · OWASP · Conventional Commits ·
@@ -18,16 +18,27 @@ cd ~/claude-setup && ./install.sh
 brew install jq gitleaks semgrep   # guardrail dependencies; on Linux, your package manager
 ```
 
+The installer puts everything in `~/.tbv` and then sets up each tool it finds:
+
+| Tool | Set up when | What lands in the tool's folder |
+|---|---|---|
+| Claude Code | `~/.claude` exists or `claude` is on PATH | `~/.claude/CLAUDE.md`, `agents/`, `skills/`, hooks and permissions merged into `settings.json` |
+| GitHub Copilot (VS Code, CLI) | always | `~/.copilot/agents/`, `skills/`, `hooks/tbv.json` |
+| Cursor | `~/.cursor` exists or `cursor` is on PATH | `~/.cursor/agents/`, `skills/`, `hooks.json` |
+
+To choose yourself: `TBV_TOOLS=cursor ./install.sh`, or any comma-separated mix of
+`claude`, `copilot` and `cursor`. A tool left out gets no files at all.
+
 Already have a `~/.claude/settings.json`? The installer adds this setup's hooks and
 permissions to it and keeps every value of yours; the file as it was is saved beside it
 as `settings.json.bak-<timestamp>`. Re-running the installer adds nothing twice.
 
-To see what is installed and whether it is current: `~/.claude/scripts/tbv version`.
-To upgrade: `~/.claude/scripts/tbv update` (see
+To see what is installed and whether it is current: `~/.tbv/scripts/tbv version`.
+To upgrade: `~/.tbv/scripts/tbv update` (see
 [Staying current](#staying-current)).
 
 No jq and no admin rights? `install.sh` fetches the official jq 1.8.1 binary into
-`~/.claude/bin`, checks it against a pinned SHA-256, and the hook scripts find it
+`~/.tbv/bin`, checks it against a pinned SHA-256, and the hook scripts find it
 there (see [jq without admin rights](#jq-without-admin-rights)).
 
 Windows: install [Git for Windows](https://git-scm.com/downloads/win), then run the same
@@ -39,7 +50,7 @@ Then in any project:
 
 ```bash
 cd your-project
-claude
+claude                 # or open the project in Cursor, VS Code or the Copilot CLI
 > /init-codebase       # one-time per project; asks for your lint/test/build commands
 > /grill               # mandatory before any work — settles every human decision
 ```
@@ -51,12 +62,12 @@ builds. Nothing after the grill should need you unless a slice escalates.
 
 | Path | What |
 |---|---|
-| CLAUDE.md | Global protocol — the main session IS the Director |
+| PROTOCOL.md | The protocol — the main session IS the Director. Installed as `~/.tbv/PROTOCOL.md`, copied to `~/.claude/CLAUDE.md` for Claude Code and into each project's AGENTS.md for every tool |
 | agents/ | planner · tester · builder · reviewer · auditor · retro (least-privilege tools, model-per-agent) |
 | skills/ | protocol-native: grill · ui-prototype · slice-planning · risk-gate · parallel-dispatch · architecture-review · learning-loop · configure-gates · test-speed · crap-hotspots · mutation-survivors · clean-diff · harden-diff · blast-radius · `/codebase-map` · brief-contract · `/init-codebase` · `/harvest` · `/create-verification-skill` · `/maintain-verification-skill` (opt-in, `/`-only: a project-local `verify-*` skill that lets the reviewer reach live-verified evidence) — plus a general engineering-practice library, a principles index (19 pstack principles, read on demand) and pstack's prose skills: unslop · technical-writing (docs/README/ADR work) (see Credits) |
-| settings.json | Permission deny/ask lists + hooks on 6 events + env that keeps Claude Code on Windows in Git Bash |
-| context-firewall/ | `tbv` — the context firewall: artifact store, per-type compressors, retrieval, ranking, stats (Python 3.8+ stdlib, installed to `~/.claude/context-firewall/`) |
-| scripts/ | tbv (the firewall's bash entry point, `PreToolUse` rewrite and `PostToolUse` hook) · guard.sh (PreToolUse) · vault-guard.sh (Pre/PostToolUse, SubagentStop — restores Director-only files) · lint.sh (PostToolUse) · checkpoint.sh (Stop) · session-start.sh (SessionStart) · codebase-graph.py + codemap/ + graph-viewer.html (code and workflow map of any repo, change impact, `arch` fitness check, drill-down HTML) · crap-score.py (lizard + coverage report → CRAP lines for `gate.crap`) · mutation-report.py (mutation tool report → mutant lines for `gate.mutation`) · detect-gates.py (reads a repo's manifests → the gate lines it supports today, and what each missing one needs) · gate.sh (quiet lint/types/test/build/a11y runner + diff-scoped CRAP, mutation, TODO/FIXME, no-comments and architecture-rule checks) · test-workers.sh (the per-gate worker budget behind `{workers}`, from CPUs, free memory, cgroup limits and running gates) · find-comments.sh (the comment detector behind that check) · log-event.sh (the Director's structured log.jsonl writer) · risk-gate.sh (scores each slice's risk, judges builder spawns and merges) · adopt-plan.sh · record-gate.sh · land-slice.sh (the Director's plan adoption, gate recording and merge, one call each) · approve-risk.sh (the human's approval command — refuses inside an agent) · check-plan.sh (the Director's lint for a planner draft: fields, "Actor can" titles, resolvable acyclic `depends_on`, `auditor_triggers` from a fixed list, every `ui_contract` an approved contract, gates as a verdict or `skip: <reason>`) · generate-agents.sh (Copilot/Cursor agents, install-time) · fetch-jq.sh (checksum-pinned jq into ~/.claude/bin when jq is missing, install-time) · agents-md.sh (protocol block in a project's AGENTS.md, for Cursor/Copilot) |
+| settings.json | Claude Code's adapter: permission deny/ask lists + hooks on 6 events + env that keeps Claude Code on Windows in Git Bash. Copilot's and Cursor's hook files are generated by install.sh |
+| context-firewall/ | `tbv` — the context firewall: artifact store, per-type compressors, retrieval, ranking, stats (Python 3.8+ stdlib, installed to `~/.tbv/context-firewall/`) |
+| scripts/ | tbv (the firewall's bash entry point, `PreToolUse` rewrite and `PostToolUse` hook) · guard.sh (PreToolUse) · vault-guard.sh (Pre/PostToolUse, SubagentStop — restores Director-only files) · lint.sh (PostToolUse) · checkpoint.sh (Stop) · session-start.sh (SessionStart) · codebase-graph.py + codemap/ + graph-viewer.html (code and workflow map of any repo, change impact, `arch` fitness check, drill-down HTML) · crap-score.py (lizard + coverage report → CRAP lines for `gate.crap`) · mutation-report.py (mutation tool report → mutant lines for `gate.mutation`) · detect-gates.py (reads a repo's manifests → the gate lines it supports today, and what each missing one needs) · gate.sh (quiet lint/types/test/build/a11y runner + diff-scoped CRAP, mutation, TODO/FIXME, no-comments and architecture-rule checks) · test-workers.sh (the per-gate worker budget behind `{workers}`, from CPUs, free memory, cgroup limits and running gates) · find-comments.sh (the comment detector behind that check) · log-event.sh (the Director's structured log.jsonl writer) · risk-gate.sh (scores each slice's risk, judges builder spawns and merges) · adopt-plan.sh · record-gate.sh · land-slice.sh (the Director's plan adoption, gate recording and merge, one call each) · approve-risk.sh (the human's approval command — refuses inside an agent) · check-plan.sh (the Director's lint for a planner draft: fields, "Actor can" titles, resolvable acyclic `depends_on`, `auditor_triggers` from a fixed list, every `ui_contract` an approved contract, gates as a verdict or `skip: <reason>`) · generate-agents.sh (Copilot/Cursor agents, install-time) · fetch-jq.sh (checksum-pinned jq into ~/.tbv/bin when jq is missing, install-time) · agents-md.sh (protocol block in a project's AGENTS.md, for Cursor/Copilot) |
 | workflow.json | This setup's stage order for the workflow map; verified by the map's build and CI |
 | tests/ | Test harness for the hook scripts — run after any script edit; CI runs it too |
 | evals/ | 16-task benchmark + scorecard — run before trusting, re-run after any manifest edit |
@@ -119,7 +130,7 @@ Enforcement is mechanical, not prose:
 - **Before building** — guard.sh runs `risk-gate.sh check <ID> build` on every builder
   spawn: no recorded assessment, an assessment changed since it was recorded, a
   critical slice without a human authorization, a brief whose `RISK:` line names another
-  class, or a sonnet builder on an elevated+ slice → the spawn is refused.
+  class, or an economy-tier builder (`sonnet`, `fast`) on an elevated+ slice → the spawn is refused.
 - **While building** — gate.sh's `scope` step fails any changed file outside
   `risk.scope.files`. The builder stops with SCOPE-EXPANSION; the Director logs it,
   re-rates the slice and records it again (`assess`). A higher class brings its controls
@@ -129,8 +140,8 @@ Enforcement is mechanical, not prose:
   that would land `slice/<ID>` on main (merge, cherry-pick, rebase, pull, reset,
   update-ref, `branch -f`/`checkout -B` main, `push . x:main`). It reads the verdicts
   logged at the slice's current patch-id and the human approvals. Any gap blocks the merge.
-- **Human approvals** — only `~/.claude/scripts/approve-risk.sh <authorize|merge|downgrade> <ID>`
-  and `~/.claude/scripts/approve-ui.sh <contract>`, run by you in your own terminal. It refuses without a TTY or inside an agent's shell
+- **Human approvals** — only `~/.tbv/scripts/approve-risk.sh <authorize|merge|downgrade> <ID>`
+  and `~/.tbv/scripts/approve-ui.sh <contract>`, run by you in your own terminal. It refuses without a TTY or inside an agent's shell
   (CLAUDECODE set), shows you what you're approving, and appends your decision (git
   email, assessment hash, patch-id) to `.git/tbv/approvals.jsonl`. guard.sh blocks
   every agent, the Director included, from writing that ledger or running the command;
@@ -186,7 +197,7 @@ by the human, before planning (`ui-prototype` skill):
    responsive rules, tokens and components, accessibility. Major work also gets
    `prototype.html`, one clickable file that uses the project's tokens and real copy
    and has a switcher for every state, plus screenshots at 375, 768 and 1280px.
-3. You approve it yourself: `~/.claude/scripts/approve-ui.sh vault/ui/<feature>/contract.md`
+3. You approve it yourself: `~/.tbv/scripts/approve-ui.sh vault/ui/<feature>/contract.md`
    in your own terminal. Like `approve-risk.sh`, it refuses inside an agent's shell or
    without a TTY. It shows the contract and the files, then records your typed decision
    in `.git/tbv/approvals.jsonl`, bound to a hash of the whole folder, so
@@ -270,7 +281,7 @@ Cargo.toml) and labels each step:
 ```text
 STACK: node (package.json, pnpm-lock.yaml)
 READY  - gate.test: pnpm exec vitest run --coverage
-READY  - gate.crap: python3 ~/.claude/scripts/crap-score.py coverage/lcov.info -x '*.test.*' -x '*.spec.*' src
+READY  - gate.crap: python3 ~/.tbv/scripts/crap-score.py coverage/lcov.info -x '*.test.*' -x '*.spec.*' src
 N/A    gate.types — plain JavaScript (no typescript with a tsconfig.json)
 SLICE  gate.a11y — UI (react) without an accessibility check; add @playwright/test and @axe-core/playwright, … ⇒ - gate.a11y: …
 SLICE  gate.mutation — add @stryker-mutator/core and @stryker-mutator/vitest-runner ⇒ - gate.mutation: …
@@ -386,7 +397,7 @@ roughly its complexity squared. The metric and the threshold of 30 come from cra
 (Alberto Savoia and Bob Evans). Two optional lines turn it on:
 
 ```markdown
-- gate.crap: python3 ~/.claude/scripts/crap-score.py coverage.lcov src
+- gate.crap: python3 ~/.tbv/scripts/crap-score.py coverage.lcov src
 - gate.crap.max: 30
 ```
 
@@ -430,12 +441,12 @@ at CRAP 42.
 
 | Stack | `gate.test` | `gate.crap` |
 |---|---|---|
-| Python: pytest + coverage.py *(CI)* | `python3 -m coverage run -m pytest -q && python3 -m coverage lcov -q -o coverage.lcov` | `python3 ~/.claude/scripts/crap-score.py coverage.lcov src` |
-| React: Vitest *(CI)* | `npx vitest run --coverage`, with `coverage: { provider: "v8", reporter: ["lcov"], include: ["src/**"] }` in vitest.config | `python3 ~/.claude/scripts/crap-score.py coverage/lcov.info -x '*.test.*' src` |
-| Java: Maven + JaCoCo *(CI)* | `mvn -q -B test`, with jacoco-maven-plugin's `prepare-agent` and its `report` goal bound to the `test` phase (see `tests/fixtures/crap/java/pom.xml`) | `python3 ~/.claude/scripts/crap-score.py target/site/jacoco/jacoco.xml src/main/java` |
+| Python: pytest + coverage.py *(CI)* | `python3 -m coverage run -m pytest -q && python3 -m coverage lcov -q -o coverage.lcov` | `python3 ~/.tbv/scripts/crap-score.py coverage.lcov src` |
+| React: Vitest *(CI)* | `npx vitest run --coverage`, with `coverage: { provider: "v8", reporter: ["lcov"], include: ["src/**"] }` in vitest.config | `python3 ~/.tbv/scripts/crap-score.py coverage/lcov.info -x '*.test.*' src` |
+| Java: Maven + JaCoCo *(CI)* | `mvn -q -B test`, with jacoco-maven-plugin's `prepare-agent` and its `report` goal bound to the `test` phase (see `tests/fixtures/crap/java/pom.xml`) | `python3 ~/.tbv/scripts/crap-score.py target/site/jacoco/jacoco.xml src/main/java` |
 | Python: pytest-cov | `python3 -m pytest -q --cov=src --cov-report=lcov:coverage.lcov` | as above |
-| React: Jest | `npx jest --coverage --coverageReporters=lcov` | `python3 ~/.claude/scripts/crap-score.py coverage/lcov.info -x '*.test.*' src` |
-| Java: Gradle + JaCoCo | `./gradlew test jacocoTestReport`, with `jacocoTestReport { reports { xml.required = true } }` | `python3 ~/.claude/scripts/crap-score.py build/reports/jacoco/test/jacocoTestReport.xml src/main/java` |
+| React: Jest | `npx jest --coverage --coverageReporters=lcov` | `python3 ~/.tbv/scripts/crap-score.py coverage/lcov.info -x '*.test.*' src` |
+| Java: Gradle + JaCoCo | `./gradlew test jacocoTestReport`, with `jacocoTestReport { reports { xml.required = true } }` | `python3 ~/.tbv/scripts/crap-score.py build/reports/jacoco/test/jacocoTestReport.xml src/main/java` |
 
 The last three rows write the same report formats as the CI-tested rows. Their
 commands are not run in CI.
@@ -451,7 +462,7 @@ value to its default) and runs the tests. A failing test **kills** the mutant; a
 every test **survives** is a bug the suite would ship. Two optional lines turn it on:
 
 ```markdown
-- gate.mutation: rm -rf mutants && python3 -m mutmut run >/dev/null 2>&1 && python3 -m mutmut results --all true 2>/dev/null | python3 ~/.claude/scripts/mutation-report.py -
+- gate.mutation: rm -rf mutants && python3 -m mutmut run >/dev/null 2>&1 && python3 -m mutmut results --all true 2>/dev/null | python3 ~/.tbv/scripts/mutation-report.py -
 - gate.mutation.min: 80
 ```
 
@@ -500,17 +511,17 @@ from fixtures (`tests/mutation-report.sh`); the other rows' commands are not run
 
 | Stack | `gate.mutation` | Gitignore |
 |---|---|---|
-| Python: mutmut 3 *(CI)* | `rm -rf mutants && python3 -m mutmut run >/dev/null 2>&1 && python3 -m mutmut results --all true 2>/dev/null \| python3 ~/.claude/scripts/mutation-report.py -`, with `[tool.mutmut] source_paths = ["src/"]` in pyproject.toml and pytest's `testpaths` set so it skips the copy in `mutants/` | `mutants/` |
-| JS/TS: StrykerJS | `npx stryker run --reporters json && python3 ~/.claude/scripts/mutation-report.py reports/mutation/mutation.json` | `reports/`, `.stryker-tmp/` |
-| Java: Maven + PIT | `mvn -q -B test-compile org.pitest:pitest-maven:mutationCoverage -DoutputFormats=XML -DtimestampedReports=false && python3 ~/.claude/scripts/mutation-report.py target/pit-reports/mutations.xml` | `target/` |
-| Rust: cargo-mutants | `git diff "$GATE_BASE...HEAD" > .gate/diff.patch; cargo mutants --in-diff .gate/diff.patch; case $? in 0\|2\|3) python3 ~/.claude/scripts/mutation-report.py mutants.out/outcomes.json ;; *) exit 1 ;; esac` (exit 2 and 3 mean survivors and timeouts, which the gate judges) | `mutants.out*/` |
-| Go: Gremlins | `gremlins unleash --diff "$GATE_BASE" --output .gate/gremlins.json && python3 ~/.claude/scripts/mutation-report.py .gate/gremlins.json` | |
+| Python: mutmut 3 *(CI)* | `rm -rf mutants && python3 -m mutmut run >/dev/null 2>&1 && python3 -m mutmut results --all true 2>/dev/null \| python3 ~/.tbv/scripts/mutation-report.py -`, with `[tool.mutmut] source_paths = ["src/"]` in pyproject.toml and pytest's `testpaths` set so it skips the copy in `mutants/` | `mutants/` |
+| JS/TS: StrykerJS | `npx stryker run --reporters json && python3 ~/.tbv/scripts/mutation-report.py reports/mutation/mutation.json` | `reports/`, `.stryker-tmp/` |
+| Java: Maven + PIT | `mvn -q -B test-compile org.pitest:pitest-maven:mutationCoverage -DoutputFormats=XML -DtimestampedReports=false && python3 ~/.tbv/scripts/mutation-report.py target/pit-reports/mutations.xml` | `target/` |
+| Rust: cargo-mutants | `git diff "$GATE_BASE...HEAD" > .gate/diff.patch; cargo mutants --in-diff .gate/diff.patch; case $? in 0\|2\|3) python3 ~/.tbv/scripts/mutation-report.py mutants.out/outcomes.json ;; *) exit 1 ;; esac` (exit 2 and 3 mean survivors and timeouts, which the gate judges) | `mutants.out*/` |
+| Go: Gremlins | `gremlins unleash --diff "$GATE_BASE" --output .gate/gremlins.json && python3 ~/.tbv/scripts/mutation-report.py .gate/gremlins.json` | |
 
 The step is plain gate.sh, so it behaves the same under Claude Code, Cursor and
 Copilot, including from PowerShell through Git Bash on Windows.
 
 ## Codebase map
-`/codebase-map` (or `python3 ~/.claude/scripts/codebase-graph.py build`) maps any
+`/codebase-map` (or `python3 ~/.tbv/scripts/codebase-graph.py build`) maps any
 repository from its committed tree into `.gate/graph.json` and a self-contained
 `.gate/graph.html`. It's regenerated on demand and never committed, so it can't drift.
 
@@ -609,8 +620,8 @@ Where the protocol spends tokens, and what keeps it down:
 - **Subagent cold starts** — no bookkeeping agent: the Director records gates and
   harvests the story itself; the planner reads the codebase for decomposition so the Director's long-lived context
   doesn't; agents get file paths, not pasted contents.
-- **Model choice** — builder drops to sonnet for small slices; reviewer is sonnet.
-- **Always-loaded text** — the global CLAUDE.md is kept small (rarely-needed procedure
+- **Model choice** — builder drops to the economy tier for small slices; reviewer is economy (`sonnet` in Claude Code; Cursor and Copilot agents keep the session model).
+- **Always-loaded text** — the protocol is kept small (rarely-needed procedure
   lives in on-demand skills like parallel-dispatch) and is inert outside a vault project.
 - **Resume** — the SessionStart hook injects live slices, git status and leftover
   worktrees in one go; git and task-tree.json are the only resume state.
@@ -625,6 +636,11 @@ runs) goes through the context firewall. Two hooks handle it:
   failing runs are compacted too
 - a `PostToolUse` hook catches everything else that succeeds
 
+Those two hooks are Claude Code's. Cursor and Copilot give a hook no way to replace a
+tool's output, so there the generated agents and the AGENTS.md block tell the agent to
+run a noisy command as `~/.tbv/scripts/tbv run -- <command>`, which compacts it the same
+way. `gate.sh` output is compact under every tool.
+
 The full stdout/stderr is kept as an artifact in `<repo>/.tbv/`. The model gets a compact, deterministic
 view instead:
 - failing tests with their assertion lines
@@ -633,7 +649,7 @@ view instead:
 - diagnostics, with repeats collapsed
 
 The view starts with a `[tbv] <type> | <artifact id> | …` header. Omitted parts are named
-along with the flag that fetches them (`~/.claude/scripts/tbv artifact <id> --failure 2`,
+along with the flag that fetches them (`~/.tbv/scripts/tbv artifact <id> --failure 2`,
 `--file`, `--lines`, `--raw`). Source code is never compressed. `gate.sh` failure
 excerpts use the same compressors. The firewall fails open: if anything goes wrong, the
 model sees the raw output. It needs Python 3.8+ and nothing else. Details, modes,
@@ -650,8 +666,8 @@ jq is missing, the payload isn't JSON, or a field has the wrong type).
   a drive path like `C:\Users` or `C:/` → an absolute path, and git's global options
   (`-C dir`, `-c k=v`, `--git-dir`…) removed. So `g""it -C . reset --hard` and
   `rm -rf C:/` are caught.
-- Blocked: the settings.json Bash denies, repeated here because Cursor and Copilot never
-  read settings.json (`git reset --hard`, `git clean -f`, force pushes, `sudo`,
+- Blocked: Claude Code's settings.json Bash denies, repeated here because Cursor and Copilot never
+  read that file (`git reset --hard`, `git clean -f`, force pushes, `sudo`,
   `chmod 777`, DROP/TRUNCATE), plus remote branch deletion (`--delete`, `:branch`,
   `--mirror`), `git checkout/restore .`, forced checkouts, `stash drop/clear`,
   deleting main, history rewrites (`filter-branch`/`filter-repo`) and `--no-verify`.
@@ -688,7 +704,7 @@ jq is missing, the payload isn't JSON, or a field has the wrong type).
   `.git/tb*/approvals?jsonl`, `cd .git && tee -a tbv/app*` and a
   symlink to `.git` are all refused. In a vault project an agent may also not allocate
   a pseudo-terminal or scrub its environment (`script`, `expect`, `unbuffer`, `socat`,
-  python `pty`, `pexpect`, any mention of `CLAUDECODE`, `env -i`): those are how a
+  python `pty`, `pexpect`, any mention of `CLAUDECODE`, `CURSOR_AGENT`, `COPILOT_AGENT` or `TBV_AGENT`, `env -i`): those are how a
   process passes for a human at approve-risk.sh.
 - The reviewer's Chrome tools (claude-in-chrome navigate and tabs_create) may only open
   http(s) on localhost, 127.0.0.1, [::1], *.local, *.localhost or *.test; userinfo,
@@ -711,8 +727,9 @@ change that turns up during a Director call that shouldn't touch vault/ is repor
 the Director and then accepted as theirs. gate.sh adds the worktree case: a slice branch
 that changes those files fails the gate before a squash-merge carries it into main.
 
-approve-risk.sh and approve-ui.sh refuse when CLAUDECODE is set, when stdin/stdout
-aren't a terminal, and when any ancestor process is Claude Code (checked with `ps`;
+approve-risk.sh and approve-ui.sh refuse when an agent marker is set (CLAUDECODE,
+CURSOR_AGENT, COPILOT_AGENT, TBV_AGENT), when stdin/stdout
+aren't a terminal, and when any ancestor process is Claude Code, the Copilot CLI or cursor-agent (checked with `ps`;
 skipped where `ps -o` is unavailable, as in Git Bash).
 
 What this still doesn't stop: code the agent writes to a file and then runs (a script or
@@ -734,30 +751,30 @@ Also:
 - `autonomy: full` is only legal in a sandbox; new projects start `supervised`
 
 ## Staying current
-`install.sh` records what it installed in `~/.claude/tbv.version` (the commit,
+`install.sh` records what it installed in `~/.tbv/tbv.version` (the commit,
 its date, the clone it came from) and a hash of every file it put in place in
-`~/.claude/tbv.manifest`. At the start of every session, in any project, the
+`~/.tbv/tbv.manifest`. At the start of every session, in any project, the
 session-start hook compares that record with reality and tells the agent to tell you,
 in one line, when:
 
 | It says | Meaning | Fix |
 |---|---|---|
 | `outdated` | The clone has newer commits than the install: you pulled and didn't install | `./install.sh` in the clone |
-| `update available` | The remote is ahead of the clone | `~/.claude/scripts/tbv update` |
+| `update available` | The remote is ahead of the clone | `~/.tbv/scripts/tbv update` |
 | `modified` | An installed file was edited or deleted since the install | `./install.sh` in the clone |
-| `too old for this project` | The project's `vault/project.md` pins a newer harness (`- harness: <date> (<commit>)`) | `~/.claude/scripts/tbv update` |
+| `too old for this project` | The project's `vault/project.md` pins a newer harness (`- harness: <date> (<commit>)`) | `~/.tbv/scripts/tbv update` |
 
 `tbv update` fast-forwards the clone and runs its `install.sh`; it refuses a clone with
 uncommitted changes. Nothing updates on its own: these scripts are the guardrails, so
 new code reaches them only when you run the command.
 
 The remote is asked at most once a day, with a 5-second limit, and the answer is cached
-in `~/.claude/tbv.remote`. `TBV_OFFLINE=1` turns that question off;
+in `~/.tbv/tbv.remote`. `TBV_OFFLINE=1` turns that question off;
 the other three checks are local.
 
 **A machine with no install** has no hook to notice it, so the project carries that
 check: /init-codebase adds a SessionStart hook to the project's `.claude/settings.json`
-that speaks only when `~/.claude/scripts/harness.sh` is missing, and names the
+that speaks only when `~/.tbv/scripts/harness.sh` is missing, and names the
 repository to clone. That covers a teammate's laptop and a fresh cloud container. For
 cloud sessions, put the clone and `./install.sh` in the environment's setup script so
 the harness is there before the session starts.
@@ -767,7 +784,21 @@ tarball (`tbv version` says so; sessions stay quiet). Hooks this setup later dro
 in a merged `settings.json` until you remove them.
 
 ## Upgrading an existing install
-`~/.claude/scripts/tbv update`, or pull and re-run `./install.sh`. It retires old `~/.claude/commands/init-vault.md` and
+**From an install in `~/.claude`.** Earlier versions installed the scripts, the firewall
+and the version record into `~/.claude`. `install.sh` now moves them:
+- tbv's scripts, `context-firewall/`, `tbv.version` and `tbv.manifest` go to
+  `~/.claude/tbv-legacy.bak-<timestamp>/` (nothing is deleted; a script of your own in
+  `~/.claude/scripts` stays where it is) and the new copies live in `~/.tbv`.
+- Hooks in `~/.claude/settings.json`, `~/.copilot/hooks/tbv.json` and
+  `~/.cursor/hooks.json` that ran those scripts now run them from `~/.tbv/scripts`.
+- Each old path `~/.claude/scripts/<script>` becomes a link to the new copy, so a
+  `gate.*` line or project hook written before the move keeps working. Git Bash on
+  Windows can't make the links: there, change `~/.claude/scripts` to `~/.tbv/scripts` in
+  each project's `vault/project.md` and `.claude/settings.json`.
+- Each project's AGENTS.md block is rewritten with the new paths at the next session
+  start; commit the diff.
+
+`~/.tbv/scripts/tbv update`, or pull and re-run `./install.sh`. It retires old `~/.claude/commands/init-vault.md` and
 `harvest.md` (now skills) to `.bak-<timestamp>` copies. /init-vault is now
 /init-codebase: install.sh moves a stale `~/.claude/skills/init-vault/` to
 `~/.claude/init-vault-skill.bak-<timestamp>/`, outside skills/ so it stops loading;
@@ -781,11 +812,11 @@ In each existing project:
    Commit before running the gate: it now refuses uncommitted changes outside `vault/`.
 2. Add `.gate/` and `vault/plan-draft.json` to `.gitignore`.
    The vault memory layer is gone: install.sh backs up a stale scribe agent and
-   compaction skill (Claude, Copilot and Cursor copies) as `.bak-<timestamp>` outside
+   compaction skill (Claude Code, Copilot and Cursor copies) as `.bak-<timestamp>` outside
    the live folders, and session-start.sh prints a hint while `vault/memory` or
    `vault/handoffs` remains. Re-run `/init-codebase`: on a clean tree it `git rm -r`s
    them in their own commit (history keeps them).
-3. Run `~/.claude/scripts/agents-md.sh` once in the project so Cursor and Copilot get
+3. Run `~/.tbv/scripts/agents-md.sh` once in the project so Cursor and Copilot get
    the protocol through AGENTS.md; commit it.
 4. Slices already in `task-tree.json` with a `mode: afk|hitl` field keep working; the
    field is ignored. Any former hitl slice whose human decision is still open should
@@ -806,78 +837,141 @@ In each existing project:
    which keeps Claude Code in Git Bash (see Windows).
 10. Risk gate: every live slice in `task-tree.json` needs a `risk` assessment before its
     next builder spawn or merge (see Risk gate). Add one to each (the planner can draft
-    them), run `~/.claude/scripts/risk-gate.sh assess <ID>`, and check
+    them), run `~/.tbv/scripts/risk-gate.sh assess <ID>`, and check
     `risk-gate.sh pending`. Builder briefs need a `RISK: <class>` line. Slices already
     shipped need nothing. The risk gate stays off in projects without a vault/.
 
-## Verify on first install
-Hook and permission syntax evolves — if a hook doesn't fire, check the current
-Claude Code docs (docs.claude.com) and adjust settings.json patterns.
+## Tools
+tbv is one install with an adapter per tool. Everything that does the work lives in
+`~/.tbv`: `PROTOCOL.md`, `agents/` (the source manifests), `skills/`, `scripts/`,
+`context-firewall/`, the version record. Each tool then gets only what it needs to find
+those, in the format it reads:
 
-## GitHub Copilot / VS Code compatibility
-VS Code's Copilot Chat reads several of Claude Code's own files directly, so most of
-this setup works with zero conversion once `./install.sh` has run:
-- `~/.claude/CLAUDE.md` → loaded automatically as always-on instructions
-  (`chat.useClaudeMdFile`, on by default)
-- `~/.claude/skills/*/SKILL.md` → auto-discovered as personal Agent Skills (same
-  format, invoked automatically or via `/skill-name`)
-- Hooks → `install.sh` writes `~/.copilot/hooks/tbv.json` in VS Code's native
-  format (PascalCase events, absolute script paths, a 60 s timeout like Claude Code's),
-  which the **Local** session target loads with no setting to flip. Leave
+| | Claude Code | Copilot in VS Code | Copilot CLI | Copilot cloud agent | Cursor |
+|---|---|---|---|---|---|
+| Protocol | `~/.claude/CLAUDE.md` | project AGENTS.md | project AGENTS.md | project AGENTS.md | project AGENTS.md |
+| Agents | `~/.claude/agents/` | `~/.copilot/agents/` | `~/.copilot/agents/` | `.github/agents/` (opt-in) or the runner's `~/.copilot/agents/` | `~/.cursor/agents/` |
+| Skills | `~/.claude/skills/` | `~/.copilot/skills/` | `~/.copilot/skills/` | the runner's `~/.copilot/skills/` | `~/.cursor/skills/` |
+| Hooks | `~/.claude/settings.json` | `~/.copilot/hooks/tbv.json` | `~/.copilot/hooks/tbv.json` | `.github/hooks/tbv.json` | `~/.cursor/hooks.json` |
+| Director | the main session | the `orchestrator` agent | the `orchestrator` agent | the `orchestrator` agent | the main session |
+| Economy model tier | `sonnet` | session model | session model | session model | session model |
+| Shell output compaction | hooks (automatic) | `tbv run --` (the agents are told) | `tbv run --` | `tbv run --` | `tbv run --` |
+| Blocks a subagent's vault write up front | yes | no (restored after) | no (restored after) | no (restored after) | no (restored after) |
+
+Every script reads all of these tools' hook payloads; the named tests in
+`tests/run-tests.sh` pin each mapping. Hook formats change faster than this file: if a
+hook doesn't fire, check the tool's current hook docs against the file install.sh wrote.
+
+The protocol names its model tier, not a model: `economy` in `agents/*.md` and in the
+builder routing rule. `generate-agents.sh claude` turns it into `sonnet`; Cursor and
+Copilot agents run on the session model. guard.sh refuses a builder spawn on any
+economy-tier name (`economy`, `sonnet`, `haiku`, `fast`, `mini`, `nano`, `flash`, `lite`)
+for an elevated-or-higher slice.
+
+### Claude Code
+`install.sh` copies the protocol to `~/.claude/CLAUDE.md` (a differing file is backed
+up first), generates `~/.claude/agents/`, copies the skills and merges hooks and
+permissions into `~/.claude/settings.json`; the hooks call `~/.tbv/scripts/`. Hook and
+permission syntax evolves: if a hook doesn't fire, check the Claude Code docs
+(docs.claude.com) and adjust the settings.json patterns. Only here do the context
+firewall's hooks rewrite and compact shell output on their own, because only Claude
+Code lets a PostToolUse hook replace what the model sees.
+
+### GitHub Copilot in VS Code
+- Hooks → `~/.copilot/hooks/tbv.json` (PascalCase events, absolute script paths, a 60 s
+  timeout), which the **Local** session target loads with no setting to flip. Leave
   `chat.useClaudeHooks` off: with it on, VS Code also runs the `~/.claude/settings.json`
   hooks and every script fires twice. The scripts read VS Code's own tool names and
   payloads: `run_in_terminal`, `send_to_terminal` and `create_and_run_task` (its
   `task.command` plus `task.args`), camelCase `filePath`, every file in
   `multi_replace_string_in_file` and `apply_patch`, and `runSubagent`'s `agentName`
-  and `model` for the brief and risk checks. VS Code has no matchers, so `lint.sh` skips read-only
-  tools itself and never reformats a file the agent only read. `session-start.sh` answers with `hookSpecificOutput` JSON,
-  the only SessionStart form VS Code reads. The named tests in `tests/run-tests.sh` pin
-  each mapping.
+  and `model` for the brief and risk checks. VS Code has no matchers, so `lint.sh` skips
+  read-only tools itself and never reformats a file the agent only read.
+  `session-start.sh` answers with `hookSpecificOutput` JSON, the only SessionStart form
+  VS Code reads.
+- Agents → `~/.copilot/agents/*.agent.md`, plus an `orchestrator` agent that plays the
+  Director and dispatches the others as subagents (its `agents:` roster is generated
+  from `agents/`). Tools are mapped to VS Code's sets (`read`, `edit`, `search`,
+  `execute`, `agent`); if a generated agent is missing terminal access, check the tool
+  name in the `#` tools picker and fix `map_tools` in `scripts/generate-agents.sh`.
+- Skills → `~/.copilot/skills/`.
+- Protocol → the project's AGENTS.md (see [AGENTS.md](#agentsmd)).
 
-  Limits under VS Code (checked against VS Code's source, not just its docs): only the
-  **Local** session target uses these hooks; the Copilot, Claude and Codex targets on Agent
-  Host follow their own hook docs. VS Code has no `PostToolUseFailure`, so vault-guard.sh
-  only restores human-only files after a tool call that succeeded (guard.sh still refuses
-  the commands up front). Subagents run the same hooks, but VS Code's `PreToolUse` and
-  `PostToolUse` payloads carry no `agent_id`, so the subagent-only blocks in guard.sh can't
-  tell a subagent's call from the Director's; vault-guard.sh still reports any vault change
-  the Director didn't make. Hooks start in the hook file's workspace folder (the first one
-  for a user-level file) and in your home directory when no folder is open. On Windows
-  VS Code runs hook commands through Windows PowerShell, so the hooks file calls Git Bash
-  as `& '…\bin\bash.exe' '…/guard.sh'; exit $LASTEXITCODE`; CI runs it exactly that way.
-  Workspace Trust and `chat.useHooks` (on by default) must allow hooks.
+Limits under VS Code (checked against VS Code's source, not just its docs): only the
+**Local** session target uses these hooks. VS Code has no `PostToolUseFailure`, so
+vault-guard.sh only restores human-only files after a tool call that succeeded (guard.sh
+still refuses the commands up front). Subagents run the same hooks, but the payloads
+carry no `agent_id`, so the subagent-only blocks in guard.sh can't tell a subagent's
+call from the Director's; vault-guard.sh still reports any vault change the Director
+didn't make. On Windows VS Code runs hook commands through Windows PowerShell, so the
+hooks file calls Git Bash as `& '…\bin\bash.exe' '…/guard.sh'; exit $LASTEXITCODE`; CI
+runs it exactly that way. Workspace Trust and `chat.useHooks` (on by default) must allow
+hooks.
 
-What doesn't carry over as-is: VS Code reads user-level agents from both
-`~/.claude/agents` and `~/.copilot/agents`, so you may see each agent listed twice.
-`install.sh` runs `scripts/generate-agents.sh copilot` to translate every agent in
-`agents/` into VS Code's native format at `~/.copilot/agents/`, plus a new `orchestrator` agent
-that plays the Director role (dispatches every agent above as a subagent — its
-`agents:` roster is generated from `agents/`, so a new agent needs no generator edit;
-VS Code has genuine subagent orchestration via that frontmatter field). The
-Bash → VS Code tool-name mapping in that script is a best-effort guess; if a
-generated agent seems to be missing terminal access, check the real tool identifier
-via the `#` tools picker in VS Code chat and fix the mapping.
+With Claude Code installed too, VS Code reads `~/.claude/agents`, `~/.claude/skills` and
+`~/.claude/CLAUDE.md` as well, so agents and skills are listed twice and the protocol
+loads twice in a vault project. Turn off `chat.useClaudeMdFile` to stop paying for the
+protocol twice; nothing is lost, since every vault project carries AGENTS.md.
 
-## Cursor compatibility
-What Cursor picks up with no conversion: `~/.claude/skills/` (all skills) and
-`~/.claude/agents/` (all subagents). What `./install.sh` adds when it finds `~/.cursor`
-(or `cursor` on PATH, or you run `CURSOR=1 ./install.sh`):
-- `~/.cursor/agents/*.md`: the same agents, re-emitted with Cursor's `readonly` flag.
-  Cursor ignores Claude's `tools:` allowlist, so without these copies the reviewer and
-  auditor could edit files. Same-named files here take precedence over `~/.claude/agents`.
-  Models: `haiku` becomes `fast`; everything else becomes `inherit`.
-- `~/.cursor/hooks.json`: the same scripts on Cursor's events. `preToolUse`,
-  `beforeShellExecution` and `beforeReadFile` → guard.sh with `failClosed: true` (a crash or
-  timeout blocks instead of allowing; answers with Cursor's allow/deny JSON), so file writes,
-  deletes and `Task` spawns are checked as well as shell and reads. `preToolUse`,
-  `postToolUse`, `postToolUseFailure` and `subagentStop` → vault-guard.sh. `postToolUse` →
-  lint.sh, whose errors come back to the agent as `additional_context`; `afterFileEdit` →
-  lint.sh as well, for formatting. `stop` → checkpoint.sh, `sessionStart` → session-start.sh.
-  An existing hooks.json is never overwritten; the new one lands next to it as
+### GitHub Copilot CLI
+The CLI reads the same `~/.copilot/` folders as VS Code: the agents, the skills and
+`hooks/tbv.json`. The hooks file is written so both accept it: `version: 1`, PascalCase
+event names (which make the CLI send the VS Code-shaped payload the scripts already
+read), `command` and `timeout`, and on Windows a `powershell` command beside VS Code's
+`windows` one. guard.sh also knows the CLI's lowercase tool names (`bash`, `view`,
+`grep`, `glob`, `task`) and answers a blocked PreToolUse with
+`{"permissionDecision": "deny", …}` on stdout as well as exit 2 and the reason on
+stderr. Start the Director with the `orchestrator` agent.
+
+This path is written from GitHub's hooks reference and has not been run against a live
+CLI: run `git push --force` in a scratch repo once and confirm the block before you
+rely on it.
+
+### GitHub Copilot cloud agent
+The cloud agent runs on a GitHub Actions runner and sees nothing in your home directory,
+so what it needs is committed to the project. In the project, run:
+
+```bash
+~/.tbv/scripts/cloud-agent.sh            # add --with-agents for .github/agents/
+git add .github && git commit -m "chore: set up tbv for the Copilot cloud agent"
+```
+
+It writes:
+- `.github/workflows/copilot-setup-steps.yml`: the `copilot-setup-steps` job clones tbv
+  at the commit you have installed and runs `TBV_TOOLS=copilot ./install.sh` on the
+  runner, so gate.sh, the scripts, the agents and the skills are there before the agent
+  starts.
+- `.github/hooks/tbv.json`: the same scripts on the same events. On the runner each hook
+  runs `~/.tbv/scripts/<script>`; if tbv is missing there (the setup step failed), every
+  tool call is blocked instead of running unguarded. On a machine that already has
+  `~/.copilot/hooks/tbv.json` the project hooks do nothing, so no script runs twice, and
+  on a teammate's machine without tbv they do nothing either.
+- with `--with-agents`, `.github/agents/*.agent.md`. Leave it out if the runner's
+  `~/.copilot/agents/` is enough for you: VS Code lists agents from both places, so
+  committing them shows each agent twice locally.
+
+Both files must be on the default branch. What the cloud agent can't do: get a human
+approval (approve-risk.sh and approve-ui.sh need a person at a terminal), so a high or
+critical slice, or one that needs a UI approval, waits for you. The tbv repository must
+be one the runner can clone over HTTPS; for a private fork, give the workflow a token
+and pass `--source`. Like the CLI path, this is written from GitHub's docs and has not
+been run in a live cloud session.
+
+### Cursor
+- `~/.cursor/agents/*.md`: the agents with Cursor's `readonly` flag (Cursor ignores a
+  `tools:` allowlist, so this is what keeps the reviewer and auditor from editing).
+  `model: inherit` throughout.
+- `~/.cursor/skills/`: the skills.
+- `~/.cursor/hooks.json`: `preToolUse`, `beforeShellExecution` and `beforeReadFile` →
+  guard.sh with `failClosed: true` (a crash or timeout blocks instead of allowing;
+  answers with Cursor's allow/deny JSON), so file writes, deletes and `Task` spawns are
+  checked as well as shell and reads. `preToolUse`, `postToolUse`, `postToolUseFailure`
+  and `subagentStop` → vault-guard.sh. `postToolUse` → lint.sh, whose errors come back
+  to the agent as `additional_context`; `afterFileEdit` → lint.sh as well, for
+  formatting. `stop` → checkpoint.sh, `sessionStart` → session-start.sh. An existing
+  hooks.json of your own is never overwritten; the new one lands next to it as
   `hooks.json.new-<timestamp>`.
-
-Cursor never reads CLAUDE.md and has no file-based global rules; it reads the project's
-`AGENTS.md`. See "AGENTS.md" below.
+- Protocol → the project's AGENTS.md. Cursor has no file-based global rules.
 
 Known gaps under Cursor:
 - **Subagent writes are reported, not blocked.** Cursor's tool payloads don't say which
@@ -885,14 +979,12 @@ Known gaps under Cursor:
   vault-guard.sh restores Director-only files when a subagent stops and tells the Director
   about any vault change it didn't make.
 - **Running twice with third-party configs on.** Cursor's "Include third-party Plugins,
-  Skills, and other configs" toggle also runs `~/.claude/settings.json` hooks, so each
+  Skills, and other configs" toggle also runs `~/.claude/settings.json` hooks and reads
+  `~/.claude/skills` and `~/.claude/agents`, so with Claude Code installed too each
   script fires twice. Harmless (every script is idempotent), just slower.
 - **Session context injection may not work.** Cursor has a reported bug where
   `sessionStart`'s `additional_context` isn't injected. If the agent doesn't see its
   live slices, it can read `vault/task-tree.json` and `git log` itself.
-- **Hook payload fields are unverified.** They come from secondary sources (Cursor's
-  docs weren't reachable when this was written). If a hook doesn't fire, check Cursor's
-  hooks docs and adjust the event names in `install.sh`.
 - **No hooks on Windows.** See Windows below.
 
 ## Windows
@@ -925,52 +1017,43 @@ nothing below. CI runs the whole test harness on Windows (Git Bash) and macOS
 - **From PowerShell**, a script goes through Git Bash. The generated Cursor and Copilot
   agents and the AGENTS.md block tell the agents how. CI runs this form from PowerShell 7
   and Windows PowerShell 5.1:
-  `& "$env:ProgramFiles\Git\bin\bash.exe" -c '~/.claude/scripts/gate.sh test -- tests/test_notes.py'`
+  `& "$env:ProgramFiles\Git\bin\bash.exe" -c '~/.tbv/scripts/gate.sh test -- tests/test_notes.py'`
 
 Known gaps on Windows:
-- **No hooks under Cursor or Copilot.** Both start hook commands with Windows shells
-  there (Cursor through PowerShell), and those can't execute a `.sh` file, so guard.sh,
-  vault-guard.sh, lint.sh and checkpoint.sh don't fire. gate.sh, the agents and the
-  skills still work. For the guardrails too, open the project in WSL: hooks then run on
-  Linux.
+- **No hooks under Cursor.** It starts hook commands through PowerShell, which can't
+  execute a `.sh` file, so guard.sh, vault-guard.sh, lint.sh and checkpoint.sh don't
+  fire. gate.sh, the agents and the skills still work. For the guardrails too, open the
+  project in WSL: hooks then run on Linux. Copilot's hooks file carries a PowerShell
+  command that calls Git Bash (`windows` for VS Code, `powershell` for the CLI).
 - **guard.sh reads bash, not PowerShell or cmd.** It knows `rm.exe` and `rm -rf C:/`,
   but not `Remove-Item -Recurse` or `rd /s`. Under Claude Code, keeping the PowerShell
-  tool off covers this; under Cursor and Copilot there are no hooks to begin with.
+  tool off covers this; set Copilot's terminal to Git Bash as above.
 
 ### jq without admin rights
-Every hook script sources `scripts/jq-text.sh`, which looks in `~/.claude/bin` when no
+Every hook script sources `scripts/jq-text.sh`, which looks in `~/.tbv/bin` when no
 jq is on `PATH`. A jq already on `PATH` always wins, so a package-manager jq takes
 over as soon as you install one. `install.sh` fills that folder when jq is missing:
 `scripts/fetch-jq.sh` downloads the official jq 1.8.1 release for Linux, macOS (amd64,
 arm64) or Windows (amd64), refuses it unless its SHA-256 matches the one pinned in the
-script and it runs, and saves it as `~/.claude/bin/jq` (`jq.exe` on Windows). Behind a
+script and it runs, and saves it as `~/.tbv/bin/jq` (`jq.exe` on Windows). Behind a
 proxy that blocks GitHub, download the matching file from
 github.com/jqlang/jq/releases yourself, save it under that name, and re-run
 `install.sh` so it writes the Copilot and Cursor hook files that need jq.
 
-## AGENTS.md (Cursor and Copilot)
-Cursor and GitHub Copilot both read a project's `AGENTS.md`; Claude Code reads the
-global `~/.claude/CLAUDE.md` instead. `/init-codebase` runs `~/.claude/scripts/agents-md.sh`,
-which writes the protocol into AGENTS.md between
+## AGENTS.md
+Cursor and every Copilot surface read a project's `AGENTS.md`; Claude Code reads
+`~/.claude/CLAUDE.md`. `/init-codebase` runs `~/.tbv/scripts/agents-md.sh`,
+which writes `~/.tbv/PROTOCOL.md` into AGENTS.md between
 `<!-- skeletoncrew:protocol:begin … -->` and `<!-- skeletoncrew:protocol:end -->`.
 Anything else in the file is yours and is never touched. The session-start hook rewrites
-the block whenever `~/.claude/CLAUDE.md` changes, so upgrades propagate — commit the diff.
+the block whenever the installed protocol changes, so upgrades propagate — commit the diff.
 
-Every CRAP rule sits where all three tools read it: gate.sh, the generated agents,
-and the protocol block; the skill is named by its path so a tool without a skill
-loader can open it.
-
-This also reaches Copilot surfaces that never see `~/.claude/`: the cloud coding agent
-and the CLI get the protocol text, but not gate.sh, the hooks, or the agents, so there it
-is guidance only.
-
-VS Code reads both files: `~/.claude/CLAUDE.md` (`chat.useClaudeMdFile`, on by default)
-and AGENTS.md, so in a vault project the protocol loads twice. To avoid paying for it
-twice, turn off `chat.useClaudeMdFile`. Nothing is lost: the protocol only applies in
-vault projects, and every vault project carries AGENTS.md.
+Every CRAP rule sits where all the tools read it: gate.sh, the generated agents,
+and the protocol block; a skill is named by its path under `~/.tbv/skills/` so a tool
+without a skill loader can open it.
 
 ## Scripts
-Installed to `~/.claude/scripts/`. Each one's behavior is pinned by a named test in
+Installed to `~/.tbv/scripts/` (`cloud-agent.sh` and `generate-agents.sh` write into a tool's or a project's folder). Each one's behavior is pinned by a named test in
 `tests/run-tests.sh`; crap-score.py's in `tests/crap-score.sh` (formats) and
 `tests/crap-stacks.sh` (Python, React and Java end to end); mutation-report.py's in
 `tests/mutation-report.sh` (formats) and `tests/mutation-stacks.sh` (Python with mutmut
@@ -989,29 +1072,30 @@ end to end); codebase-graph.py's in `tests/codebase-graph.sh`.
 | record-gate.sh | `record-gate.sh <ID> <self_review\|automated\|reviewer\|auditor> <verdict\|'skip: <reason>'> [--gate-line LINE] [log-event.sh options]` | One gate verdict in one call: sets the slice's gate in task-tree.json, appends the log.jsonl line (sha and patch_id read from gate.sh's result line), and commits both. Refuses a verdict the gate can't give, or one that contradicts the gate line, before writing anything. |
 | land-slice.sh | `land-slice.sh <ID> [-m MESSAGE]` | The merge in one call, from the main checkout: `risk-gate.sh check <ID> merge`, a `git merge-tree` conflict check that leaves main untouched, squash-merge, tag `<ID>-done`, gate 5 and status `done` in task-tree.json, `merge done` with the CONTROLS line in log.jsonl, a bookkeeping commit, then the branch and worktree removed. guard.sh runs the merge check on the command too, and blocks subagents from all three scripts. |
 | risk-gate.sh | `risk-gate.sh lint\|table <plan>` · `score [file\|-]` · `show\|assess\|audit <ID>` · `check <ID> build\|merge` · `scope [ID]` · `pending` · `calibrate` | Scores a slice's `risk` (0-100, class, floors, controls) the same way every time. `assess` records it in log.jsonl; `check` exits 1 listing every missing control and ends `RISK: PASS\|FAIL`; `scope` backs gate.sh's step; `pending` feeds the SessionStart hook. Exit 2 (fail closed) without jq or on a malformed `vault/risk-policy.json`. |
-| approve-risk.sh | `approve-risk.sh <authorize\|merge\|downgrade> <ID>` | The human's approval. Refuses without a TTY or with CLAUDECODE set; shows the assessment (merge: diffstat and controls); records the typed decision in `.git/tbv/approvals.jsonl`. Typing anything other than the prompt records a denial; an empty line cancels. |
+| approve-risk.sh | `approve-risk.sh <authorize\|merge\|downgrade> <ID>` | The human's approval. Refuses without a TTY, with an agent marker set (CLAUDECODE, CURSOR_AGENT, COPILOT_AGENT, TBV_AGENT) or under a Claude Code, Copilot CLI or cursor-agent process; shows the assessment (merge: diffstat and controls); records the typed decision in `.git/tbv/approvals.jsonl`. Typing anything other than the prompt records a denial; an empty line cancels. |
 | approve-ui.sh | `approve-ui.sh vault/ui/<slug>/contract.md` | The human's UI approval. Same refusals as approve-risk.sh; shows the contract and the folder's files; records the typed decision with a hash of the whole folder. |
 | ui-approval.sh | `ui-approval.sh check\|hash <contract>` | Read-only. `check` prints `UI: APPROVED … by <email>` (exit 0) only when the latest ledger decision for that contract is an approval of the folder as it is now; otherwise `UI: NOT APPROVED` with the reason and the command to run (exit 1). Behind check-plan.sh and guard.sh. |
-| guard.sh | PreToolUse hook (every tool) | Exit 2 blocks the call and feeds the reason back. Fails closed without jq or on a malformed payload. Understands Claude Code, VS Code Copilot (its own tool names; an unknown tool carrying a command is treated as a shell call) and Cursor (`beforeShellExecution` and `beforeReadFile`, answered with allow/deny JSON). See Safety model. |
+| guard.sh | PreToolUse hook (every tool) | Exit 2 blocks the call and feeds the reason back. Fails closed without jq or on a malformed payload. Understands Claude Code, Copilot in VS Code and the CLI (their own tool names; a PreToolUse block also prints a `permissionDecision: deny` answer; an unknown tool carrying a command is treated as a shell call) and Cursor (`beforeShellExecution` and `beforeReadFile`, answered with allow/deny JSON). See Safety model. |
 | vault-guard.sh | PreToolUse, PostToolUse, PostToolUseFailure, SubagentStop hook; `vault-guard.sh --snapshot` | Restores task-tree.json and log.jsonl in the main checkout when a subagent changes them (exit 2 tells it why); warns the Director about unexplained changes. Snapshots live in `.git/skeletoncrew-vault-guard/`. Claude Code only — other tools' payloads don't name the subagent. |
 | lint.sh | PostToolUse hook | Formats the edited file, exit 2 with lint errors. Reads Claude Code's `file_path`, Copilot's `filePath` and Cursor's top-level `file_path`; Cursor ignores the exit code, so there errors surface at the gate. |
 | checkpoint.sh | Stop hook | Commits progress on `slice/*` branches only (never main, a feature branch or a detached HEAD), inside worktrees too. Scans with `gitleaks git --staged` (v8.19+) or `gitleaks protect --staged` (older) and aborts on a finding. |
-| harness.sh | `harness.sh status` · `check` · `require [dir]` · `update` · `pin` · `project-hook` · `stamp <source>` (`tbv version` and `tbv update` call it) | The install's version record. `stamp` (run by install.sh) writes the commit, its date and the source clone to `~/.claude/tbv.version` and a hash per installed file to `tbv.manifest`. `check` prints nothing when the install matches its clone, the remote (asked once a day) and the manifest, else one line per problem with the command that fixes it. `require` compares the install with a project's `harness:` pin. `pin` prints that line; `project-hook` prints the project-level hook that reports a machine with no install. `update` fast-forwards the clone and re-runs its install.sh. |
+| harness.sh | `harness.sh status` · `check` · `require [dir]` · `update` · `pin` · `project-hook` · `stamp <source>` (`tbv version` and `tbv update` call it) | The install's version record. `stamp` (run by install.sh) writes the commit, its date and the source clone to `~/.tbv/tbv.version` and a hash per installed file to `tbv.manifest`. `check` prints nothing when the install matches its clone, the remote (asked once a day) and the manifest, else one line per problem with the command that fixes it. `require` compares the install with a project's `harness:` pin. `pin` prints that line; `project-hook` prints the project-level hook that reports a machine with no install. `update` fast-forwards the clone and re-runs its install.sh. |
 | session-start.sh | SessionStart hook | Injects live slices, slices the risk gate is holding, git status and leftover worktrees (plus a one-line migration hint while vault/memory or vault/handoffs exists; deletes nothing); plain text, or `{"additional_context": ...}` for Cursor. Refreshes the AGENTS.md protocol block. |
 | agents-md.sh | `agents-md.sh [project-dir]` | Writes the protocol into the project's AGENTS.md between its markers; leaves everything else in the file alone. |
-| generate-agents.sh | `generate-agents.sh <copilot\|cursor> [dest]` | Emits derived agents (always overwritten, never hand-edit). Copilot gets an `orchestrator` whose roster is every agent in `agents/`; it isn't called "director" because that name means the main Claude Code session. |
+| cloud-agent.sh | `cloud-agent.sh [--with-agents] [--source URL] [--ref COMMIT] [project-dir]` | Writes what Copilot's cloud agent reads from a repository: `.github/workflows/copilot-setup-steps.yml` (installs tbv at the installed commit), `.github/hooks/tbv.json` and, with `--with-agents`, `.github/agents/`. Keeps a workflow or hooks file of your own and puts tbv's beside it as `.tbv-new`. Refuses a source the runner can't clone. |
+| generate-agents.sh | `generate-agents.sh <claude\|copilot\|cursor> [dest]` | Emits derived agents (always overwritten, never hand-edit). Claude Code gets the manifests with the economy tier turned into `sonnet`. Copilot gets an `orchestrator` whose roster is every agent in `agents/`; it isn't called "director" because that name means the main session. |
 | detect-gates.py | `detect-gates.py [--apply] [repo root]` | Prints the repo's stacks and one line per gate step: SET, READY, N/A, ASK, SLICE or TOOL, with the proposed command. `--apply` appends READY lines (and `none` for N/A) to the Gate section of vault/project.md and the needed entries to .gitignore. It never edits an existing line, and a second run changes nothing. Exit 1 when `--apply` finds no vault/project.md. |
 | fetch-jq.sh | `fetch-jq.sh <dest-dir> [--url U --sha256 HEX]` | Downloads the official jq 1.8.1 binary for this OS into `<dest-dir>`, installs it only when its SHA-256 matches the pinned one (or the one given with `--url`) and it runs, and prints its path. Exit 1 with nothing installed otherwise. `install.sh` runs it when jq is missing. |
-| validate-manifests.sh | `validate-manifests.sh` | Checks agent and skill frontmatter, and that CLAUDE.md's Agents table matches `agents/`. |
+| validate-manifests.sh | `validate-manifests.sh` | Checks agent and skill frontmatter, and that PROTOCOL.md's Agents table matches `agents/`. |
 
 ## Iterating
-This repo IS your dotfiles for Claude Code (and, via the above, Copilot in VS Code and Cursor).
+This repo IS your dotfiles for all three tools.
 Edit agent manifests here, re-run ./install.sh, re-run the evals, commit. The setup
 improves as you use it. Re-running install.sh also regenerates
-`~/.copilot/agents/` (and `~/.cursor/agents/`) from whatever's currently in `agents/` — that output is pure
+`~/.claude/agents/`, `~/.copilot/agents/` and `~/.cursor/agents/` from whatever's currently in `agents/` — that output is pure
 derived content, never hand-edit it directly.
-The global CLAUDE.md is inert in any directory without a `vault/` — including this
-repo — so editing the setup itself doesn't put Claude into Director mode.
+The protocol is inert in any directory without a `vault/` — including this
+repo — so editing the setup itself doesn't put the agent into Director mode.
 Any edit to scripts/ must keep `tests/run-tests.sh` green — the guardrails are
 the last line of defense, so they are the one place tests are non-negotiable.
 This repo follows its own no-comments rule; CI runs `find-comments.sh` over every

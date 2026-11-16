@@ -101,7 +101,7 @@ snapshot_between_calls() {
     esac
   done
   [ ${#restored[@]} -eq 0 ] && return 0
-  echo "RESTORED: ${restored[*]} — the approvals ledger changed between tool calls without approve-risk.sh or approve-ui.sh (a background job?). Only those scripts, run by a human in their own terminal, may add to it. If a human edited it by hand, they run ~/.claude/scripts/vault-guard.sh --human-snapshot in their own terminal." >&2
+  echo "RESTORED: ${restored[*]} — the approvals ledger changed between tool calls without approve-risk.sh or approve-ui.sh (a background job?). Only those scripts, run by a human in their own terminal, may add to it. If a human edited it by hand, they run ~/.tbv/scripts/vault-guard.sh --human-snapshot in their own terminal." >&2
   return 1
 }
 

@@ -25,5 +25,5 @@ Manifest commit (tbv repo, `git rev-parse HEAD`): [sha]
 
 ## Notes
 - Worst failure observed:
-- Manifest/CLAUDE.md change this run motivates:
+- Manifest/PROTOCOL.md change this run motivates:
 - Dial recommendation: supervised / semi / (full only in sandbox)

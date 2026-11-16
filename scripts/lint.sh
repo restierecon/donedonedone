@@ -5,7 +5,7 @@
 input=$(cat)
 event=$(echo "$input" | jq -r '.hook_event_name // empty' 2>/dev/null)
 case "$(echo "$input" | jq -r '.tool_name // empty' 2>/dev/null)" in
-  Read|Grep|Glob|LS|NotebookRead|read_file|readFile|list_dir|listDirectory|file_search|grep_search|semantic_search) exit 0 ;;
+  Read|Grep|Glob|LS|NotebookRead|view|grep|glob|read_file|readFile|list_dir|listDirectory|file_search|grep_search|semantic_search) exit 0 ;;
 esac
 if [ "$event" = "postToolUse" ]; then
   msg=$(printf '%s' "$input" | jq -c 'del(.hook_event_name)' | "$0" 2>&1 >/dev/null) \

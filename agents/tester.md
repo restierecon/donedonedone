@@ -24,7 +24,7 @@ directory if the slice has a `git worktree`. Work on branch `slice/<ID>` only.
    run, a module's exported function). Where that surface does not exist yet, name it
    the way the spec and neighboring code would, and list each name you chose under
    INTERFACE in your report: the builder builds to those names.
-4. Run them: `~/.claude/scripts/gate.sh test -- <contract test paths>`. They must fail,
+4. Run them: `~/.tbv/scripts/gate.sh test -- <contract test paths>`. They must fail,
    and fail because the behavior is missing. A test that passes now proves nothing —
    rewrite it. A test that fails on a typo or a bad import of something that already
    exists is broken — fix it.

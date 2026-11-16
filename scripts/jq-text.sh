@@ -1,7 +1,7 @@
 #!/bin/bash
 
-if ! command -v jq >/dev/null 2>&1 && [ -d "$HOME/.claude/bin" ]; then
-  PATH="$PATH:$HOME/.claude/bin"
+if ! command -v jq >/dev/null 2>&1 && [ -d "$HOME/.tbv/bin" ]; then
+  PATH="$PATH:$HOME/.tbv/bin"
 fi
 
 if command -v jq >/dev/null 2>&1 && [ "$(command jq -rn '"x"' 2>/dev/null | tr '\r' '!')" = "x!" ]; then

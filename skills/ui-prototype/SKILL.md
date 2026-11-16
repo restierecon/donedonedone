@@ -76,7 +76,7 @@ table and screenshot it at 375, 768 and 1280px (`vault/ui/<feature-slug>/<state>
 Approval is human-only, exactly like a risk approval: you can't give it, and nothing
 you write counts as it. The human runs, in their own terminal:
 
-    ~/.claude/scripts/approve-ui.sh vault/ui/<feature-slug>/contract.md
+    ~/.tbv/scripts/approve-ui.sh vault/ui/<feature-slug>/contract.md
 
 It refuses inside an agent's shell or without a TTY, shows the contract and every file
 in the folder, and records the typed decision in `.git/tbv/approvals.jsonl`,
@@ -89,7 +89,7 @@ any agent from running it or writing that ledger.
   every state, copy, responsive behavior, what's deliberately left out — and the exact
   command. Put the same in vault/flags/pending-review.md.
 - Changes requested (in chat, or a denial recorded) → revise, re-screenshot, ask again.
-- Confirm with `~/.claude/scripts/ui-approval.sh check <contract path>`: it prints
+- Confirm with `~/.tbv/scripts/ui-approval.sh check <contract path>`: it prints
   `UI: APPROVED … by <email>` or why not. Only then is the grill done.
 - Commit the folder: `docs(ui): add <feature-slug> contract`.
 

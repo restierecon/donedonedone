@@ -38,7 +38,7 @@ another slice's worktree. If none is given, work on branch `slice/<ID>` as usual
    redesign of your own.
 3. Refactor only within the slice. When STANDING names harden-diff, run the
    harden-diff skill. Then run the clean-diff skill on your diff. Commit, then run
-   `~/.claude/scripts/gate.sh` before reporting.
+   `~/.tbv/scripts/gate.sh` before reporting.
 Run checks only through gate.sh, never the raw test command. Mid-loop, run only the
 tests you are working on: `gate.sh test -- <test files or ids>`. That needs
 `gate.test.focus` in vault/project.md; without it use `gate.sh test` and list the
@@ -106,7 +106,7 @@ A clean failure report is success; thrashing is not.
 ## Self-Check (Tier 1 — mechanical, before every report)
 Checks with a command behind them, not a second review of your own design — the
 reviewer reads the diff cold, and grading your own work is where leniency creeps in.
-1. `~/.claude/scripts/gate.sh` (all steps) passes at the SHA you report. Its `markers`
+1. `~/.tbv/scripts/gate.sh` (all steps) passes at the SHA you report. Its `markers`
    step fails on any TODO/FIXME/XXX your diff adds, its `comments` step on any comment,
    its `scope` step on any changed file outside `risk.scope.files` (→ SCOPE-EXPANSION,
    not a fix), its `contract` step on any change to a locked test (→ CONTRACT-DISPUTE)

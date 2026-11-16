@@ -36,7 +36,7 @@ fi
 last=""
 [ -f "$ledger" ] && last=$(jq -Rc --arg c "$contract" 'fromjson? | select(type == "object" and .kind == "ui" and .contract == $c)' "$ledger" \
   | jq -sc 'sort_by(.ts // "") | last // empty')
-ask="a human runs ~/.claude/scripts/approve-ui.sh $contract in their own terminal"
+ask="a human runs ~/.tbv/scripts/approve-ui.sh $contract in their own terminal"
 if [ -z "$last" ]; then
   echo "UI: NOT APPROVED $contract hash=$hash — never approved; $ask"
   exit 1
